@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { ChevronRight, Eye, EyeOff } from "lucide-react";
-import Image from "next/image";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { signInWithPassword } from "@/app/login/actions";
 import type { RosterEntry } from "@/lib/supabase/database.types";
 
@@ -25,14 +25,7 @@ function PickStep({ roster, onPick }: { roster: RosterEntry[]; onPick: (member: 
   return (
     <>
       <div className="flex items-center gap-3 pt-2">
-        <Image
-          src="/kap-klimber-logo.svg"
-          alt="Kap Klimber"
-          width={140}
-          height={22}
-          className="h-5 w-auto dark:invert"
-          priority
-        />
+        <BrandLogo width={140} height={22} className="h-5 w-auto" priority />
       </div>
       <div className="flex flex-col gap-2">
         <h1 className="text-screen-title">Who are you?</h1>

@@ -1,6 +1,6 @@
 import type { TaskWithRelations } from "@/lib/data/tasks";
 import { PRIORITY_RANK } from "@/lib/constants";
-import { formatDateGroup } from "@/lib/utils";
+import { formatDateGroup, zonedDateKey } from "@/lib/utils";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
 export type SortMode = "priority" | "reminder" | "updated";
@@ -80,11 +80,11 @@ export interface TaskGroup {
 
 const NO_DATE_KEY = "no-date";
 
-export function groupTasks(tasks: TaskWithRelations[], sort: SortMode): TaskGroup[] {
+export function groupTasks(tasks: TaskWithRelations[], sort: SortMode, timeZone?: string): TaskGroup[] {
   const groups = new Map<string, TaskWithRelations[]>();
 
   for (const task of tasks) {
-    const key = task.reminder_at ? new Date(task.reminder_at).toDateString() : NO_DATE_KEY;
+    const key = task.reminder_at ? zonedDateKey(new Date(task.reminder_at), timeZone) : NO_DATE_KEY;
     const bucket = groups.get(key);
     if (bucket) bucket.push(task);
     else groups.set(key, [task]);
@@ -96,7 +96,7 @@ export function groupTasks(tasks: TaskWithRelations[], sort: SortMode): TaskGrou
 
   const result: TaskGroup[] = dated.map(([key, groupTasks]) => ({
     key,
-    label: formatDateGroup(groupTasks[0]!.reminder_at!),
+    label: formatDateGroup(groupTasks[0]!.reminder_at!, timeZone),
     tasks: groupTasks.slice().sort((a, b) => compareTasks(a, b, sort)),
   }));
 

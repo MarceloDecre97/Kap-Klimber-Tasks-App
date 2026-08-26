@@ -17,6 +17,7 @@ import type { TaskStatus } from "@/lib/supabase/database.types";
 export function TaskPill({
   task,
   meId,
+  timeZone,
   expanded,
   onToggleExpand,
   onSetStatus,
@@ -24,6 +25,7 @@ export function TaskPill({
 }: {
   task: TaskWithRelations;
   meId: string;
+  timeZone?: string;
   expanded: boolean;
   onToggleExpand: () => void;
   onSetStatus: (status: TaskStatus) => void;
@@ -88,7 +90,7 @@ export function TaskPill({
           {task.reminder_at && (
             <div className="flex items-center gap-2 text-[18px] leading-7 font-bold text-accent">
               <Bell aria-hidden className="size-5" />
-              {formatReminder(task.reminder_at)}
+              {formatReminder(task.reminder_at, timeZone)}
             </div>
           )}
 

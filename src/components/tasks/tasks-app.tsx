@@ -1,26 +1,30 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Search, Settings, Users, X } from "lucide-react";
-import Image from "next/image";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { EmptyState } from "@/components/tasks/empty-state";
 import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dropdown";
 import { FiltersPanel } from "@/components/tasks/filters-panel";
 import { SortMenu } from "@/components/tasks/sort-menu";
 import { TaskPill } from "@/components/tasks/task-pill";
+import { DEFAULT_TIMEZONE, TimezoneSelect } from "@/components/tasks/timezone-select";
 import { setTaskStatus, softDeleteTask, restoreTask } from "@/app/tasks/actions";
 import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
 import { EMPTY_FILTERS, countActiveFilters, groupTasks, matchesFilters, type SortMode, type TaskFilters } from "@/lib/tasks-view";
+import { formatTimeOfDay, getZoneAbbreviation } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
+
+const TIMEZONE_STORAGE_KEY = "kap-klimber-timezone";
 
 export function TasksApp({
   initialTasks,
@@ -40,7 +44,21 @@ export function TasksApp({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showComplete, setShowComplete] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
+  const [timeZone, setTimeZone] = useState(DEFAULT_TIMEZONE);
   const [, startTransition] = useTransition();
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const stored = window.localStorage.getItem(TIMEZONE_STORAGE_KEY);
+      if (stored) setTimeZone(stored);
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  function handleTimeZoneChange(next: string) {
+    setTimeZone(next);
+    window.localStorage.setItem(TIMEZONE_STORAGE_KEY, next);
+  }
 
   const activeCount = countActiveFilters(filters);
 
@@ -52,7 +70,7 @@ export function TasksApp({
     };
   }, [initialTasks, filters, me.id]);
 
-  const groups = useMemo(() => groupTasks(open, sort), [open, sort]);
+  const groups = useMemo(() => groupTasks(open, sort, timeZone), [open, sort, timeZone]);
   const totalMatching = open.length + complete.length;
 
   const overallDone = useMemo(() => initialTasks.filter((task) => task.status === "complete").length, [initialTasks]);
@@ -118,8 +136,9 @@ export function TasksApp({
     <div className="flex h-dvh flex-col bg-bg">
       <header className="flex shrink-0 flex-col gap-3 border-b-[1.5px] border-border bg-card px-5 pt-[calc(env(safe-area-inset-top)+10px)] pb-3.5">
         <div className="flex items-center justify-between gap-4">
-          <Image src="/kap-klimber-logo.svg" alt="Kap Klimber" width={120} height={19} className="h-[19px] w-auto dark:invert" />
-          <div className="flex items-center gap-2">
+          <BrandLogo width={120} height={19} className="h-[19px] w-auto" />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <TimezoneSelect value={timeZone} onChange={handleTimeZoneChange} />
             <ThemeToggle />
             <Link href="/settings">
               <IconButton aria-label="Settings">
@@ -204,27 +223,37 @@ export function TasksApp({
         ) : (
           <div className="flex flex-col gap-6">
             {groups.map((group) => (
-              <div key={group.key} className="grid grid-cols-[64px_1fr] gap-3">
-                <div className="flex flex-col items-end gap-2 pt-0.5">
-                  <div className="sticky top-0 flex items-center gap-2 text-[16px] leading-[22px] font-bold text-sub text-right">
-                    {group.label}
-                    <span className="size-[11px] shrink-0 rounded-full bg-brand" />
+              <div key={group.key} className="flex flex-col gap-3">
+                {group.tasks.map((task, taskIndex) => (
+                  <div key={task.id} className="grid grid-cols-[64px_1fr] gap-3">
+                    <div className="flex flex-col items-end gap-1 pt-0.5">
+                      {taskIndex === 0 && (
+                        <div className="sticky top-0 flex items-center gap-2 text-[16px] leading-[22px] font-bold text-sub text-right">
+                          {group.label}
+                          <span className="size-[11px] shrink-0 rounded-full bg-brand" />
+                        </div>
+                      )}
+                      {task.reminder_at && (
+                        <div className="flex flex-col items-end text-[12px] leading-[14px] font-bold text-sub tabular-nums whitespace-nowrap">
+                          <span>{formatTimeOfDay(task.reminder_at, timeZone)}</span>
+                          <span className="opacity-70">{getZoneAbbreviation(timeZone, new Date(task.reminder_at))}</span>
+                        </div>
+                      )}
+                      <div className="flex-1 w-[1.5px] bg-line" />
+                    </div>
+                    <div className="min-w-0">
+                      <TaskPill
+                        task={task}
+                        meId={me.id}
+                        timeZone={timeZone}
+                        expanded={expandedId === task.id}
+                        onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
+                        onSetStatus={(status) => handleSetStatus(task.id, status)}
+                        onRequestDelete={() => setDeleteTarget(task)}
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1 w-[1.5px] bg-line" />
-                </div>
-                <div className="flex flex-col gap-3 min-w-0 pb-1">
-                  {group.tasks.map((task) => (
-                    <TaskPill
-                      key={task.id}
-                      task={task}
-                      meId={me.id}
-                      expanded={expandedId === task.id}
-                      onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
-                      onSetStatus={(status) => handleSetStatus(task.id, status)}
-                      onRequestDelete={() => setDeleteTarget(task)}
-                    />
-                  ))}
-                </div>
+                ))}
               </div>
             ))}
 
@@ -245,6 +274,7 @@ export function TasksApp({
                         key={task.id}
                         task={task}
                         meId={me.id}
+                        timeZone={timeZone}
                         expanded={expandedId === task.id}
                         onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}
