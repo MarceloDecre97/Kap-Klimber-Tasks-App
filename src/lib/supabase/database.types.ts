@@ -28,6 +28,7 @@ export interface Database {
           initials: string;
         };
         Update: Partial<Database["public"]["Tables"]["members"]["Row"]>;
+        Relationships: [];
       };
       categories: {
         Row: {
@@ -41,6 +42,7 @@ export interface Database {
           label: string;
         };
         Update: Partial<Database["public"]["Tables"]["categories"]["Row"]>;
+        Relationships: [];
       };
       tasks: {
         Row: {
@@ -63,6 +65,7 @@ export interface Database {
           created_by: string;
         };
         Update: Partial<Database["public"]["Tables"]["tasks"]["Row"]>;
+        Relationships: [];
       };
       task_assignees: {
         Row: {
@@ -70,8 +73,12 @@ export interface Database {
           member_id: string;
           assigned_at: string;
         };
-        Insert: Database["public"]["Tables"]["task_assignees"]["Row"];
+        Insert: Partial<Database["public"]["Tables"]["task_assignees"]["Row"]> & {
+          task_id: string;
+          member_id: string;
+        };
         Update: Partial<Database["public"]["Tables"]["task_assignees"]["Row"]>;
+        Relationships: [];
       };
       task_notes: {
         Row: {
@@ -87,8 +94,10 @@ export interface Database {
           body: string;
         };
         Update: Partial<Database["public"]["Tables"]["task_notes"]["Row"]>;
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
     Functions: {
       list_team_roster: {
         Args: Record<string, never>;

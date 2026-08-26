@@ -140,7 +140,7 @@ function VerifyStep({
         <Avatar initials={member.initials} color={member.color} size={48} />
         <h1 className="text-screen-title pt-2">Enter your code</h1>
         <p className="text-[18px] leading-7 text-sub text-pretty">
-          We sent a 6-digit code to {maskedEmail}. It's good for 10 minutes.
+          We sent a 6-digit code to {maskedEmail}. It&apos;s good for 10 minutes.
         </p>
       </div>
       <form
