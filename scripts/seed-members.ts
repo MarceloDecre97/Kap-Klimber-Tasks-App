@@ -1,8 +1,15 @@
 /**
- * Provisions team members: creates each an auth.users row (email, no
- * password) and a matching public.members row. This is the stand-in for the
- * future admin panel — until that exists, editing scripts/members.json and
- * re-running `npm run seed:members` is how the roster is managed.
+ * Provisions team members: creates each an auth.users row and a matching
+ * public.members row, and sets (or resets) their password from
+ * SEED_INITIAL_PASSWORD. This is the stand-in for the future admin panel —
+ * until that exists, editing scripts/members.json and re-running
+ * `npm run seed:members` is how the roster is managed.
+ *
+ * Password login is a temporary simplification while email deliverability
+ * for the passwordless OTP flow gets sorted out — that flow's code
+ * (src/app/login/actions.ts: requestOtp/verifyOtp) is untouched and still
+ * there to switch back to later. Everything else (RLS, sessions, per-user
+ * auth.uid()) is unchanged; this only changes how a session gets started.
  *
  * Requires SUPABASE_SERVICE_ROLE_KEY, which this script is the only place
  * in the codebase allowed to use. Run locally / in CI only — never ship
@@ -34,9 +41,16 @@ function loadMembers(): MemberConfig[] {
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const initialPassword = process.env.SEED_INITIAL_PASSWORD;
   if (!url || !serviceRoleKey) {
     throw new Error(
       "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (in .env.local) before seeding."
+    );
+  }
+  if (!initialPassword || initialPassword.length < 8) {
+    throw new Error(
+      "Set SEED_INITIAL_PASSWORD (in .env.local) to a password of 8+ characters before seeding. " +
+        "This is the password every seeded member starts with — share it with the team out of band."
     );
   }
 
@@ -65,6 +79,7 @@ async function main() {
     if (!userId) {
       const { data: created, error: createError } = await admin.auth.admin.createUser({
         email,
+        password: initialPassword,
         email_confirm: true,
       });
 
@@ -75,6 +90,15 @@ async function main() {
 
       userId = created.user.id;
       console.log(`Created auth user for ${email}`);
+    } else {
+      const { error: passwordError } = await admin.auth.admin.updateUserById(userId, {
+        password: initialPassword,
+      });
+
+      if (passwordError) {
+        console.error(`Failed to set password for ${email}:`, passwordError.message);
+        continue;
+      }
     }
 
     const { error: upsertError } = await admin

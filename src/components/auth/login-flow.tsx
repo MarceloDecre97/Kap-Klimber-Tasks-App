@@ -2,50 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { requestOtp, verifyOtp } from "@/app/login/actions";
+import { signInWithPassword } from "@/app/login/actions";
 import type { RosterEntry } from "@/lib/supabase/database.types";
 
-type Step = { name: "pick" } | { name: "verify"; member: RosterEntry; maskedEmail: string };
+type Step = { name: "pick" } | { name: "password"; member: RosterEntry };
 
 export function LoginFlow({ roster }: { roster: RosterEntry[] }) {
   const [step, setStep] = useState<Step>({ name: "pick" });
 
-  if (step.name === "verify") {
-    return <VerifyStep member={step.member} maskedEmail={step.maskedEmail} onBack={() => setStep({ name: "pick" })} />;
+  if (step.name === "password") {
+    return <PasswordStep member={step.member} onBack={() => setStep({ name: "pick" })} />;
   }
 
-  return <PickStep roster={roster} onSent={(member, maskedEmail) => setStep({ name: "verify", member, maskedEmail })} />;
+  return <PickStep roster={roster} onPick={(member) => setStep({ name: "password", member })} />;
 }
 
-function PickStep({
-  roster,
-  onSent,
-}: {
-  roster: RosterEntry[];
-  onSent: (member: RosterEntry, maskedEmail: string) => void;
-}) {
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  function handleTap(member: RosterEntry) {
-    setError(null);
-    setPendingId(member.id);
-    startTransition(async () => {
-      const result = await requestOtp(member.id);
-      if (!result.ok) {
-        setError(result.error);
-        setPendingId(null);
-        return;
-      }
-      onSent(member, result.maskedEmail);
-    });
-  }
-
+function PickStep({ roster, onPick }: { roster: RosterEntry[]; onPick: (member: RosterEntry) => void }) {
   return (
     <>
       <div className="flex items-center gap-3 pt-2">
@@ -60,27 +36,20 @@ function PickStep({
       </div>
       <div className="flex flex-col gap-2">
         <h1 className="text-screen-title">Who are you?</h1>
-        <p className="text-[18px] leading-7 text-sub text-pretty">
-          Tap your name. No password. This phone will remember you.
-        </p>
+        <p className="text-[18px] leading-7 text-sub text-pretty">Tap your name, then enter your password.</p>
       </div>
       <div className="flex flex-col gap-3">
         {roster.map((member) => (
           <button
             key={member.id}
             type="button"
-            disabled={isPending}
-            onClick={() => handleTap(member)}
-            className="flex h-[72px] w-full items-center gap-4 rounded-2xl border-[1.5px] border-border bg-card px-4 shadow-[0_1px_3px_rgba(2,6,23,0.08)] transition-transform duration-150 ease-out active:scale-[0.97] active:bg-muted disabled:opacity-60 cursor-pointer"
+            onClick={() => onPick(member)}
+            className="flex h-[72px] w-full items-center gap-4 rounded-2xl border-[1.5px] border-border bg-card px-4 shadow-[0_1px_3px_rgba(2,6,23,0.08)] transition-transform duration-150 ease-out active:scale-[0.97] active:bg-muted cursor-pointer"
           >
             <Avatar initials={member.initials} color={member.color} size={48} />
             <span className="text-[20px] leading-7 font-bold text-fg">{member.display_name}</span>
             <span className="ml-auto flex items-center text-sub">
-              {pendingId === member.id ? (
-                <span className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : (
-                <ChevronRight aria-hidden className="size-5" />
-              )}
+              <ChevronRight aria-hidden className="size-5" />
             </span>
           </button>
         ))}
@@ -88,36 +57,24 @@ function PickStep({
           <p className="text-[18px] leading-7 text-sub">No team members are set up yet.</p>
         )}
       </div>
-      {error && (
-        <p role="alert" className="text-[18px] leading-7 font-bold text-danger text-pretty">
-          {error}
-        </p>
-      )}
       <p className="text-center text-[16px] leading-[22px] text-sub">Not on this list? Ask Marcelo to add you.</p>
     </>
   );
 }
 
-function VerifyStep({
-  member,
-  maskedEmail,
-  onBack,
-}: {
-  member: RosterEntry;
-  maskedEmail: string;
-  onBack: () => void;
-}) {
+function PasswordStep({ member, onBack }: { member: RosterEntry; onBack: () => void }) {
   const router = useRouter();
-  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [isResending, setIsResending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function submit(value: string) {
+  function submit() {
+    if (!password) return;
     setError(null);
     startTransition(async () => {
-      const result = await verifyOtp(member.id, value);
+      const result = await signInWithPassword(member.id, password);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -138,53 +95,45 @@ function VerifyStep({
       </button>
       <div className="flex flex-col gap-2">
         <Avatar initials={member.initials} color={member.color} size={48} />
-        <h1 className="text-screen-title pt-2">Enter your code</h1>
-        <p className="text-[18px] leading-7 text-sub text-pretty">
-          We sent a 6-digit code to {maskedEmail}. It&apos;s good for 10 minutes.
-        </p>
+        <h1 className="text-screen-title pt-2">Enter your password</h1>
+        <p className="text-[18px] leading-7 text-sub text-pretty">Welcome back, {member.display_name}.</p>
       </div>
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          submit(code);
+          submit();
         }}
         className="flex flex-col gap-4"
       >
-        <input
-          ref={inputRef}
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          value={code}
-          onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-          placeholder="000000"
-          aria-label="6-digit code"
-          aria-invalid={!!error}
-          className="h-[60px] rounded-2xl border-[1.5px] border-border bg-card px-4 text-center text-[28px] font-bold tracking-[0.3em] text-fg focus-visible:border-prim focus-visible:outline-[3px] focus-visible:outline-offset-2 aria-invalid:border-danger"
-        />
+        <div className="relative">
+          <input
+            ref={inputRef}
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            autoFocus
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Password"
+            aria-label="Password"
+            aria-invalid={!!error}
+            className="h-[60px] w-full rounded-2xl border-[1.5px] border-border bg-card pl-4 pr-14 text-[18px] text-fg focus-visible:border-prim focus-visible:outline-[3px] focus-visible:outline-offset-2 aria-invalid:border-danger"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 flex size-9 items-center justify-center text-sub cursor-pointer"
+          >
+            {showPassword ? <EyeOff aria-hidden className="size-5" /> : <Eye aria-hidden className="size-5" />}
+          </button>
+        </div>
         {error && (
           <p role="alert" className="text-[18px] leading-7 font-bold text-danger text-pretty">
             {error}
           </p>
         )}
-        <Button type="submit" disabled={code.length !== 6 || isPending}>
+        <Button type="submit" disabled={!password || isPending}>
           {isPending ? "Checking…" : "Continue"}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={isResending}
-          onClick={() => {
-            setIsResending(true);
-            setError(null);
-            startTransition(async () => {
-              const result = await requestOtp(member.id);
-              setIsResending(false);
-              if (!result.ok) setError(result.error);
-            });
-          }}
-        >
-          {isResending ? "Sending…" : "Send a new code"}
         </Button>
       </form>
     </div>

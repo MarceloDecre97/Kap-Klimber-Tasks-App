@@ -7,6 +7,8 @@ export const otpCodeSchema = z
   .trim()
   .regex(/^\d{6}$/, "Enter the 6-digit code.");
 
+export const passwordSchema = z.string().min(1, "Enter your password.").max(200);
+
 export const priorityEnum = z.enum(["asap", "high", "medium", "low", "someday"]);
 export const statusEnum = z.enum(["not_started", "in_progress", "for_review", "waiting", "complete"]);
 

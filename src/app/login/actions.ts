@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { maskEmail } from "@/lib/mask-email";
-import { otpCodeSchema } from "@/lib/validation";
+import { otpCodeSchema, passwordSchema } from "@/lib/validation";
 
 const memberIdSchema = z.string().uuid();
 
@@ -19,6 +19,41 @@ async function resolveMemberEmail(memberId: string) {
 
   if (error || !data) return null;
   return data;
+}
+
+/**
+ * Password-based sign-in — the temporary login method while email
+ * deliverability for the OTP flow below gets sorted out. Real per-user
+ * Supabase sessions either way; RLS and everything downstream is unchanged.
+ * Email is resolved server-side and never sent to the browser, same as the
+ * OTP flow.
+ */
+export async function signInWithPassword(memberIdInput: string, passwordInput: string) {
+  const memberResult = memberIdSchema.safeParse(memberIdInput);
+  const passwordResult = passwordSchema.safeParse(passwordInput);
+
+  if (!memberResult.success) return { ok: false as const, error: "That doesn't look like a valid person." };
+  if (!passwordResult.success) {
+    return { ok: false as const, error: passwordResult.error.issues[0]?.message ?? "Enter your password." };
+  }
+
+  const member = await resolveMemberEmail(memberResult.data);
+  if (!member) {
+    return { ok: false as const, error: "We couldn't find that person. Ask Marcelo to add you." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email: member.email,
+    password: passwordResult.data,
+  });
+
+  if (error) {
+    console.error("signInWithPassword failed", { status: error.status, code: error.code, message: error.message });
+    return { ok: false as const, error: "That password is wrong. Try again." };
+  }
+
+  return { ok: true as const };
 }
 
 export async function requestOtp(memberIdInput: string) {
