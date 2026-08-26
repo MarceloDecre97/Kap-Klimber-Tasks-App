@@ -38,7 +38,7 @@ const TASK_SELECT = `
   id, title, description, priority, status, reminder_at, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
-  notes:task_notes(id, body, created_at, member:members(id, display_name, initials, color), acks:task_note_acks(member_id))
+  notes:task_notes(id, body, created_at, member:members!task_notes_member_id_fkey(id, display_name, initials, color), acks:task_note_acks(member_id))
 `;
 
 type RawTaskNote = {
