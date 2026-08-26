@@ -1,6 +1,6 @@
 [
-  { "email": "marcelo@example.com", "displayName": "Marcelo", "initials": "M", "color": "#87252B" },
-  { "email": "kieth@example.com", "displayName": "Kieth", "initials": "K", "color": "#0F172A" },
-  { "email": "dee@example.com", "displayName": "Dee", "initials": "D", "color": "#166534" },
-  { "email": "fred@example.com", "displayName": "Fred", "initials": "F", "color": "#1E3A8A" }
+  { "email": "marcelo.decrescenzo@opuskap.com", "displayName": "Marcelo Decrescenzo", "initials": "MD", "color": "#87252B" },
+  { "email": "fred.kiewatt@opuskap.com", "displayName": "Fred Kiewatt", "initials": "FK", "color": "#1E3A8A" },
+  { "email": "keith.maslowski@opuskap.com", "displayName": "Keith Maslowski", "initials": "KM", "color": "#0F172A" },
+  { "email": "dee.kapur@opuskap.com", "displayName": "Dee Kapur", "initials": "DK", "color": "#166534" }
 ]
