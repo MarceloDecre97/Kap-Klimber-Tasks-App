@@ -195,6 +195,7 @@ export function TasksApp({
                     <TaskPill
                       key={task.id}
                       task={task}
+                      meId={me.id}
                       expanded={expandedId === task.id}
                       onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
                       onSetStatus={(status) => handleSetStatus(task.id, status)}
@@ -221,6 +222,7 @@ export function TasksApp({
                       <TaskPill
                         key={task.id}
                         task={task}
+                        meId={me.id}
                         expanded={expandedId === task.id}
                         onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}

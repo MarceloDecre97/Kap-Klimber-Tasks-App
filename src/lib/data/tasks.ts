@@ -15,6 +15,7 @@ export interface TaskNote {
   body: string;
   created_at: string;
   member: MemberSummary | null;
+  ackedByMemberIds: string[];
 }
 
 export interface TaskWithRelations {
@@ -37,8 +38,16 @@ const TASK_SELECT = `
   id, title, description, priority, status, reminder_at, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
-  notes:task_notes(id, body, created_at, member:members(id, display_name, initials, color))
+  notes:task_notes(id, body, created_at, member:members(id, display_name, initials, color), acks:task_note_acks(member_id))
 `;
+
+type RawTaskNote = {
+  id: string;
+  body: string;
+  created_at: string;
+  member: MemberSummary | null;
+  acks: { member_id: string }[] | null;
+};
 
 type RawTask = {
   id: string;
@@ -53,14 +62,16 @@ type RawTask = {
   created_by: string;
   category: { id: string; label: string } | null;
   assignees: { member: MemberSummary | null }[] | null;
-  notes: TaskNote[] | null;
+  notes: RawTaskNote[] | null;
 };
 
 function mapTask(row: RawTask): TaskWithRelations {
   return {
     ...row,
     assignees: (row.assignees ?? []).map((a) => a.member).filter((m): m is MemberSummary => !!m),
-    notes: (row.notes ?? []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    notes: (row.notes ?? [])
+      .map((note) => ({ ...note, ackedByMemberIds: (note.acks ?? []).map((a) => a.member_id) }))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at)),
   };
 }
 

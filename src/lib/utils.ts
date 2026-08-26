@@ -1,7 +1,15 @@
 import clsx, { type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
+/**
+ * clsx alone only concatenates — when a caller passes a conflicting
+ * override (e.g. `className="w-14"` against a component's own `w-full`),
+ * which one wins depends on Tailwind's internal stylesheet order, not on
+ * where the class appears in the string. twMerge resolves same-property
+ * conflicts by keeping the last one, matching what callers actually intend.
+ */
 export function cn(...inputs: ClassValue[]) {
-  return clsx(inputs);
+  return twMerge(clsx(inputs));
 }
 
 export function getInitials(name: string): string {

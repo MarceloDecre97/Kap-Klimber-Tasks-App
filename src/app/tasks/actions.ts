@@ -199,3 +199,49 @@ export async function addNote(input: unknown): Promise<ActionResult<{ noteId: st
     return { ok: false, error: "Couldn't add that note. Try again." };
   }
 }
+
+const noteIdSchema = z.string().uuid();
+
+/**
+ * Toggles the current member's own acknowledgment ("seen/recognized") on a
+ * note. Purely a reference signal between teammates — never touches
+ * task.status, so it can't affect the done/total counters.
+ */
+export async function toggleNoteAck(noteIdInput: string): Promise<ActionResult<{ acked: boolean }>> {
+  const noteId = noteIdSchema.safeParse(noteIdInput);
+  if (!noteId.success) return { ok: false, error: "Invalid note." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+
+    const { data: existing, error: lookupError } = await supabase
+      .from("task_note_acks")
+      .select("note_id")
+      .eq("note_id", noteId.data)
+      .eq("member_id", member.id)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+
+    if (existing) {
+      const { error } = await supabase
+        .from("task_note_acks")
+        .delete()
+        .eq("note_id", noteId.data)
+        .eq("member_id", member.id);
+      if (error) throw error;
+      revalidatePath("/tasks");
+      return { ok: true, acked: false };
+    }
+
+    const { error } = await supabase
+      .from("task_note_acks")
+      .insert({ note_id: noteId.data, member_id: member.id });
+    if (error) throw error;
+
+    revalidatePath("/tasks");
+    return { ok: true, acked: true };
+  } catch (error) {
+    console.error("toggleNoteAck failed", error);
+    return { ok: false, error: "Couldn't update that. Try again." };
+  }
+}

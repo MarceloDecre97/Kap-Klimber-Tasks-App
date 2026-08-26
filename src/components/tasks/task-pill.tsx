@@ -2,26 +2,28 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell, ChevronDown, Pencil, Send, Trash2 } from "lucide-react";
+import { Bell, ChevronDown, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
-import { formatReminder, formatTimestamp } from "@/lib/utils";
-import { addNote } from "@/app/tasks/actions";
-import type { TaskWithRelations } from "@/lib/data/tasks";
+import { cn, formatReminder, formatTimestamp } from "@/lib/utils";
+import { addNote, toggleNoteAck } from "@/app/tasks/actions";
+import type { TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
 export function TaskPill({
   task,
+  meId,
   expanded,
   onToggleExpand,
   onSetStatus,
   onRequestDelete,
 }: {
   task: TaskWithRelations;
+  meId: string;
   expanded: boolean;
   onToggleExpand: () => void;
   onSetStatus: (status: TaskStatus) => void;
@@ -116,12 +118,7 @@ export function TaskPill({
             <div className="text-section-heading">Notes</div>
             {task.notes.length === 0 && <p className="text-[18px] leading-7 text-sub">No notes yet.</p>}
             {task.notes.map((note) => (
-              <div key={note.id} className="flex flex-col gap-1 rounded-2xl border-[1.5px] border-border bg-bg p-4">
-                <div className="text-timestamp text-sub">
-                  {note.member?.display_name ?? "Someone"} · {formatTimestamp(note.created_at)}
-                </div>
-                <div className="text-[18px] leading-7 text-fg text-pretty">{note.body}</div>
-              </div>
+              <NoteRow key={note.id} note={note} meId={meId} />
             ))}
             <div className="flex min-w-0 gap-2">
               <Input
@@ -171,6 +168,38 @@ export function TaskPill({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function NoteRow({ note, meId }: { note: TaskNote; meId: string }) {
+  const [isPending, startTransition] = useTransition();
+  const iAcked = note.ackedByMemberIds.includes(meId);
+  const count = note.ackedByMemberIds.length;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-border bg-bg p-4">
+      <div className="text-timestamp text-sub">
+        {note.member?.display_name ?? "Someone"} · {formatTimestamp(note.created_at)}
+      </div>
+      <div className="text-[18px] leading-7 text-fg text-pretty">{note.body}</div>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() =>
+          startTransition(async () => {
+            await toggleNoteAck(note.id);
+          })
+        }
+        aria-pressed={iAcked}
+        className={cn(
+          "inline-flex w-fit items-center gap-1.5 self-start rounded-full border-[1.5px] px-3 py-1.5 text-[15px] leading-5 font-bold cursor-pointer transition-transform duration-150 active:scale-[0.97] disabled:opacity-60",
+          iAcked ? "border-prim bg-prim text-on-prim" : "border-border bg-card text-sub"
+        )}
+      >
+        <ThumbsUp aria-hidden className="size-3.5" fill={iAcked ? "currentColor" : "none"} />
+        {count > 0 ? count : "Seen"}
+      </button>
     </div>
   );
 }

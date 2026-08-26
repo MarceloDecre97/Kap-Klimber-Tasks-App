@@ -96,6 +96,19 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["task_notes"]["Row"]>;
         Relationships: [];
       };
+      task_note_acks: {
+        Row: {
+          note_id: string;
+          member_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["task_note_acks"]["Row"]> & {
+          note_id: string;
+          member_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["task_note_acks"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
