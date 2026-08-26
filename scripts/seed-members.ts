@@ -8,11 +8,15 @@
  * in the codebase allowed to use. Run locally / in CI only — never ship
  * this key to a client or a Vercel serverless function that serves users.
  */
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+
+// Match Next.js's own env file precedence: .env.local wins over .env.
+loadEnv({ path: ".env" });
+loadEnv({ path: ".env.local", override: true });
 
 interface MemberConfig {
   email: string;
