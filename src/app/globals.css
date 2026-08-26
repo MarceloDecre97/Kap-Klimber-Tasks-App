@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-bg: #f8fafc;
+  --color-canvas: #eef1f5;
+  --color-card: #ffffff;
+  --color-border: #e2e8f0;
+  --color-fg: #020617;
+  --color-sub: #475569;
+  --color-muted: #e8ecf1;
+  --color-muted-fg: #334155;
+  --color-prim: #0f172a;
+  --color-prim-hover: #87252b;
+  --color-prim-active: #020617;
+  --color-on-prim: #ffffff;
+  --color-brand: #87252b;
+  --color-accent: #a16207;
+  --color-danger: #dc2626;
+  --color-danger-hover-bg: #fef2f2;
+  --color-danger-active-bg: #fee2e2;
+  --color-line: #cbd5e1;
+  --color-skeleton: #e8ecf1;
+  --shadow-card: 0 1px 3px rgba(2, 6, 23, 0.08);
+}
+
+.dark {
+  --color-bg: #0b1220;
+  --color-canvas: #05070d;
+  --color-card: #131b2c;
+  --color-border: #263548;
+  --color-fg: #f1f5f9;
+  --color-sub: #94a3b8;
+  --color-muted: #1c2a3f;
+  --color-muted-fg: #cbd5e1;
+  --color-prim: #e2e8f0;
+  --color-prim-hover: #c9757b;
+  --color-prim-active: #ffffff;
+  --color-on-prim: #0b1220;
+  --color-brand: #e8969c;
+  --color-accent: #fbbf5c;
+  --color-danger: #f87171;
+  --color-danger-hover-bg: #2a1416;
+  --color-danger-active-bg: #3a1a1c;
+  --color-line: #334155;
+  --color-skeleton: #1c2a3f;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+@theme inline {
+  --color-bg: var(--color-bg);
+  --color-canvas: var(--color-canvas);
+  --color-card: var(--color-card);
+  --color-border: var(--color-border);
+  --color-fg: var(--color-fg);
+  --color-sub: var(--color-sub);
+  --color-muted: var(--color-muted);
+  --color-muted-fg: var(--color-muted-fg);
+  --color-prim: var(--color-prim);
+  --color-prim-hover: var(--color-prim-hover);
+  --color-prim-active: var(--color-prim-active);
+  --color-on-prim: var(--color-on-prim);
+  --color-brand: var(--color-brand);
+  --color-accent: var(--color-accent);
+  --color-danger: var(--color-danger);
+  --color-line: var(--color-line);
+  --color-skeleton: var(--color-skeleton);
+  --font-sans: var(--font-atkinson), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: var(--font-bai-jamjuree), var(--font-atkinson), sans-serif;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes toast-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 18px;
+  line-height: 28px;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+::selection {
+  background: var(--color-brand);
+  color: #ffffff;
+}
+
+[data-hscroll] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+[data-hscroll]::-webkit-scrollbar {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
+button,
+input,
+textarea {
+  font-family: inherit;
+}
+
+/* Consistent, visible focus ring per design system: 3px ring, 2px offset, never removed. */
+:focus-visible {
+  outline: 3px solid var(--color-prim);
+  outline-offset: 2px;
+}
+
+@layer utilities {
+  .text-screen-title {
+    font-family: var(--font-display);
+    font-size: 30px;
+    line-height: 36px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .text-section-heading {
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 700;
+  }
+  .text-card-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    line-height: 26px;
+    font-weight: 600;
+  }
+  .text-field-label {
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 700;
+  }
+  .text-chip {
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 700;
+  }
+  .text-timestamp {
+    font-size: 15px;
+    line-height: 20px;
+    font-variant-numeric: tabular-nums;
+  }
+  .tap-target {
+    min-height: 56px;
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

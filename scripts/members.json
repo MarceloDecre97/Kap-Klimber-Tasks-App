@@ -1,0 +1,6 @@
+[
+  { "email": "marcelo@example.com", "displayName": "Marcelo", "initials": "M", "color": "#87252B" },
+  { "email": "kieth@example.com", "displayName": "Kieth", "initials": "K", "color": "#0F172A" },
+  { "email": "dee@example.com", "displayName": "Dee", "initials": "D", "color": "#166534" },
+  { "email": "fred@example.com", "displayName": "Fred", "initials": "F", "color": "#1E3A8A" }
+]

@@ -1,0 +1,201 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { getCurrentMember } from "@/lib/get-current-member";
+import { noteInputSchema, statusEnum, taskInputSchema } from "@/lib/validation";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
+
+type ActionResult<T = { taskId: string }> = { ok: true } & T | { ok: false; error: string };
+
+const taskIdSchema = z.string().uuid();
+
+async function resolveCategoryId(
+  supabase: SupabaseClient<Database>,
+  memberId: string,
+  categoryId: string | null | undefined,
+  newLabel: string | undefined
+): Promise<string | null> {
+  const trimmedLabel = newLabel?.trim();
+  if (trimmedLabel) {
+    const { data: existing } = await supabase
+      .from("categories")
+      .select("id")
+      .ilike("label", trimmedLabel)
+      .maybeSingle();
+    if (existing) return existing.id;
+
+    const { data: created, error } = await supabase
+      .from("categories")
+      .insert({ label: trimmedLabel, created_by: memberId })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return created.id;
+  }
+  return categoryId ?? null;
+}
+
+export async function createTask(input: unknown): Promise<ActionResult> {
+  const parsed = taskInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That task isn't valid." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+    const data = parsed.data;
+    const categoryId = await resolveCategoryId(supabase, member.id, data.categoryId, data.newCategoryLabel);
+
+    const { data: task, error } = await supabase
+      .from("tasks")
+      .insert({
+        title: data.title,
+        description: data.description || null,
+        category_id: categoryId,
+        priority: data.priority,
+        status: data.status,
+        reminder_at: data.reminderAt ?? null,
+        created_by: member.id,
+      })
+      .select("id")
+      .single();
+
+    if (error) throw error;
+
+    const { error: assigneeError } = await supabase
+      .from("task_assignees")
+      .insert(data.assigneeIds.map((memberId) => ({ task_id: task.id, member_id: memberId })));
+    if (assigneeError) throw assigneeError;
+
+    revalidatePath("/tasks");
+    return { ok: true, taskId: task.id };
+  } catch (error) {
+    console.error("createTask failed", error);
+    return { ok: false, error: "Couldn't save that task. Try again." };
+  }
+}
+
+export async function updateTask(taskIdInput: string, input: unknown): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  const parsed = taskInputSchema.safeParse(input);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That task isn't valid." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+    const data = parsed.data;
+    const categoryId = await resolveCategoryId(supabase, member.id, data.categoryId, data.newCategoryLabel);
+
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        title: data.title,
+        description: data.description || null,
+        category_id: categoryId,
+        priority: data.priority,
+        status: data.status,
+        reminder_at: data.reminderAt ?? null,
+        ...(data.status === "complete" ? { completed_at: new Date().toISOString(), completed_by: member.id } : { completed_at: null, completed_by: null }),
+      })
+      .eq("id", taskId.data);
+    if (error) throw error;
+
+    const { error: deleteError } = await supabase.from("task_assignees").delete().eq("task_id", taskId.data);
+    if (deleteError) throw deleteError;
+
+    const { error: assigneeError } = await supabase
+      .from("task_assignees")
+      .insert(data.assigneeIds.map((memberId) => ({ task_id: taskId.data, member_id: memberId })));
+    if (assigneeError) throw assigneeError;
+
+    revalidatePath("/tasks");
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("updateTask failed", error);
+    return { ok: false, error: "Couldn't save that task. Try again." };
+  }
+}
+
+export async function setTaskStatus(taskIdInput: string, statusInput: unknown): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  const status = statusEnum.safeParse(statusInput);
+  if (!taskId.success || !status.success) return { ok: false, error: "That status isn't valid." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+    const isComplete = status.data === "complete";
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        status: status.data,
+        completed_at: isComplete ? new Date().toISOString() : null,
+        completed_by: isComplete ? member.id : null,
+      })
+      .eq("id", taskId.data);
+    if (error) throw error;
+
+    revalidatePath("/tasks");
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("setTaskStatus failed", error);
+    return { ok: false, error: "Couldn't update that task. Try again." };
+  }
+}
+
+export async function softDeleteTask(taskIdInput: string): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", taskId.data);
+    if (error) throw error;
+
+    revalidatePath("/tasks");
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("softDeleteTask failed", error);
+    return { ok: false, error: "Couldn't delete that task. Try again." };
+  }
+}
+
+export async function restoreTask(taskIdInput: string): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase.from("tasks").update({ deleted_at: null }).eq("id", taskId.data);
+    if (error) throw error;
+
+    revalidatePath("/tasks");
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("restoreTask failed", error);
+    return { ok: false, error: "Couldn't undo that delete." };
+  }
+}
+
+export async function addNote(input: unknown): Promise<ActionResult<{ noteId: string }>> {
+  const parsed = noteInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Say what happened." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+    const { data: note, error } = await supabase
+      .from("task_notes")
+      .insert({ task_id: parsed.data.taskId, member_id: member.id, body: parsed.data.body })
+      .select("id")
+      .single();
+    if (error) throw error;
+
+    revalidatePath("/tasks");
+    return { ok: true, noteId: note.id };
+  } catch (error) {
+    console.error("addNote failed", error);
+    return { ok: false, error: "Couldn't add that note. Try again." };
+  }
+}
