@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Settings, Users } from "lucide-react";
+import { ChevronDown, Plus, Search, Settings, Users, X } from "lucide-react";
 import Image from "next/image";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -147,6 +147,28 @@ export function TasksApp({
           </div>
         )}
 
+        <div className="relative">
+          <Search aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-sub" />
+          <input
+            type="text"
+            value={filters.query}
+            onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+            placeholder="Search tasks, notes, people…"
+            aria-label="Search tasks"
+            className="h-12 w-full rounded-full border-[1.5px] border-border bg-card pl-10 pr-10 text-[16px] text-fg placeholder:text-sub focus-visible:border-prim focus-visible:outline-[3px] focus-visible:outline-offset-2"
+          />
+          {filters.query && (
+            <button
+              type="button"
+              onClick={() => setFilters({ ...filters, query: "" })}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-sub cursor-pointer hover:bg-muted"
+            >
+              <X aria-hidden className="size-4" />
+            </button>
+          )}
+        </div>
+
         <div data-hscroll="true" className="flex gap-2 overflow-x-auto">
           <FilterDropdown label="Priority" options={priorityOptions} selected={filters.priority} onChange={(priority) => setFilters({ ...filters, priority })} />
           <FilterDropdown
@@ -160,7 +182,7 @@ export function TasksApp({
           <SortMenu value={sort} onChange={setSort} />
         </div>
 
-        {activeCount > 0 && (
+        {(activeCount > 0 || filters.query) && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-[16px] leading-[22px] tabular-nums text-sub">
               Showing {totalMatching} of {initialTasks.length} tasks
@@ -178,7 +200,7 @@ export function TasksApp({
 
       <div className="flex-1 overflow-y-auto px-5 pb-6 pt-4">
         {groups.length === 0 && complete.length === 0 ? (
-          <EmptyState hasFilters={activeCount > 0} onClearFilters={() => setFilters(EMPTY_FILTERS)} />
+          <EmptyState hasFilters={activeCount > 0 || !!filters.query} onClearFilters={() => setFilters(EMPTY_FILTERS)} />
         ) : (
           <div className="flex flex-col gap-6">
             {groups.map((group) => (

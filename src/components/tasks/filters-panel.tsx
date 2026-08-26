@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { Filter } from "lucide-react";
 import { Chip } from "@/components/ui/chip";
 import { cn } from "@/lib/utils";
+import { useFloatingPanel, FloatingPanel } from "@/components/tasks/floating-panel";
 import { STATUSES, STATUS_ORDER } from "@/lib/constants";
 import type { TaskFilters } from "@/lib/tasks-view";
 import type { TaskStatus } from "@/lib/supabase/database.types";
@@ -21,27 +21,19 @@ export function FiltersPanel({
   onChange: (next: TaskFilters) => void;
   categories: { id: string; label: string }[];
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const { open, setOpen, triggerRef, panelRef, style } = useFloatingPanel<HTMLButtonElement>();
   const count = filters.status.length + filters.categoryIds.length;
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
+  const panelWidth = typeof window !== "undefined" ? Math.min(window.innerWidth - 32, 380) : 380;
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className={cn(
-          "flex h-12 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-4 text-[16px] leading-[22px] font-bold cursor-pointer transition-transform duration-150 active:scale-[0.97]",
+          "flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-4 text-[16px] leading-[22px] font-bold cursor-pointer transition-transform duration-150 active:scale-[0.97]",
           count > 0 ? "border-prim bg-prim text-on-prim" : "border-border bg-card text-fg"
         )}
       >
@@ -51,7 +43,12 @@ export function FiltersPanel({
       </button>
 
       {open && (
-        <div className="absolute left-0 z-20 mt-2 flex w-[min(90vw,380px)] flex-col gap-5 rounded-2xl border-[1.5px] border-border bg-card p-5 shadow-[0_1px_3px_rgba(2,6,23,0.08)]">
+        <FloatingPanel
+          panelRef={panelRef}
+          style={style}
+          width={panelWidth}
+          className="z-50 flex flex-col gap-5 rounded-2xl border-[1.5px] border-border bg-card p-5 shadow-[0_4px_16px_rgba(2,6,23,0.16)]"
+        >
           <FilterGroup label="Status">
             {STATUS_ORDER.map((value) => {
               const spec = STATUSES[value];
@@ -91,9 +88,9 @@ export function FiltersPanel({
               Clear these filters
             </button>
           )}
-        </div>
+        </FloatingPanel>
       )}
-    </div>
+    </>
   );
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { ArrowUpDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFloatingPanel, FloatingPanel } from "@/components/tasks/floating-panel";
 import type { SortMode } from "@/lib/tasks-view";
 
 const OPTIONS: { value: SortMode; label: string }[] = [
@@ -11,37 +11,31 @@ const OPTIONS: { value: SortMode; label: string }[] = [
   { value: "updated", label: "Recently updated" },
 ];
 
+const PANEL_WIDTH = 240;
+
 export function SortMenu({ value, onChange }: { value: SortMode; onChange: (value: SortMode) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
-
+  const { open, setOpen, triggerRef, panelRef, style } = useFloatingPanel<HTMLButtonElement>();
   const current = OPTIONS.find((o) => o.value === value)!;
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex h-12 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border bg-card px-4 text-[16px] leading-[22px] font-bold text-fg cursor-pointer transition-transform duration-150 active:scale-[0.97]"
+        className="flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border bg-card px-4 text-[16px] leading-[22px] font-bold text-fg cursor-pointer transition-transform duration-150 active:scale-[0.97]"
       >
         <ArrowUpDown aria-hidden className="size-4" />
         {current.label}
       </button>
       {open && (
-        <div
-          role="listbox"
-          className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border-[1.5px] border-border bg-card p-2 shadow-[0_1px_3px_rgba(2,6,23,0.08)]"
+        <FloatingPanel
+          panelRef={panelRef}
+          style={style}
+          width={PANEL_WIDTH}
+          className="z-50 rounded-2xl border-[1.5px] border-border bg-card p-2 shadow-[0_4px_16px_rgba(2,6,23,0.16)]"
         >
           {OPTIONS.map((option) => (
             <button
@@ -62,8 +56,8 @@ export function SortMenu({ value, onChange }: { value: SortMode; onChange: (valu
               {option.value === value && <Check aria-hidden className="size-4" />}
             </button>
           ))}
-        </div>
+        </FloatingPanel>
       )}
-    </div>
+    </>
   );
 }

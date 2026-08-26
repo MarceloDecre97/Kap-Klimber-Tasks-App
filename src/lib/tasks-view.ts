@@ -7,6 +7,7 @@ export type SortMode = "priority" | "reminder" | "updated";
 
 export interface TaskFilters {
   mine: boolean;
+  query: string;
   status: TaskStatus[];
   priority: Priority[];
   categoryIds: string[];
@@ -15,6 +16,7 @@ export interface TaskFilters {
 
 export const EMPTY_FILTERS: TaskFilters = {
   mine: false,
+  query: "",
   status: [],
   priority: [],
   categoryIds: [],
@@ -25,8 +27,22 @@ export function countActiveFilters(filters: TaskFilters): number {
   return filters.status.length + filters.priority.length + filters.categoryIds.length + filters.assigneeIds.length;
 }
 
+function matchesQuery(task: TaskWithRelations, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const haystacks = [
+    task.title,
+    task.description ?? "",
+    task.category?.label ?? "",
+    ...task.assignees.map((a) => a.display_name),
+    ...task.notes.map((n) => n.body),
+  ];
+  return haystacks.some((h) => h.toLowerCase().includes(q));
+}
+
 export function matchesFilters(task: TaskWithRelations, filters: TaskFilters, meId: string | null): boolean {
   if (filters.mine && !(meId && task.assignees.some((a) => a.id === meId))) return false;
+  if (!matchesQuery(task, filters.query)) return false;
   if (filters.status.length && !filters.status.includes(task.status)) return false;
   if (filters.priority.length && !filters.priority.includes(task.priority)) return false;
   if (filters.categoryIds.length && !(task.category && filters.categoryIds.includes(task.category.id))) return false;
