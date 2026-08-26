@@ -37,6 +37,7 @@ export async function requestOtp(memberIdInput: string) {
   });
 
   if (error) {
+    console.error("signInWithOtp failed", { status: error.status, code: error.code, message: error.message });
     return { ok: false as const, error: "We couldn't send a code right now. Try again in a moment." };
   }
 
@@ -63,6 +64,7 @@ export async function verifyOtp(memberIdInput: string, codeInput: string) {
   });
 
   if (error) {
+    console.error("verifyOtp failed", { status: error.status, code: error.code, message: error.message });
     return { ok: false as const, error: "That code is wrong or has expired. Request a new one." };
   }
 
