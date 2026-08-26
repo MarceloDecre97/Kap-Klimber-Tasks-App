@@ -1,12 +1,12 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { Filter } from "lucide-react";
 import { Chip } from "@/components/ui/chip";
-import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { PRIORITIES, PRIORITY_ORDER, STATUSES, STATUS_ORDER } from "@/lib/constants";
-import type { MemberSummary } from "@/lib/data/tasks";
+import { cn } from "@/lib/utils";
+import { STATUSES, STATUS_ORDER } from "@/lib/constants";
 import type { TaskFilters } from "@/lib/tasks-view";
-import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
+import type { TaskStatus } from "@/lib/supabase/database.types";
 
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -15,93 +15,84 @@ function toggle<T>(list: T[], value: T): T[] {
 export function FiltersPanel({
   filters,
   onChange,
-  roster,
   categories,
-  resultCount,
-  onClose,
 }: {
   filters: TaskFilters;
   onChange: (next: TaskFilters) => void;
-  roster: MemberSummary[];
   categories: { id: string; label: string }[];
-  resultCount: number;
-  onClose: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const count = filters.status.length + filters.categoryIds.length;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
   return (
-    <div className="flex flex-col gap-5 border-b-[1.5px] border-border bg-card px-5 py-5">
-      <FilterGroup label="Status">
-        {STATUS_ORDER.map((value) => {
-          const spec = STATUSES[value];
-          const Icon = spec.icon;
-          return (
-            <Chip
-              key={value}
-              selected={filters.status.includes(value)}
-              icon={<Icon aria-hidden className="size-4" />}
-              onClick={() => onChange({ ...filters, status: toggle<TaskStatus>(filters.status, value) })}
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={cn(
+          "flex h-12 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-4 text-[16px] leading-[22px] font-bold cursor-pointer transition-transform duration-150 active:scale-[0.97]",
+          count > 0 ? "border-prim bg-prim text-on-prim" : "border-border bg-card text-fg"
+        )}
+      >
+        <Filter aria-hidden className="size-4" />
+        More filters
+        {count > 0 && <span className="tabular-nums">· {count}</span>}
+      </button>
+
+      {open && (
+        <div className="absolute left-0 z-20 mt-2 flex w-[min(90vw,380px)] flex-col gap-5 rounded-2xl border-[1.5px] border-border bg-card p-5 shadow-[0_1px_3px_rgba(2,6,23,0.08)]">
+          <FilterGroup label="Status">
+            {STATUS_ORDER.map((value) => {
+              const spec = STATUSES[value];
+              const Icon = spec.icon;
+              return (
+                <Chip
+                  key={value}
+                  selected={filters.status.includes(value)}
+                  icon={<Icon aria-hidden className="size-4" />}
+                  onClick={() => onChange({ ...filters, status: toggle<TaskStatus>(filters.status, value) })}
+                >
+                  {spec.label}
+                </Chip>
+              );
+            })}
+          </FilterGroup>
+
+          <FilterGroup label="Category">
+            {categories.map((category) => (
+              <Chip
+                key={category.id}
+                selected={filters.categoryIds.includes(category.id)}
+                onClick={() => onChange({ ...filters, categoryIds: toggle(filters.categoryIds, category.id) })}
+              >
+                {category.label}
+              </Chip>
+            ))}
+            {categories.length === 0 && <p className="text-[16px] text-sub">No categories yet.</p>}
+          </FilterGroup>
+
+          {count > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange({ ...filters, status: [], categoryIds: [] })}
+              className="self-start text-[16px] leading-[22px] font-bold text-brand underline underline-offset-[3px] cursor-pointer"
             >
-              {spec.label}
-            </Chip>
-          );
-        })}
-      </FilterGroup>
-
-      <FilterGroup label="Priority">
-        {PRIORITY_ORDER.map((value) => {
-          const spec = PRIORITIES[value];
-          const Icon = spec.icon;
-          return (
-            <Chip
-              key={value}
-              selected={filters.priority.includes(value)}
-              icon={<Icon aria-hidden className="size-4" />}
-              onClick={() => onChange({ ...filters, priority: toggle<Priority>(filters.priority, value) })}
-            >
-              {spec.label}
-            </Chip>
-          );
-        })}
-      </FilterGroup>
-
-      <FilterGroup label="Category">
-        {categories.map((category) => (
-          <Chip
-            key={category.id}
-            selected={filters.categoryIds.includes(category.id)}
-            onClick={() => onChange({ ...filters, categoryIds: toggle(filters.categoryIds, category.id) })}
-          >
-            {category.label}
-          </Chip>
-        ))}
-      </FilterGroup>
-
-      <FilterGroup label="Assigned to">
-        {roster.map((person) => (
-          <Chip
-            key={person.id}
-            selected={filters.assigneeIds.includes(person.id)}
-            icon={<Avatar initials={person.initials} color={person.color} size={28} />}
-            onClick={() => onChange({ ...filters, assigneeIds: toggle(filters.assigneeIds, person.id) })}
-          >
-            {person.display_name}
-          </Chip>
-        ))}
-      </FilterGroup>
-
-      <div className="flex gap-3 pt-1">
-        <Button
-          variant="secondary"
-          className="w-auto px-5"
-          onClick={() =>
-            onChange({ mine: filters.mine, status: [], priority: [], categoryIds: [], assigneeIds: [] })
-          }
-        >
-          Clear all
-        </Button>
-        <Button onClick={onClose}>
-          Show {resultCount} {resultCount === 1 ? "task" : "tasks"}
-        </Button>
-      </div>
+              Clear these filters
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -110,7 +101,7 @@ function FilterGroup({ label, children }: { label: string; children: React.React
   return (
     <div className="flex flex-col gap-2.5">
       <div className="text-field-label">{label}</div>
-      <div className="flex flex-wrap gap-3">{children}</div>
+      <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   );
 }

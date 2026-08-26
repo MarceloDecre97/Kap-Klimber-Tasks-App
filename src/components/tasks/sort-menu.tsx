@@ -27,13 +27,13 @@ export function SortMenu({ value, onChange }: { value: SortMode; onChange: (valu
   const current = OPTIONS.find((o) => o.value === value)!;
 
   return (
-    <div ref={ref} className="relative flex-1">
+    <div ref={ref} className="relative shrink-0">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex h-14 w-full items-center justify-center gap-2 rounded-full border-[1.5px] border-border bg-card text-chip text-fg cursor-pointer transition-transform duration-150 active:scale-[0.97]"
+        className="flex h-12 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border bg-card px-4 text-[16px] leading-[22px] font-bold text-fg cursor-pointer transition-transform duration-150 active:scale-[0.97]"
       >
         <ArrowUpDown aria-hidden className="size-4" />
         {current.label}

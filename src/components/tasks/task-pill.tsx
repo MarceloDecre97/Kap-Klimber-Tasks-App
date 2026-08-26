@@ -62,7 +62,7 @@ export function TaskPill({
         />
       </button>
 
-      <div className="flex items-center gap-2 overflow-hidden">
+      <div className="flex flex-wrap items-center gap-1.5">
         <Badge spec={priority} />
         <Badge spec={status} />
       </div>
@@ -123,12 +123,13 @@ export function TaskPill({
                 <div className="text-[18px] leading-7 text-fg text-pretty">{note.body}</div>
               </div>
             ))}
-            <div className="flex gap-2">
+            <div className="flex min-w-0 gap-2">
               <Input
                 value={noteBody}
                 onChange={(event) => setNoteBody(event.target.value)}
                 placeholder="What happened?"
                 aria-label="Add a note"
+                className="min-w-0 flex-1"
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
