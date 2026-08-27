@@ -208,9 +208,12 @@ export function TasksApp({
           <FiltersPanel filters={filters} onChange={setFilters} categories={categories} />
           <SortMenu value={sort} onChange={setSort} />
           <Link href="/tasks/new" className="ml-auto shrink-0">
-            <Button size="md" className="h-12 px-4">
+            <Button
+              size="md"
+              className="h-12 justify-center px-4 bg-white text-black border border-transparent hover:bg-brand hover:text-white active:bg-brand active:text-white"
+            >
               <Plus aria-hidden className="size-4" />
-              New task
+              New Task
             </Button>
           </Link>
         </div>
