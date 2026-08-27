@@ -12,6 +12,33 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Relative luminance of a #rrggbb colour, per WCAG. */
+function relativeLuminance(hex: string): number {
+  const c = hex.replace("#", "");
+  const channels = [0, 2, 4]
+    .map((i) => parseInt(c.slice(i, i + 2), 16) / 255)
+    .map((x) => (x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)));
+  return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+}
+
+function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Picks white or near-black for text sitting directly on `background`,
+ * whichever reads better. The status bar fills span very light (olive,
+ * teal) to very dark (crimson, forest), so a single hardcoded text colour
+ * would be unreadable on one end or the other.
+ */
+export function readableTextOn(background: string): string {
+  const INK = "#020617";
+  return contrastRatio("#FFFFFF", background) >= contrastRatio(INK, background) ? "#FFFFFF" : INK;
+}
+
 export function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";

@@ -1,6 +1,6 @@
 import { PRIORITY_RANK, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { getLastActivityAt } from "@/lib/tasks-view";
-import { daysBetweenKeys, zonedDateKey } from "@/lib/utils";
+import { daysBetweenKeys, readableTextOn, zonedDateKey } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 
 /** Statuses that count as "open" — everything except complete. */
@@ -177,7 +177,10 @@ export function computeDashboardStats({
       count,
       width: pct(count, openTasks.length),
       fill: spec.border,
-      fg: spec.fg,
+      // The count sits on the bar itself, so it needs contrast against the
+      // fill — not the badge's text colour, which is tuned for the pale
+      // badge background instead.
+      fg: readableTextOn(spec.border),
     };
   });
 

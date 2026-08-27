@@ -40,12 +40,22 @@ export const PRIORITIES: Record<Priority, BadgeSpec> = {
   someday: { value: "someday", label: "Someday", icon: Moon, bg: "#F1F5F9", fg: "#475569", border: "#CBD5E1" },
 };
 
+/**
+ * Status tones read as a call to action: red until someone starts, blue
+ * while it moves, yellow while it waits on a reviewer, teal while it waits
+ * on someone else, green when it's done.
+ *
+ * Text-on-background contrast for every one of these clears WCAG AA
+ * (5.15:1 to 7.02:1). The `border` shade doubles as the bar fill on the
+ * dashboard, and is dark enough that numbers printed on it need
+ * `readableTextOn()` rather than the badge's own text colour.
+ */
 export const STATUSES: Record<TaskStatus, BadgeSpec> = {
-  not_started: { value: "not_started", label: "Not started", icon: Circle, bg: "#F1F5F9", fg: "#334155", border: "#CBD5E1" },
-  in_progress: { value: "in_progress", label: "In progress", icon: CircleDot, bg: "#DBEAFE", fg: "#1E3A8A", border: "#93C5FD" },
-  for_review: { value: "for_review", label: "For review", icon: Eye, bg: "#EDE9FE", fg: "#5B21B6", border: "#C4B5FD" },
-  waiting: { value: "waiting", label: "Waiting", icon: Clock, bg: "#CCFBF1", fg: "#115E59", border: "#5EEAD4" },
-  complete: { value: "complete", label: "Complete", icon: CheckCircle2, bg: "#DCFCE7", fg: "#166534", border: "#86EFAC" },
+  not_started: { value: "not_started", label: "Not started", icon: Circle, bg: "#FF9FA1", fg: "#7D1E24", border: "#9A0615" },
+  in_progress: { value: "in_progress", label: "In progress", icon: CircleDot, bg: "#9FC8FF", fg: "#1E3A8A", border: "#004CA1" },
+  for_review: { value: "for_review", label: "For review", icon: Eye, bg: "#FFF68F", fg: "#5B5300", border: "#8E8200" },
+  waiting: { value: "waiting", label: "Waiting", icon: Clock, bg: "#9CFFEA", fg: "#115E59", border: "#0D9A84" },
+  complete: { value: "complete", label: "Complete", icon: CheckCircle2, bg: "#88FFB1", fg: "#166534", border: "#00531E" },
 };
 
 export const PRIORITY_ORDER: Priority[] = ["asap", "high", "medium", "low", "someday"];
