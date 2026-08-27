@@ -38,6 +38,23 @@ function dateTimeFormatter(timeZone?: string) {
   });
 }
 
+/**
+ * Calendar-day key ("2026-08-27") for `date` as seen in `timeZone`. Sortable
+ * and directly comparable against a SQL `date` column's string value.
+ */
+export function zonedDateKey(date: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+/**
+ * Whole days between two "YYYY-MM-DD" keys (b - a). Both are parsed at UTC
+ * midnight so the subtraction is exact integer days, never off-by-one from
+ * a DST shift in the viewer's zone.
+ */
+export function daysBetweenKeys(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+}
+
 /** e.g. "CST" / "CDT" for the given zone at the given instant. */
 export function getZoneAbbreviation(timeZone: string, date: Date = new Date()): string {
   const part = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" })

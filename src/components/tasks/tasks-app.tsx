@@ -11,6 +11,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { ViewNav } from "@/components/layout/view-nav";
 import { EmptyState } from "@/components/tasks/empty-state";
 import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dropdown";
 import { FiltersPanel } from "@/components/tasks/filters-panel";
@@ -155,6 +156,9 @@ export function TasksApp({
             </Link>
           </div>
         </div>
+
+        <ViewNav current="/tasks" />
+
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-screen-title">Tasks</h1>
           <span className="text-[16px] leading-[22px] font-bold text-sub">{me.display_name}</span>
