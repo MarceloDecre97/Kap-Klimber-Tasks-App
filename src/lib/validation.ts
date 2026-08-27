@@ -20,7 +20,11 @@ export const taskInputSchema = z.object({
   priority: priorityEnum,
   status: statusEnum,
   assigneeIds: z.array(z.string().uuid()).min(1, "Pick at least one person."),
-  reminderAt: z.string().datetime({ offset: true }).nullable().optional(),
+  dueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid due date.")
+    .nullable()
+    .optional(),
 });
 
 export type TaskInput = z.infer<typeof taskInputSchema>;

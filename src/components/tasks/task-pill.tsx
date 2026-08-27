@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell, ChevronDown, Hourglass, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
+import { ChevronDown, Hourglass, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Chip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { daysSince } from "@/lib/tasks-view";
-import { cn, formatDateGroup, formatReminder, formatTimestamp } from "@/lib/utils";
+import { cn, formatCalendarDate, formatDateGroup, formatTimestamp } from "@/lib/utils";
 import { addNote, toggleNoteAck } from "@/app/tasks/actions";
 import type { TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
@@ -63,7 +63,7 @@ export function TaskPill({
         <span className="text-card-title flex-1 text-fg text-pretty">{task.title}</span>
         <div className="flex shrink-0 flex-col items-end gap-0.5 pt-1 text-[12px] leading-[14px] font-bold text-sub tabular-nums whitespace-nowrap">
           <span>Created On {formatDateGroup(task.created_at, timeZone)}</span>
-          {task.reminder_at && <span className="text-accent">Due For {formatDateGroup(task.reminder_at, timeZone)}</span>}
+          {task.due_date && <span className="text-accent">Due For {formatCalendarDate(task.due_date)}</span>}
         </div>
         <ChevronDown
           aria-hidden
@@ -97,14 +97,13 @@ export function TaskPill({
             </dd>
             <dt className="text-[16px] leading-7 font-bold text-sub">Category</dt>
             <dd className="text-[18px] leading-7 text-fg">{task.category?.label ?? "None"}</dd>
+            {task.due_date && (
+              <>
+                <dt className="text-[16px] leading-7 font-bold text-sub">Due date</dt>
+                <dd className="text-[18px] leading-7 text-fg">{formatCalendarDate(task.due_date)}</dd>
+              </>
+            )}
           </dl>
-
-          {task.reminder_at && (
-            <div className="flex items-center gap-2 text-[18px] leading-7 font-bold text-accent">
-              <Bell aria-hidden className="size-5" />
-              {formatReminder(task.reminder_at, timeZone)}
-            </div>
-          )}
 
           {task.description && <p className="text-[18px] leading-7 text-fg text-pretty">{task.description}</p>}
 

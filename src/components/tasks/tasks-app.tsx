@@ -28,7 +28,7 @@ import {
   type SortMode,
   type TaskFilters,
 } from "@/lib/tasks-view";
-import { formatDateGroup, formatTimeOfDay, getZoneAbbreviation } from "@/lib/utils";
+import { formatDateGroup } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
@@ -78,7 +78,7 @@ export function TasksApp({
     };
   }, [initialTasks, filters, me.id]);
 
-  const groups = useMemo(() => groupTasks(open, sort, timeZone), [open, sort, timeZone]);
+  const groups = useMemo(() => groupTasks(open, sort), [open, sort]);
   const totalMatching = open.length + complete.length;
 
   const overallDone = useMemo(() => initialTasks.filter((task) => task.status === "complete").length, [initialTasks]);
@@ -250,17 +250,10 @@ export function TasksApp({
                           <span className="size-[11px] shrink-0 rounded-full bg-brand" />
                         </div>
                       )}
-                      {task.reminder_at ? (
-                        <div className="flex flex-col items-end text-[12px] leading-[14px] font-bold text-sub tabular-nums whitespace-nowrap">
-                          <span>{formatTimeOfDay(task.reminder_at, timeZone)}</span>
-                          <span className="opacity-70">{getZoneAbbreviation(timeZone, new Date(task.reminder_at))}</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-end text-[11px] leading-[13px] font-bold text-sub tabular-nums whitespace-nowrap opacity-70">
-                          <span>Updated</span>
-                          <span>{formatDateGroup(getLastActivityAt(task), timeZone)}</span>
-                        </div>
-                      )}
+                      <div className="flex flex-col items-end text-[11px] leading-[13px] font-bold text-sub tabular-nums whitespace-nowrap opacity-70">
+                        <span>Updated</span>
+                        <span>{formatDateGroup(getLastActivityAt(task), timeZone)}</span>
+                      </div>
                       <div className="flex-1 w-[1.5px] bg-line" />
                     </div>
                     <div className="min-w-0">

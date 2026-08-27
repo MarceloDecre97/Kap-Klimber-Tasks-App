@@ -1,9 +1,8 @@
 import type { TaskWithRelations } from "@/lib/data/tasks";
 import { PRIORITY_RANK } from "@/lib/constants";
-import { formatDateGroup, zonedDateKey } from "@/lib/utils";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
-export type SortMode = "priority" | "reminder" | "updated";
+export type SortMode = "priority" | "due" | "updated";
 
 export interface TaskFilters {
   mine: boolean;
@@ -69,10 +68,10 @@ export function matchesFilters(task: TaskWithRelations, filters: TaskFilters, me
 
 function compareTasks(a: TaskWithRelations, b: TaskWithRelations, sort: SortMode): number {
   switch (sort) {
-    case "reminder": {
-      const ar = a.reminder_at ? Date.parse(a.reminder_at) : Infinity;
-      const br = b.reminder_at ? Date.parse(b.reminder_at) : Infinity;
-      if (ar !== br) return ar - br;
+    case "due": {
+      const ad = a.due_date ? Date.parse(a.due_date) : Infinity;
+      const bd = b.due_date ? Date.parse(b.due_date) : Infinity;
+      if (ad !== bd) return ad - bd;
       return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
     }
     case "updated":
@@ -81,9 +80,9 @@ function compareTasks(a: TaskWithRelations, b: TaskWithRelations, sort: SortMode
     default: {
       const rank = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
       if (rank !== 0) return rank;
-      const ar = a.reminder_at ? Date.parse(a.reminder_at) : Infinity;
-      const br = b.reminder_at ? Date.parse(b.reminder_at) : Infinity;
-      if (ar !== br) return ar - br;
+      const ad = a.due_date ? Date.parse(a.due_date) : Infinity;
+      const bd = b.due_date ? Date.parse(b.due_date) : Infinity;
+      if (ad !== bd) return ad - bd;
       return Date.parse(b.updated_at) - Date.parse(a.updated_at);
     }
   }
@@ -95,32 +94,13 @@ export interface TaskGroup {
   tasks: TaskWithRelations[];
 }
 
-const NO_DATE_KEY = "no-date";
-
-export function groupTasks(tasks: TaskWithRelations[], sort: SortMode, timeZone?: string): TaskGroup[] {
-  const groups = new Map<string, TaskWithRelations[]>();
-
-  for (const task of tasks) {
-    const key = task.reminder_at ? zonedDateKey(new Date(task.reminder_at), timeZone) : NO_DATE_KEY;
-    const bucket = groups.get(key);
-    if (bucket) bucket.push(task);
-    else groups.set(key, [task]);
-  }
-
-  const dated = [...groups.entries()]
-    .filter(([key]) => key !== NO_DATE_KEY)
-    .sort(([a], [b]) => Date.parse(a) - Date.parse(b));
-
-  const result: TaskGroup[] = dated.map(([key, groupTasks]) => ({
-    key,
-    label: formatDateGroup(groupTasks[0]!.reminder_at!, timeZone),
-    tasks: groupTasks.slice().sort((a, b) => compareTasks(a, b, sort)),
-  }));
-
-  const noDate = groups.get(NO_DATE_KEY);
-  if (noDate) {
-    result.push({ key: NO_DATE_KEY, label: "Update Log", tasks: noDate.slice().sort((a, b) => compareTasks(a, b, sort)) });
-  }
-
-  return result;
+/**
+ * The task list is a single running "Update Log" — every task appears in
+ * it regardless of whether it has a due date, sorted by the chosen mode.
+ * (Grouping by due date was retired: due dates no longer drive the rail,
+ * only the last-activity timestamp shown per task does.)
+ */
+export function groupTasks(tasks: TaskWithRelations[], sort: SortMode): TaskGroup[] {
+  if (tasks.length === 0) return [];
+  return [{ key: "update-log", label: "Update Log", tasks: tasks.slice().sort((a, b) => compareTasks(a, b, sort)) }];
 }

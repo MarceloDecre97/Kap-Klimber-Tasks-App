@@ -7,7 +7,7 @@ import type { SortMode } from "@/lib/tasks-view";
 
 const OPTIONS: { value: SortMode; label: string }[] = [
   { value: "priority", label: "Priority" },
-  { value: "reminder", label: "Reminder date" },
+  { value: "due", label: "Due date" },
   { value: "updated", label: "Recently updated" },
 ];
 

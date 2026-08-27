@@ -2,13 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bell, Calendar } from "lucide-react";
+import { AlertTriangle, Calendar } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { PRIORITIES, PRIORITY_ORDER, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { createTask, updateTask } from "@/app/tasks/actions";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
@@ -23,18 +22,7 @@ interface FormState {
   priority: Priority;
   status: TaskStatus;
   assigneeIds: string[];
-  reminderEnabled: boolean;
-  reminderDate: string;
-  reminderTime: string;
-}
-
-function toDateInputValue(iso: string) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function toTimeInputValue(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  dueDate: string;
 }
 
 function initialState(task?: TaskWithRelations): FormState {
@@ -47,9 +35,7 @@ function initialState(task?: TaskWithRelations): FormState {
     priority: task?.priority ?? "medium",
     status: task?.status ?? "not_started",
     assigneeIds: task?.assignees.map((a) => a.id) ?? [],
-    reminderEnabled: !!task?.reminder_at,
-    reminderDate: task?.reminder_at ? toDateInputValue(task.reminder_at) : "",
-    reminderTime: task?.reminder_at ? toTimeInputValue(task.reminder_at) : "09:00",
+    dueDate: task?.due_date ?? "",
   };
 }
 
@@ -91,11 +77,6 @@ export function TaskForm({
     if (!canSave) return;
     setError(null);
 
-    const reminderAt =
-      form.reminderEnabled && form.reminderDate
-        ? new Date(`${form.reminderDate}T${form.reminderTime || "09:00"}`).toISOString()
-        : null;
-
     const input = {
       title: form.title,
       description: form.description,
@@ -104,7 +85,7 @@ export function TaskForm({
       priority: form.priority,
       status: form.status,
       assigneeIds: form.assigneeIds,
-      reminderAt,
+      dueDate: form.dueDate || null,
     };
 
     startTransition(async () => {
@@ -224,42 +205,18 @@ export function TaskForm({
           )}
         </Field>
 
-        <Field label="">
-          <div className="flex items-center justify-between gap-4 rounded-2xl border-[1.5px] border-border bg-card p-4">
-            <span className="text-field-label">Set a reminder</span>
-            <Switch checked={form.reminderEnabled} onCheckedChange={(v) => update("reminderEnabled", v)} label="Set a reminder" />
+        <Field label="Due date" htmlFor="task-due-date">
+          <div className="relative">
+            <Calendar aria-hidden className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-sub" />
+            <input
+              id="task-due-date"
+              type="date"
+              value={form.dueDate}
+              onChange={(event) => update("dueDate", event.target.value)}
+              className="h-[60px] w-full rounded-2xl border-[1.5px] border-border bg-card pl-11 pr-3 text-[18px] text-fg tabular-nums"
+            />
           </div>
-          {form.reminderEnabled && (
-            <div className="flex gap-3">
-              <div className="flex flex-1 flex-col gap-2">
-                <label htmlFor="reminder-date" className="text-field-label">
-                  Date
-                </label>
-                <div className="relative">
-                  <Calendar aria-hidden className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-sub" />
-                  <input
-                    id="reminder-date"
-                    type="date"
-                    value={form.reminderDate}
-                    onChange={(event) => update("reminderDate", event.target.value)}
-                    className="h-[60px] w-full rounded-2xl border-[1.5px] border-border bg-card pl-11 pr-3 text-[18px] text-fg tabular-nums"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-1 flex-col gap-2">
-                <label htmlFor="reminder-time" className="text-field-label">
-                  Time
-                </label>
-                <input
-                  id="reminder-time"
-                  type="time"
-                  value={form.reminderTime}
-                  onChange={(event) => update("reminderTime", event.target.value)}
-                  className="h-[60px] w-full rounded-2xl border-[1.5px] border-border bg-card px-3 text-[18px] text-fg tabular-nums"
-                />
-              </div>
-            </div>
-          )}
+          <p className="text-[16px] leading-[22px] text-sub">Optional — leave blank if there&apos;s no deadline yet.</p>
         </Field>
 
         <Field label="Description">
@@ -275,12 +232,6 @@ export function TaskForm({
           <div className="flex items-start gap-2 text-danger">
             <AlertTriangle aria-hidden className="mt-0.5 size-5 shrink-0" />
             <p className="text-[18px] leading-7 font-bold text-pretty">{error}</p>
-          </div>
-        )}
-
-        {form.reminderEnabled && (
-          <div className="flex items-center gap-2 text-[16px] leading-[22px] text-sub">
-            <Bell aria-hidden className="size-4" />A reminder will show on the task once saved.
           </div>
         )}
       </div>
