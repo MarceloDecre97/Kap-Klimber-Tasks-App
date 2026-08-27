@@ -119,7 +119,7 @@ export function groupTasks(tasks: TaskWithRelations[], sort: SortMode, timeZone?
 
   const noDate = groups.get(NO_DATE_KEY);
   if (noDate) {
-    result.push({ key: NO_DATE_KEY, label: "No date", tasks: noDate.slice().sort((a, b) => compareTasks(a, b, sort)) });
+    result.push({ key: NO_DATE_KEY, label: "Update Log", tasks: noDate.slice().sort((a, b) => compareTasks(a, b, sort)) });
   }
 
   return result;

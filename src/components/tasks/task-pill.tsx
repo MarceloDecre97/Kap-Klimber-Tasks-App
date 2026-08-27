@@ -61,12 +61,10 @@ export function TaskPill({
         className="flex w-full min-h-14 items-start gap-3 border-none bg-transparent p-0 text-left cursor-pointer"
       >
         <span className="text-card-title flex-1 text-fg text-pretty">{task.title}</span>
-        <span
-          className="shrink-0 pt-1 text-[13px] leading-4 font-bold text-sub tabular-nums whitespace-nowrap"
-          title="Created"
-        >
-          {formatDateGroup(task.created_at, timeZone)}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-0.5 pt-1 text-[12px] leading-[14px] font-bold text-sub tabular-nums whitespace-nowrap">
+          <span>Created On {formatDateGroup(task.created_at, timeZone)}</span>
+          {task.reminder_at && <span className="text-accent">Due For {formatDateGroup(task.reminder_at, timeZone)}</span>}
+        </div>
         <ChevronDown
           aria-hidden
           className={`mt-0.5 size-5 shrink-0 text-sub transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
