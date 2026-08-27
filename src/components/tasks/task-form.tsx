@@ -11,7 +11,12 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PRIORITIES, PRIORITY_ORDER, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { createTask, updateTask } from "@/app/tasks/actions";
-import { toZonedDateInput, toZonedTimeInput, zonedWallClockToIso } from "@/lib/utils";
+import { cn, toZonedDateInput, toZonedTimeInput, zonedWallClockToIso } from "@/lib/utils";
+
+/** Matches the cap enforced in validation and in the database. */
+const TITLE_MAX = 200;
+/** Past this, the title will start getting clamped in the list on a phone. */
+const TITLE_LONG = 80;
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
@@ -67,6 +72,7 @@ export function TaskForm({
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(initial);
   const canSave = form.title.trim().length > 0 && form.assigneeIds.length > 0;
+  const titleLength = form.title.length;
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -142,12 +148,31 @@ export function TaskForm({
             id="task-title"
             placeholder="What needs doing?"
             value={form.title}
+            maxLength={TITLE_MAX}
             onChange={(event) => update("title", event.target.value)}
             aria-invalid={!!error && !form.title.trim()}
+            aria-describedby="task-title-hint"
           />
-          {!form.title.trim() ? (
-            <p className="text-[16px] leading-[22px] text-sub">Save turns on once the task has a title.</p>
-          ) : null}
+          <div className="flex items-start justify-between gap-3">
+            <p id="task-title-hint" className="text-[16px] leading-[22px] text-sub text-pretty">
+              {!form.title.trim() && <>Save turns on once the task has a title. </>}
+              Long titles are shortened in the list — put extra detail in the Description below, or add notes
+              once the task is saved.
+            </p>
+            <span
+              aria-live="polite"
+              className={cn(
+                "shrink-0 pt-0.5 text-[15px] leading-5 font-bold tabular-nums",
+                titleLength >= TITLE_MAX
+                  ? "text-danger"
+                  : titleLength > TITLE_LONG
+                    ? "text-accent"
+                    : "text-sub"
+              )}
+            >
+              {titleLength}/{TITLE_MAX}
+            </span>
+          </div>
         </Field>
 
         <Field label="Assigned to">

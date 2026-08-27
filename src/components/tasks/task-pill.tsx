@@ -15,6 +15,13 @@ import { addNote, toggleNoteAck } from "@/app/tasks/actions";
 import type { TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
+/**
+ * Past this length a title steps down one size. Character count is a proxy
+ * for line count — imprecise, but free to compute and impossible to make
+ * flicker, and the two-line clamp is what actually bounds the card.
+ */
+const COMPACT_TITLE_CHARS = 55;
+
 export function TaskPill({
   task,
   meId,
@@ -56,17 +63,40 @@ export function TaskPill({
         type="button"
         onClick={onToggleExpand}
         aria-expanded={expanded}
-        className="flex w-full min-h-14 items-start gap-3 border-none bg-transparent p-0 text-left cursor-pointer"
+        className="flex w-full min-h-14 flex-col gap-2 border-none bg-transparent p-0 text-left cursor-pointer"
       >
-        <span className="text-card-title flex-1 text-fg text-pretty">{task.title}</span>
-        <div className="flex shrink-0 flex-col items-end gap-0.5 pt-1 text-[12px] leading-[14px] font-bold text-sub tabular-nums whitespace-nowrap">
+        <span className="flex w-full items-start gap-3">
+          {/*
+            Collapsed, the title is capped at two lines so one long title can
+            never push the rest of the list off screen; expanding shows it in
+            full. The dates moved below rather than beside it, which roughly
+            doubles the width the title gets on a phone — worth far more than
+            shrinking the type. The size step is a small extra assist for
+            middling-length titles.
+          */}
+          <span
+            title={task.title}
+            className={cn(
+              "flex-1 text-fg text-pretty",
+              task.title.length > COMPACT_TITLE_CHARS ? "text-card-title-compact" : "text-card-title",
+              !expanded && "line-clamp-2"
+            )}
+          >
+            {task.title}
+          </span>
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "mt-0.5 size-5 shrink-0 text-sub transition-transform duration-150",
+              expanded && "rotate-180"
+            )}
+          />
+        </span>
+
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] leading-[14px] font-bold text-sub tabular-nums">
           <span>Created On {formatDateGroup(task.created_at)}</span>
           {task.due_date && <span className="text-accent">Due For {formatCalendarDate(task.due_date)}</span>}
-        </div>
-        <ChevronDown
-          aria-hidden
-          className={`mt-0.5 size-5 shrink-0 text-sub transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
-        />
+        </span>
       </button>
 
       <div className="flex flex-wrap items-center gap-1.5">
