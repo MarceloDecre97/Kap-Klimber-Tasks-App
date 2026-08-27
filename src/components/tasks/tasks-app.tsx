@@ -3,21 +3,18 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Search, Settings, Users, X } from "lucide-react";
+import { ChevronDown, Plus, Search, Users, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
-import { BrandLogo } from "@/components/layout/brand-logo";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { ViewNav } from "@/components/layout/view-nav";
+import { AppHeader } from "@/components/layout/app-header";
 import { EmptyState } from "@/components/tasks/empty-state";
 import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dropdown";
 import { FiltersPanel } from "@/components/tasks/filters-panel";
 import { SortMenu } from "@/components/tasks/sort-menu";
 import { TaskPill } from "@/components/tasks/task-pill";
-import { DEFAULT_TIMEZONE, TimezoneSelect } from "@/components/tasks/timezone-select";
+import { DEFAULT_TIMEZONE } from "@/components/tasks/timezone-select";
 import { setTaskStatus, softDeleteTask, restoreTask } from "@/app/tasks/actions";
 import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
 import {
@@ -143,22 +140,7 @@ export function TasksApp({
 
   return (
     <div className="flex h-dvh flex-col bg-bg">
-      <header className="flex shrink-0 flex-col gap-3 border-b-[1.5px] border-border bg-card px-5 pt-[calc(env(safe-area-inset-top)+10px)] pb-3.5">
-        <div className="flex items-center justify-between gap-4">
-          <BrandLogo width={120} height={19} className="h-[19px] w-auto" />
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <TimezoneSelect value={timeZone} onChange={handleTimeZoneChange} />
-            <ThemeToggle />
-            <Link href="/settings">
-              <IconButton aria-label="Settings">
-                <Settings aria-hidden className="size-5" />
-              </IconButton>
-            </Link>
-          </div>
-        </div>
-
-        <ViewNav current="/tasks" />
-
+      <AppHeader current="/tasks" timeZone={timeZone} onTimeZoneChange={handleTimeZoneChange}>
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-screen-title">Tasks</h1>
           <span className="text-[16px] leading-[22px] font-bold text-sub">{me.display_name}</span>
@@ -236,7 +218,7 @@ export function TasksApp({
             </button>
           </div>
         )}
-      </header>
+      </AppHeader>
 
       <div className="flex-1 overflow-y-auto px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">
         {groups.length === 0 && complete.length === 0 ? (

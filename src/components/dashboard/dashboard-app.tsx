@@ -3,18 +3,15 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ChevronDown, MessageSquare, Settings } from "lucide-react";
+import { AlertTriangle, ChevronDown, MessageSquare } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
-import { BrandLogo } from "@/components/layout/brand-logo";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { ViewNav } from "@/components/layout/view-nav";
+import { AppHeader } from "@/components/layout/app-header";
 import { BigStat, Card, EmptyLine, LegendRow, MeterRow, StackedBar } from "@/components/dashboard/cards";
 import { TaskPill } from "@/components/tasks/task-pill";
-import { DEFAULT_TIMEZONE, TimezoneSelect } from "@/components/tasks/timezone-select";
+import { DEFAULT_TIMEZONE } from "@/components/tasks/timezone-select";
 import { restoreTask, setTaskStatus, softDeleteTask } from "@/app/tasks/actions";
 import {
   STALE_AFTER_DAYS,
@@ -111,21 +108,7 @@ export function DashboardApp({
 
   return (
     <div className="flex h-dvh flex-col bg-bg">
-      <header className="flex shrink-0 flex-col gap-3 border-b-[1.5px] border-border bg-card px-5 pt-[calc(env(safe-area-inset-top)+10px)] pb-3.5 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-        <div className="flex items-center justify-between gap-4">
-          <BrandLogo width={120} height={19} className="h-[19px] w-auto" />
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <TimezoneSelect value={timeZone} onChange={handleTimeZoneChange} />
-            <ThemeToggle />
-            <Link href="/settings">
-              <IconButton aria-label="Settings">
-                <Settings aria-hidden className="size-5" />
-              </IconButton>
-            </Link>
-          </div>
-        </div>
-        <ViewNav current="/dashboard" className="lg:flex-none" />
-      </header>
+      <AppHeader current="/dashboard" timeZone={timeZone} onTimeZoneChange={handleTimeZoneChange} />
 
       <div className="flex-1 overflow-y-auto px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+32px)]">
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[400px_minmax(0,1fr)]">
