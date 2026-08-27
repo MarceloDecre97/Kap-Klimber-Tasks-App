@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronDown, Hourglass, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
+import { Bell, ChevronDown, Hourglass, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,16 @@ export function TaskPill({
           <Hourglass aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
           {daysSince(task.created_at)}d
         </span>
+        {task.reminder_at && (
+          <span
+            className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border px-2.5 text-[15px] leading-5 font-bold text-accent"
+            title={`Reminder set for ${formatTimestamp(task.reminder_at)}`}
+          >
+            <Bell aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+            <span className="sr-only">Reminder set for </span>
+            {formatTimestamp(task.reminder_at)}
+          </span>
+        )}
       </div>
 
       {expanded && (

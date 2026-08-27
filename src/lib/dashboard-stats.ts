@@ -1,6 +1,6 @@
 import { PRIORITY_RANK, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { getLastActivityAt } from "@/lib/tasks-view";
-import { daysBetweenKeys, readableTextOn, zonedDateKey } from "@/lib/utils";
+import { daysBetweenKeys, formatClockTime, readableTextOn, zonedDateKey } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 
 /** Statuses that count as "open" — everything except complete. */
@@ -11,14 +11,33 @@ export const STALE_AFTER_DAYS = 14;
 
 export type PersonalScope = "assigned" | "created";
 
+/**
+ * A task in a bucket, with everything the row needs already resolved so the
+ * component never has to re-derive why the task landed where it did.
+ */
+export interface BucketEntry {
+  task: TaskWithRelations;
+  /** Calendar day, in app time, that decided this task's bucket. */
+  attentionKey: string | null;
+  hasReminder: boolean;
+  /** The line explaining placement, e.g. "Due Fri 28 Aug". */
+  primaryLabel: string;
+  /** The other date, when a task carries both. */
+  secondaryLabel: string | null;
+  /** A deadline that has passed — rendered red. */
+  missedDeadline: boolean;
+  /** A reminder that fired on a task with no deadline — rendered amber. */
+  passedReminder: boolean;
+}
+
 export interface BucketSpec {
   key: string;
   title: string;
-  tasks: TaskWithRelations[];
+  entries: BucketEntry[];
   emptyCopy: string;
   /** Open by default — the buckets that need attention today. */
   defaultOpen: boolean;
-  /** Overdue gets a danger rail + filled count, per the design reference. */
+  /** Overdue gets a danger rail, per the design reference. */
   urgent?: boolean;
   prompt?: string;
 }
@@ -70,13 +89,114 @@ function pct(n: number, total: number): string {
 }
 
 /**
- * Day offset of a task's due date relative to today, both resolved in the
- * viewer's selected timezone. Negative = overdue, 0 = today, null = no due
- * date set.
+ * Day offset of a task's due date relative to today. Negative = overdue,
+ * 0 = today, null = no due date set.
  */
 export function dueOffset(task: TaskWithRelations, todayKey: string): number | null {
   if (!task.due_date) return null;
   return daysBetweenKeys(todayKey, task.due_date);
+}
+
+/** The calendar day a task's reminder falls on, in app time. */
+function reminderKey(task: TaskWithRelations): string | null {
+  return task.reminder_at ? zonedDateKey(new Date(task.reminder_at)) : null;
+}
+
+/**
+ * The day a task next wants attention — what decides its bucket.
+ *
+ * A due date is an obligation; a reminder is a nudge. An *upcoming* nudge
+ * can pull a task forward, but a nudge that has already fired never drags a
+ * task with a healthy future deadline into Overdue: it did its job, and the
+ * deadline governs from then on.
+ */
+function attentionKeyOf(task: TaskWithRelations, todayKey: string): string | null {
+  const due = task.due_date ?? null;
+  const rem = reminderKey(task);
+
+  if (due && rem) return rem >= todayKey && rem < due ? rem : due;
+  return due ?? rem;
+}
+
+/** Monday-start Sunday that ends the week containing `dayKey`, `weeksAhead` on. */
+function endOfWeekKey(dayKey: string, weeksAhead = 0): string {
+  const d = new Date(`${dayKey}T00:00:00Z`);
+  const mondayIndex = (d.getUTCDay() + 6) % 7; // Mon = 0 … Sun = 6
+  d.setUTCDate(d.getUTCDate() + (6 - mondayIndex) + weeksAhead * 7);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "Fri 28 Aug" from a plain "YYYY-MM-DD", with no timezone shifting. */
+function formatDayKey(dayKey: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${dayKey}T00:00:00Z`));
+}
+
+/** "today" / "tomorrow" / "Fri 28 Aug" */
+function relativeDay(dayKey: string, todayKey: string): string {
+  const offset = daysBetweenKeys(todayKey, dayKey);
+  if (offset === 0) return "today";
+  if (offset === 1) return "tomorrow";
+  return formatDayKey(dayKey);
+}
+
+function plural(n: number, word: string) {
+  return `${n} ${n === 1 ? word : `${word}s`}`;
+}
+
+function toEntry(task: TaskWithRelations, todayKey: string): BucketEntry {
+  const due = task.due_date ?? null;
+  const rem = reminderKey(task);
+  const attentionKey = attentionKeyOf(task, todayKey);
+  const remTime = task.reminder_at ? formatClockTime(new Date(task.reminder_at)) : null;
+
+  const missedDeadline = !!due && due < todayKey;
+  // Only a reminder-only task can have a "passed reminder" — if there is a
+  // deadline, that deadline is the thing being judged.
+  const passedReminder = !due && !!rem && rem < todayKey;
+
+  const reminderText = (key: string) => `Reminder ${relativeDay(key, todayKey)}, ${remTime}`;
+  const dueText = (key: string) => `Due ${relativeDay(key, todayKey)}`;
+
+  let primaryLabel: string;
+  let secondaryLabel: string | null = null;
+
+  if (missedDeadline) {
+    primaryLabel = `${plural(Math.abs(daysBetweenKeys(todayKey, due!)), "day")} overdue`;
+    if (rem && rem >= todayKey) secondaryLabel = reminderText(rem);
+  } else if (passedReminder) {
+    primaryLabel = `Reminder passed ${plural(Math.abs(daysBetweenKeys(todayKey, rem!)), "day")} ago`;
+  } else if (attentionKey && attentionKey === rem && rem !== due) {
+    primaryLabel = reminderText(rem);
+    if (due) secondaryLabel = dueText(due);
+  } else if (attentionKey) {
+    primaryLabel = dueText(attentionKey);
+    if (rem && rem >= todayKey) secondaryLabel = reminderText(rem);
+  } else {
+    primaryLabel = "No date set";
+  }
+
+  return {
+    task,
+    attentionKey,
+    hasReminder: !!task.reminder_at,
+    primaryLabel,
+    secondaryLabel,
+    missedDeadline,
+    passedReminder,
+  };
+}
+
+/** Soonest attention date first, then by priority. */
+function byAttention(a: BucketEntry, b: BucketEntry): number {
+  const av = a.attentionKey ?? "9999-12-31";
+  const bv = b.attentionKey ?? "9999-12-31";
+  if (av !== bv) return av < bv ? -1 : 1;
+  return PRIORITY_RANK[a.task.priority] - PRIORITY_RANK[b.task.priority];
 }
 
 function sortByUrgency(todayKey: string) {
@@ -121,36 +241,56 @@ export function computeDashboardStats({
     scope === "assigned" ? task.assignees.some((a) => a.id === meId) : task.created_by === meId
   );
 
-  const byOffset = (predicate: (offset: number | null) => boolean) =>
-    mine.filter((task) => predicate(dueOffset(task, todayKey))).sort(sortByUrgency(todayKey));
+  // Calendar weeks, Monday-start — the same week boundary the "Completed
+  // this week" card uses, so the phrase means one thing across the screen.
+  const endOfThisWeek = endOfWeekKey(todayKey);
+  const endOfNextWeek = endOfWeekKey(todayKey, 1);
+
+  const entries = mine.map((task) => toEntry(task, todayKey));
+  const inRange = (predicate: (key: string | null) => boolean) =>
+    entries.filter((e) => predicate(e.attentionKey)).sort(byAttention);
 
   const buckets: BucketSpec[] = [
     {
       key: "overdue",
       title: "Overdue",
-      tasks: byOffset((o) => o !== null && o < 0),
+      entries: inRange((k) => k !== null && k < todayKey),
       emptyCopy: "Nothing overdue.",
       defaultOpen: true,
       urgent: true,
     },
     {
       key: "today",
-      title: "Due today",
-      tasks: byOffset((o) => o === 0),
-      emptyCopy: "Nothing due today.",
+      title: "Today",
+      entries: inRange((k) => k === todayKey),
+      emptyCopy: "Nothing for today.",
       defaultOpen: true,
     },
     {
-      key: "soon",
-      title: "Next 5 days",
-      tasks: byOffset((o) => o !== null && o >= 1 && o <= 5),
-      emptyCopy: "Nothing scheduled for the next five days.",
+      key: "thisWeek",
+      title: "This week",
+      entries: inRange((k) => k !== null && k > todayKey && k <= endOfThisWeek),
+      emptyCopy: "Nothing else this week.",
+      defaultOpen: false,
+    },
+    {
+      key: "nextWeek",
+      title: "Next week",
+      entries: inRange((k) => k !== null && k > endOfThisWeek && k <= endOfNextWeek),
+      emptyCopy: "Nothing scheduled for next week.",
+      defaultOpen: false,
+    },
+    {
+      key: "later",
+      title: "Later",
+      entries: inRange((k) => k !== null && k > endOfNextWeek),
+      emptyCopy: "Nothing scheduled further out.",
       defaultOpen: false,
     },
     {
       key: "nodate",
       title: "No date set",
-      tasks: byOffset((o) => o === null),
+      entries: inRange((k) => k === null),
       emptyCopy: "Every task has a date.",
       defaultOpen: false,
       prompt: "Give these a deadline",
@@ -285,21 +425,4 @@ export function computeDashboardStats({
     doneThisWeek,
     doneLastWeek,
   };
-}
-
-/** "3 days overdue" / "Today" / "Fri 28 Aug" / "No date set" */
-export function formatDueLabel(task: TaskWithRelations, todayKey: string): string {
-  const offset = dueOffset(task, todayKey);
-  if (offset === null) return "No date set";
-  if (offset < 0) return `${Math.abs(offset)} ${Math.abs(offset) === 1 ? "day" : "days"} overdue`;
-  if (offset === 0) return "Today";
-  if (offset === 1) return "Tomorrow";
-  return new Intl.DateTimeFormat("en-US", { weekday: "short", day: "numeric", month: "short" }).format(
-    new Date(`${task.due_date!}T00:00:00`)
-  );
-}
-
-export function isOverdue(task: TaskWithRelations, todayKey: string): boolean {
-  const offset = dueOffset(task, todayKey);
-  return offset !== null && offset < 0;
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ChevronDown, MessageSquare } from "lucide-react";
+import { AlertTriangle, Bell, ChevronDown, MessageSquare } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -15,12 +15,10 @@ import { restoreTask, setTaskStatus, softDeleteTask } from "@/app/tasks/actions"
 import {
   STALE_AFTER_DAYS,
   computeDashboardStats,
-  formatDueLabel,
-  isOverdue,
   type BucketSpec,
   type PersonalScope,
 } from "@/lib/dashboard-stats";
-import { cn, zonedDateKey } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
@@ -46,7 +44,6 @@ export function DashboardApp({
     () => computeDashboardStats({ tasks: initialTasks, roster, meId: me.id, scope }),
     [initialTasks, roster, me.id, scope]
   );
-  const todayKey = useMemo(() => zonedDateKey(new Date()), []);
 
   function isSectionOpen(bucket: BucketSpec) {
     return openSections[bucket.key] ?? bucket.defaultOpen;
@@ -140,8 +137,11 @@ export function DashboardApp({
 
             {stats.buckets.map((bucket) => {
               const open = isSectionOpen(bucket);
-              const has = bucket.tasks.length > 0;
+              const has = bucket.entries.length > 0;
               const urgentAndFull = bucket.urgent && has;
+              // Only a genuinely missed deadline earns the red count. A
+              // bucket holding only fired reminders shouldn't cry wolf.
+              const hasMissedDeadline = bucket.entries.some((e) => e.missedDeadline);
 
               return (
                 <div
@@ -160,12 +160,12 @@ export function DashboardApp({
                       className={cn(
                         "inline-flex h-8 min-w-8 items-center justify-center rounded-full border-[1.5px] px-2.5",
                         "text-[15px] leading-5 font-bold tabular-nums",
-                        urgentAndFull
+                        urgentAndFull && hasMissedDeadline
                           ? "border-danger bg-danger text-white"
                           : "border-border bg-muted text-muted-fg"
                       )}
                     >
-                      {bucket.tasks.length}
+                      {bucket.entries.length}
                     </span>
                     {bucket.prompt && has && (
                       <span className="truncate text-[15px] leading-5 text-sub">{bucket.prompt}</span>
@@ -185,24 +185,37 @@ export function DashboardApp({
 
                   {open && has && (
                     <div className="flex flex-col gap-3">
-                      {bucket.tasks.map((task) => (
-                        <div key={task.id} className="flex flex-col gap-1.5">
+                      {bucket.entries.map((entry) => (
+                        <div key={entry.task.id} className="flex flex-col gap-1.5">
                           <TaskPill
-                            task={task}
+                            task={entry.task}
                             meId={me.id}
-                            expanded={expandedId === task.id}
-                            onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
-                            onSetStatus={(status) => handleSetStatus(task.id, status)}
-                            onRequestDelete={() => setDeleteTarget(task)}
+                            expanded={expandedId === entry.task.id}
+                            onToggleExpand={() =>
+                              setExpandedId((id) => (id === entry.task.id ? null : entry.task.id))
+                            }
+                            onSetStatus={(status) => handleSetStatus(entry.task.id, status)}
+                            onRequestDelete={() => setDeleteTarget(entry.task)}
                           />
-                          <span
-                            className={cn(
-                              "px-3 text-[15px] leading-5 font-bold tabular-nums",
-                              isOverdue(task, todayKey) ? "text-danger" : "text-sub"
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 text-[15px] leading-5 font-bold tabular-nums">
+                            {entry.hasReminder && (
+                              <Bell aria-hidden className="size-3.5 shrink-0 text-accent" />
                             )}
-                          >
-                            {formatDueLabel(task, todayKey)}
-                          </span>
+                            <span
+                              className={cn(
+                                entry.missedDeadline
+                                  ? "text-danger"
+                                  : entry.passedReminder
+                                    ? "text-accent"
+                                    : "text-sub"
+                              )}
+                            >
+                              {entry.primaryLabel}
+                            </span>
+                            {entry.secondaryLabel && (
+                              <span className="text-sub opacity-80">· {entry.secondaryLabel}</span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
