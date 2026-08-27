@@ -5,9 +5,9 @@
 -- precise-time reminder feature comes back later.
 -- ---------------------------------------------------------------------------
 
-alter table public.tasks add column due_date date;
+alter table public.tasks add column if not exists due_date date;
 
-create index tasks_due_date_idx on public.tasks (due_date) where deleted_at is null;
+create index if not exists tasks_due_date_idx on public.tasks (due_date) where deleted_at is null;
 
 comment on column public.tasks.reminder_at is 'Deprecated: no longer read or written by the app. See due_date.';
 comment on column public.tasks.due_date is 'Calendar due date (no time-of-day), set from the task form.';
