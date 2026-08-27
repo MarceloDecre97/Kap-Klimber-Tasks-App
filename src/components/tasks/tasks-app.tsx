@@ -196,7 +196,7 @@ export function TasksApp({
           )}
         </div>
 
-        <div data-hscroll="true" className="flex gap-2 overflow-x-auto">
+        <div data-hscroll="true" className="flex items-center gap-2 overflow-x-auto">
           <FilterDropdown label="Priority" options={priorityOptions} selected={filters.priority} onChange={(priority) => setFilters({ ...filters, priority })} />
           <FilterDropdown
             label="Assigned to"
@@ -207,6 +207,12 @@ export function TasksApp({
           />
           <FiltersPanel filters={filters} onChange={setFilters} categories={categories} />
           <SortMenu value={sort} onChange={setSort} />
+          <Link href="/tasks/new" className="ml-auto shrink-0">
+            <Button size="md" className="h-12 px-4">
+              <Plus aria-hidden className="size-4" />
+              New task
+            </Button>
+          </Link>
         </div>
 
         {(activeCount > 0 || filters.query) && (
@@ -225,7 +231,7 @@ export function TasksApp({
         )}
       </header>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-6 pt-4">
+      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">
         {groups.length === 0 && complete.length === 0 ? (
           <EmptyState hasFilters={activeCount > 0 || !!filters.query} onClearFilters={() => setFilters(EMPTY_FILTERS)} />
         ) : (
@@ -301,15 +307,6 @@ export function TasksApp({
           </div>
         )}
       </div>
-
-      <footer className="shrink-0 border-t-[1.5px] border-border bg-card px-5 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
-        <Link href="/tasks/new">
-          <Button>
-            <Plus aria-hidden className="size-5" />
-            New task
-          </Button>
-        </Link>
-      </footer>
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
         {deleteTarget && (
