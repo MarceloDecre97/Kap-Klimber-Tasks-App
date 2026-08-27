@@ -18,7 +18,6 @@ import type { TaskStatus } from "@/lib/supabase/database.types";
 export function TaskPill({
   task,
   meId,
-  timeZone,
   expanded,
   onToggleExpand,
   onSetStatus,
@@ -26,7 +25,6 @@ export function TaskPill({
 }: {
   task: TaskWithRelations;
   meId: string;
-  timeZone?: string;
   expanded: boolean;
   onToggleExpand: () => void;
   onSetStatus: (status: TaskStatus) => void;
@@ -62,7 +60,7 @@ export function TaskPill({
       >
         <span className="text-card-title flex-1 text-fg text-pretty">{task.title}</span>
         <div className="flex shrink-0 flex-col items-end gap-0.5 pt-1 text-[12px] leading-[14px] font-bold text-sub tabular-nums whitespace-nowrap">
-          <span>Created On {formatDateGroup(task.created_at, timeZone)}</span>
+          <span>Created On {formatDateGroup(task.created_at)}</span>
           {task.due_date && <span className="text-accent">Due For {formatCalendarDate(task.due_date)}</span>}
         </div>
         <ChevronDown
@@ -106,7 +104,7 @@ export function TaskPill({
             {task.reminder_at && (
               <>
                 <dt className="text-[16px] leading-7 font-bold text-sub">Reminder</dt>
-                <dd className="text-[18px] leading-7 text-fg">{formatTimestamp(task.reminder_at, timeZone)}</dd>
+                <dd className="text-[18px] leading-7 text-fg">{formatTimestamp(task.reminder_at)}</dd>
               </>
             )}
           </dl>

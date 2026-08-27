@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Search, Users, X } from "lucide-react";
@@ -14,7 +14,6 @@ import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dro
 import { FiltersPanel } from "@/components/tasks/filters-panel";
 import { SortMenu } from "@/components/tasks/sort-menu";
 import { TaskPill } from "@/components/tasks/task-pill";
-import { DEFAULT_TIMEZONE } from "@/components/tasks/timezone-select";
 import { setTaskStatus, softDeleteTask, restoreTask } from "@/app/tasks/actions";
 import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
 import {
@@ -29,8 +28,6 @@ import {
 import { formatDateGroup } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
-
-const TIMEZONE_STORAGE_KEY = "kap-klimber-timezone";
 
 export function TasksApp({
   initialTasks,
@@ -50,21 +47,7 @@ export function TasksApp({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showComplete, setShowComplete] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
-  const [timeZone, setTimeZone] = useState(DEFAULT_TIMEZONE);
   const [, startTransition] = useTransition();
-
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const stored = window.localStorage.getItem(TIMEZONE_STORAGE_KEY);
-      if (stored) setTimeZone(stored);
-    }, 0);
-    return () => clearTimeout(id);
-  }, []);
-
-  function handleTimeZoneChange(next: string) {
-    setTimeZone(next);
-    window.localStorage.setItem(TIMEZONE_STORAGE_KEY, next);
-  }
 
   const activeCount = countActiveFilters(filters);
 
@@ -140,7 +123,7 @@ export function TasksApp({
 
   return (
     <div className="flex h-dvh flex-col bg-bg">
-      <AppHeader current="/tasks" timeZone={timeZone} onTimeZoneChange={handleTimeZoneChange}>
+      <AppHeader current="/tasks">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-screen-title">Tasks</h1>
           <span className="text-[16px] leading-[22px] font-bold text-sub">{me.display_name}</span>
@@ -237,7 +220,7 @@ export function TasksApp({
                       )}
                       <div className="flex flex-col items-end text-[11px] leading-[13px] font-bold text-sub tabular-nums whitespace-nowrap opacity-70">
                         <span>Updated</span>
-                        <span>{formatDateGroup(getLastActivityAt(task), timeZone)}</span>
+                        <span>{formatDateGroup(getLastActivityAt(task))}</span>
                       </div>
                       <div className="flex-1 w-[1.5px] bg-line" />
                     </div>
@@ -245,7 +228,6 @@ export function TasksApp({
                       <TaskPill
                         task={task}
                         meId={me.id}
-                        timeZone={timeZone}
                         expanded={expandedId === task.id}
                         onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}
@@ -274,7 +256,6 @@ export function TasksApp({
                         key={task.id}
                         task={task}
                         meId={me.id}
-                        timeZone={timeZone}
                         expanded={expandedId === task.id}
                         onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}

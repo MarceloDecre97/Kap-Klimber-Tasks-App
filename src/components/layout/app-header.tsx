@@ -4,10 +4,10 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Settings } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
+import { AppClock } from "@/components/layout/app-clock";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { ViewNav } from "@/components/layout/view-nav";
-import { TimezoneSelect } from "@/components/tasks/timezone-select";
 
 /**
  * The one fixed chrome bar both top-level views share: brand left, view
@@ -18,19 +18,9 @@ import { TimezoneSelect } from "@/components/tasks/timezone-select";
  * logo and control zones each take `flex-1`, which pins the nav to the true
  * horizontal centre of the header no matter how much wider the controls are
  * than the logo. Below `lg` the nav drops to its own full-width row, because
- * the logo and three controls already fill a phone-width line.
+ * the logo and controls already fill a phone-width line.
  */
-export function AppHeader({
-  current,
-  timeZone,
-  onTimeZoneChange,
-  children,
-}: {
-  current: "/tasks" | "/dashboard";
-  timeZone: string;
-  onTimeZoneChange: (next: string) => void;
-  children?: ReactNode;
-}) {
+export function AppHeader({ current, children }: { current: "/tasks" | "/dashboard"; children?: ReactNode }) {
   return (
     <header className="flex shrink-0 flex-col gap-3 border-b-[1.5px] border-border bg-card px-5 pt-[calc(env(safe-area-inset-top)+10px)] pb-3.5">
       <div className="flex flex-wrap items-center gap-3">
@@ -43,7 +33,7 @@ export function AppHeader({
         </div>
 
         <div className="order-2 ml-auto flex flex-wrap items-center justify-end gap-2 lg:order-3 lg:ml-0 lg:flex-1">
-          <TimezoneSelect value={timeZone} onChange={onTimeZoneChange} />
+          <AppClock />
           <ThemeToggle />
           <Link href="/settings">
             <IconButton aria-label="Settings">

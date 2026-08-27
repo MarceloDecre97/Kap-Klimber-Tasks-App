@@ -104,17 +104,15 @@ export function computeDashboardStats({
   roster,
   meId,
   scope,
-  timeZone,
   now = new Date(),
 }: {
   tasks: TaskWithRelations[];
   roster: MemberSummary[];
   meId: string;
   scope: PersonalScope;
-  timeZone?: string;
   now?: Date;
 }): DashboardStats {
-  const todayKey = zonedDateKey(now, timeZone);
+  const todayKey = zonedDateKey(now);
   const openTasks = tasks.filter((t) => t.status !== "complete");
   const completeTasks = tasks.filter((t) => t.status === "complete");
 
@@ -203,9 +201,9 @@ export function computeDashboardStats({
     })
     .sort((a, b) => b.total - a.total);
 
-  const ageOf = (task: TaskWithRelations) => daysBetweenKeys(zonedDateKey(new Date(task.created_at), timeZone), todayKey);
+  const ageOf = (task: TaskWithRelations) => daysBetweenKeys(zonedDateKey(new Date(task.created_at)), todayKey);
   const untouchedFor = (task: TaskWithRelations) =>
-    daysBetweenKeys(zonedDateKey(new Date(getLastActivityAt(task)), timeZone), todayKey);
+    daysBetweenKeys(zonedDateKey(new Date(getLastActivityAt(task))), todayKey);
 
   const ageDefs: { key: string; label: string; test: (days: number) => boolean }[] = [
     { key: "fresh", label: "0–7 days", test: (d) => d <= 7 },

@@ -11,6 +11,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PRIORITIES, PRIORITY_ORDER, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { createTask, updateTask } from "@/app/tasks/actions";
+import { toZonedDateInput, toZonedTimeInput, zonedWallClockToIso } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
@@ -29,15 +30,6 @@ interface FormState {
   reminderTime: string;
 }
 
-function toDateInputValue(iso: string) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function toTimeInputValue(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
 function initialState(task?: TaskWithRelations): FormState {
   return {
     title: task?.title ?? "",
@@ -50,8 +42,8 @@ function initialState(task?: TaskWithRelations): FormState {
     assigneeIds: task?.assignees.map((a) => a.id) ?? [],
     dueDate: task?.due_date ?? "",
     reminderEnabled: !!task?.reminder_at,
-    reminderDate: task?.reminder_at ? toDateInputValue(task.reminder_at) : "",
-    reminderTime: task?.reminder_at ? toTimeInputValue(task.reminder_at) : "09:00",
+    reminderDate: task?.reminder_at ? toZonedDateInput(task.reminder_at) : "",
+    reminderTime: task?.reminder_at ? toZonedTimeInput(task.reminder_at) : "09:00",
   };
 }
 
@@ -93,9 +85,10 @@ export function TaskForm({
     if (!canSave) return;
     setError(null);
 
+    // Interpreted as Chicago wall-clock time, never the browser's zone.
     const reminderAt =
       form.reminderEnabled && form.reminderDate
-        ? new Date(`${form.reminderDate}T${form.reminderTime || "09:00"}`).toISOString()
+        ? zonedWallClockToIso(form.reminderDate, form.reminderTime || "09:00")
         : null;
 
     const input = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, MessageSquare } from "lucide-react";
@@ -11,7 +11,6 @@ import { useToast } from "@/components/ui/toast";
 import { AppHeader } from "@/components/layout/app-header";
 import { BigStat, Card, EmptyLine, LegendRow, MeterRow, StackedBar } from "@/components/dashboard/cards";
 import { TaskPill } from "@/components/tasks/task-pill";
-import { DEFAULT_TIMEZONE } from "@/components/tasks/timezone-select";
 import { restoreTask, setTaskStatus, softDeleteTask } from "@/app/tasks/actions";
 import {
   STALE_AFTER_DAYS,
@@ -25,8 +24,6 @@ import { cn, zonedDateKey } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
-const TIMEZONE_STORAGE_KEY = "kap-klimber-timezone";
-
 export function DashboardApp({
   initialTasks,
   roster,
@@ -38,31 +35,18 @@ export function DashboardApp({
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const [timeZone, setTimeZone] = useState(DEFAULT_TIMEZONE);
   const [scope, setScope] = useState<PersonalScope>("assigned");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
   const [, startTransition] = useTransition();
 
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const stored = window.localStorage.getItem(TIMEZONE_STORAGE_KEY);
-      if (stored) setTimeZone(stored);
-    }, 0);
-    return () => clearTimeout(id);
-  }, []);
-
-  function handleTimeZoneChange(next: string) {
-    setTimeZone(next);
-    window.localStorage.setItem(TIMEZONE_STORAGE_KEY, next);
-  }
 
   const stats = useMemo(
-    () => computeDashboardStats({ tasks: initialTasks, roster, meId: me.id, scope, timeZone }),
-    [initialTasks, roster, me.id, scope, timeZone]
+    () => computeDashboardStats({ tasks: initialTasks, roster, meId: me.id, scope }),
+    [initialTasks, roster, me.id, scope]
   );
-  const todayKey = useMemo(() => zonedDateKey(new Date(), timeZone), [timeZone]);
+  const todayKey = useMemo(() => zonedDateKey(new Date()), []);
 
   function isSectionOpen(bucket: BucketSpec) {
     return openSections[bucket.key] ?? bucket.defaultOpen;
@@ -108,7 +92,7 @@ export function DashboardApp({
 
   return (
     <div className="flex h-dvh flex-col bg-bg">
-      <AppHeader current="/dashboard" timeZone={timeZone} onTimeZoneChange={handleTimeZoneChange} />
+      <AppHeader current="/dashboard" />
 
       <div className="flex-1 overflow-y-auto px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+32px)]">
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[400px_minmax(0,1fr)]">
@@ -206,7 +190,6 @@ export function DashboardApp({
                           <TaskPill
                             task={task}
                             meId={me.id}
-                            timeZone={timeZone}
                             expanded={expandedId === task.id}
                             onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
                             onSetStatus={(status) => handleSetStatus(task.id, status)}
