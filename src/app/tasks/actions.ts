@@ -55,6 +55,7 @@ export async function createTask(input: unknown): Promise<ActionResult> {
         priority: data.priority,
         status: data.status,
         due_date: data.dueDate ?? null,
+        reminder_at: data.reminderAt ?? null,
         created_by: member.id,
       })
       .select("id")
@@ -95,6 +96,7 @@ export async function updateTask(taskIdInput: string, input: unknown): Promise<A
         priority: data.priority,
         status: data.status,
         due_date: data.dueDate ?? null,
+        reminder_at: data.reminderAt ?? null,
         ...(data.status === "complete" ? { completed_at: new Date().toISOString(), completed_by: member.id } : { completed_at: null, completed_by: null }),
       })
       .eq("id", taskId.data);

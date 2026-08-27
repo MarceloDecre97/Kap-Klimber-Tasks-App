@@ -51,8 +51,8 @@ export function formatDateGroup(iso: string, timeZone?: string): string {
   return dateFormatter(timeZone).format(new Date(iso));
 }
 
-export function formatTimestamp(iso: string): string {
-  return dateTimeFormatter().format(new Date(iso));
+export function formatTimestamp(iso: string, timeZone?: string): string {
+  return dateTimeFormatter(timeZone).format(new Date(iso));
 }
 
 /**

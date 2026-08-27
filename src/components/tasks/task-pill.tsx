@@ -103,6 +103,12 @@ export function TaskPill({
                 <dd className="text-[18px] leading-7 text-fg">{formatCalendarDate(task.due_date)}</dd>
               </>
             )}
+            {task.reminder_at && (
+              <>
+                <dt className="text-[16px] leading-7 font-bold text-sub">Reminder</dt>
+                <dd className="text-[18px] leading-7 text-fg">{formatTimestamp(task.reminder_at, timeZone)}</dd>
+              </>
+            )}
           </dl>
 
           {task.description && <p className="text-[18px] leading-7 text-fg text-pretty">{task.description}</p>}

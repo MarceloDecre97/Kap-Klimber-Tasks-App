@@ -25,6 +25,7 @@ export const taskInputSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid due date.")
     .nullable()
     .optional(),
+  reminderAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
 
 export type TaskInput = z.infer<typeof taskInputSchema>;

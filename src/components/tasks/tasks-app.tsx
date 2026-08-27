@@ -242,12 +242,11 @@ export function TasksApp({
             {groups.map((group) => (
               <div key={group.key} className="flex flex-col gap-3">
                 {group.tasks.map((task, taskIndex) => (
-                  <div key={task.id} className="grid grid-cols-[64px_1fr] gap-3">
+                  <div key={task.id} className="grid grid-cols-[92px_1fr] gap-3">
                     <div className="flex flex-col items-end gap-1 pt-0.5">
                       {taskIndex === 0 && (
-                        <div className="sticky top-0 flex items-center gap-2 text-[16px] leading-[22px] font-bold text-sub text-right">
+                        <div className="sticky top-0 text-[15px] leading-[20px] font-bold text-sub text-right whitespace-nowrap">
                           {group.label}
-                          <span className="size-[11px] shrink-0 rounded-full bg-brand" />
                         </div>
                       )}
                       <div className="flex flex-col items-end text-[11px] leading-[13px] font-bold text-sub tabular-nums whitespace-nowrap opacity-70">
