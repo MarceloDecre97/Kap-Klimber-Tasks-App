@@ -19,8 +19,16 @@ import { TaskPill } from "@/components/tasks/task-pill";
 import { DEFAULT_TIMEZONE, TimezoneSelect } from "@/components/tasks/timezone-select";
 import { setTaskStatus, softDeleteTask, restoreTask } from "@/app/tasks/actions";
 import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
-import { EMPTY_FILTERS, countActiveFilters, groupTasks, matchesFilters, type SortMode, type TaskFilters } from "@/lib/tasks-view";
-import { formatTimeOfDay, getZoneAbbreviation } from "@/lib/utils";
+import {
+  EMPTY_FILTERS,
+  countActiveFilters,
+  getLastActivityAt,
+  groupTasks,
+  matchesFilters,
+  type SortMode,
+  type TaskFilters,
+} from "@/lib/tasks-view";
+import { formatDateGroup, formatTimeOfDay, getZoneAbbreviation } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
@@ -233,10 +241,15 @@ export function TasksApp({
                           <span className="size-[11px] shrink-0 rounded-full bg-brand" />
                         </div>
                       )}
-                      {task.reminder_at && (
+                      {task.reminder_at ? (
                         <div className="flex flex-col items-end text-[12px] leading-[14px] font-bold text-sub tabular-nums whitespace-nowrap">
                           <span>{formatTimeOfDay(task.reminder_at, timeZone)}</span>
                           <span className="opacity-70">{getZoneAbbreviation(timeZone, new Date(task.reminder_at))}</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-end text-[11px] leading-[13px] font-bold text-sub tabular-nums whitespace-nowrap opacity-70">
+                          <span>Updated</span>
+                          <span>{formatDateGroup(getLastActivityAt(task), timeZone)}</span>
                         </div>
                       )}
                       <div className="flex-1 w-[1.5px] bg-line" />

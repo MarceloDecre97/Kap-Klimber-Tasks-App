@@ -2,14 +2,15 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell, ChevronDown, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
+import { Bell, ChevronDown, Hourglass, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
-import { cn, formatReminder, formatTimestamp } from "@/lib/utils";
+import { daysSince } from "@/lib/tasks-view";
+import { cn, formatDateGroup, formatReminder, formatTimestamp } from "@/lib/utils";
 import { addNote, toggleNoteAck } from "@/app/tasks/actions";
 import type { TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
@@ -60,6 +61,12 @@ export function TaskPill({
         className="flex w-full min-h-14 items-start gap-3 border-none bg-transparent p-0 text-left cursor-pointer"
       >
         <span className="text-card-title flex-1 text-fg text-pretty">{task.title}</span>
+        <span
+          className="shrink-0 pt-1 text-[13px] leading-4 font-bold text-sub tabular-nums whitespace-nowrap"
+          title="Created"
+        >
+          {formatDateGroup(task.created_at, timeZone)}
+        </span>
         <ChevronDown
           aria-hidden
           className={`mt-0.5 size-5 shrink-0 text-sub transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
@@ -69,6 +76,13 @@ export function TaskPill({
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge spec={priority} />
         <Badge spec={status} />
+        <span
+          className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border px-2.5 text-[15px] leading-5 font-bold text-sub"
+          title="Days since this task was created"
+        >
+          <Hourglass aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+          {daysSince(task.created_at)}d
+        </span>
       </div>
 
       {expanded && (

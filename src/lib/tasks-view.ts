@@ -27,6 +27,23 @@ export function countActiveFilters(filters: TaskFilters): number {
   return filters.status.length + filters.priority.length + filters.categoryIds.length + filters.assigneeIds.length;
 }
 
+/**
+ * Most recent activity on a task: its own last update (status/field
+ * changes, via the DB's `tasks_set_updated_at` trigger) or its newest
+ * note, whichever is later — notes don't bump `tasks.updated_at` in the
+ * schema, so this is computed client-side instead of a migration.
+ */
+export function getLastActivityAt(task: TaskWithRelations): string {
+  const latestNote = task.notes[task.notes.length - 1];
+  if (!latestNote) return task.updated_at;
+  return Date.parse(latestNote.created_at) > Date.parse(task.updated_at) ? latestNote.created_at : task.updated_at;
+}
+
+/** Whole days elapsed since `iso`, floored (0 on the day it was created). */
+export function daysSince(iso: string): number {
+  return Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86_400_000));
+}
+
 function matchesQuery(task: TaskWithRelations, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
