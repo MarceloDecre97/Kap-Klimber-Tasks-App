@@ -13,9 +13,14 @@ const OPTIONS: { value: SortMode; label: string }[] = [
 
 const PANEL_WIDTH = 240;
 
-export function SortMenu({ value, onChange }: { value: SortMode; onChange: (value: SortMode) => void }) {
+/**
+ * `value` is null until the user picks a sort, which is what lets the button
+ * read a plain "Sort" by default. The list's underlying order is unchanged —
+ * the caller substitutes its own default when nothing is chosen.
+ */
+export function SortMenu({ value, onChange }: { value: SortMode | null; onChange: (value: SortMode) => void }) {
   const { open, setOpen, triggerRef, panelRef, style } = useFloatingPanel<HTMLButtonElement>();
-  const current = OPTIONS.find((o) => o.value === value)!;
+  const current = value ? OPTIONS.find((o) => o.value === value) : undefined;
 
   return (
     <>
@@ -25,10 +30,14 @@ export function SortMenu({ value, onChange }: { value: SortMode; onChange: (valu
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border bg-card px-4 text-[16px] leading-[22px] font-bold text-fg cursor-pointer transition-transform duration-150 active:scale-[0.97]"
+        className={cn(
+          "flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-4",
+          "text-[16px] leading-[22px] font-bold cursor-pointer transition-transform duration-150 active:scale-[0.97]",
+          current ? "border-prim bg-prim text-on-prim" : "border-border bg-card text-fg"
+        )}
       >
         <ArrowUpDown aria-hidden className="size-4" />
-        {current.label}
+        {current?.label ?? "Sort"}
       </button>
       {open && (
         <FloatingPanel

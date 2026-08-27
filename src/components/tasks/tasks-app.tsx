@@ -43,7 +43,8 @@ export function TasksApp({
   const router = useRouter();
   const { showToast } = useToast();
   const [filters, setFilters] = useState<TaskFilters>(EMPTY_FILTERS);
-  const [sort, setSort] = useState<SortMode>("priority");
+  // null until the user picks one, so the button can read a plain "Sort".
+  const [sort, setSort] = useState<SortMode | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showComplete, setShowComplete] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
@@ -59,12 +60,10 @@ export function TasksApp({
     };
   }, [initialTasks, filters, me.id]);
 
-  const groups = useMemo(() => groupTasks(open, sort), [open, sort]);
+  // No explicit sort still orders by priority — same list as before, the
+  // button label is the only thing that changes.
+  const groups = useMemo(() => groupTasks(open, sort ?? "priority"), [open, sort]);
   const totalMatching = open.length + complete.length;
-
-  const overallDone = useMemo(() => initialTasks.filter((task) => task.status === "complete").length, [initialTasks]);
-  const overallTotal = initialTasks.length;
-  const overallPercent = overallTotal > 0 ? Math.round((overallDone / overallTotal) * 100) : 0;
 
   const priorityOptions: FilterOption<Priority>[] = useMemo(
     () =>
@@ -124,48 +123,13 @@ export function TasksApp({
   return (
     <div className="flex h-dvh flex-col bg-bg">
       <AppHeader current="/tasks">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-screen-title">Tasks</h1>
-          <span className="text-[16px] leading-[22px] font-bold text-sub">{me.display_name}</span>
-        </div>
-
-        {overallTotal > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-3 text-[15px] leading-5 font-bold text-sub tabular-nums">
-              <span>
-                {overallDone} of {overallTotal} done
-              </span>
-              <span>{overallPercent}%</span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-brand transition-[width] duration-300" style={{ width: `${overallPercent}%` }} />
-            </div>
-          </div>
-        )}
-
-        <div className="relative">
-          <Search aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-sub" />
-          <input
-            type="text"
-            value={filters.query}
-            onChange={(event) => setFilters({ ...filters, query: event.target.value })}
-            placeholder="Search tasks, notes, people…"
-            aria-label="Search tasks"
-            className="h-12 w-full rounded-full border-[1.5px] border-border bg-card pl-10 pr-10 text-[16px] text-fg placeholder:text-sub focus-visible:border-prim focus-visible:outline-[3px] focus-visible:outline-offset-2"
-          />
-          {filters.query && (
-            <button
-              type="button"
-              onClick={() => setFilters({ ...filters, query: "" })}
-              aria-label="Clear search"
-              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-sub cursor-pointer hover:bg-muted"
-            >
-              <X aria-hidden className="size-4" />
-            </button>
-          )}
-        </div>
-
-        <div data-hscroll="true" className="flex items-center gap-2 overflow-x-auto">
+        {/*
+          One wrapping row rather than a horizontal scroller: six controls
+          including a text field can't scroll usefully on a phone, and
+          wrapping also keeps this container free of `overflow-x-auto`,
+          which is what used to clip the dropdown panels.
+        */}
+        <div className="flex flex-wrap items-center gap-2">
           <FilterDropdown label="Priority" options={priorityOptions} selected={filters.priority} onChange={(priority) => setFilters({ ...filters, priority })} />
           <FilterDropdown
             label="Assigned to"
@@ -176,7 +140,30 @@ export function TasksApp({
           />
           <FiltersPanel filters={filters} onChange={setFilters} categories={categories} />
           <SortMenu value={sort} onChange={setSort} />
-          <Link href="/tasks/new" className="ml-auto shrink-0">
+
+          <div className="relative min-w-[220px] flex-1">
+            <Search aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-sub" />
+            <input
+              type="text"
+              value={filters.query}
+              onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+              placeholder="Search tasks, notes, people…"
+              aria-label="Search tasks"
+              className="h-12 w-full rounded-full border-[1.5px] border-border bg-card pl-10 pr-10 text-[16px] text-fg placeholder:text-sub focus-visible:border-prim focus-visible:outline-[3px] focus-visible:outline-offset-2"
+            />
+            {filters.query && (
+              <button
+                type="button"
+                onClick={() => setFilters({ ...filters, query: "" })}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-sub cursor-pointer hover:bg-muted"
+              >
+                <X aria-hidden className="size-4" />
+              </button>
+            )}
+          </div>
+
+          <Link href="/tasks/new" className="shrink-0">
             <Button
               size="md"
               className="h-12 justify-center px-4 bg-white text-black border border-transparent hover:bg-brand hover:text-white active:bg-brand active:text-white"
@@ -187,17 +174,20 @@ export function TasksApp({
           </Link>
         </div>
 
-        {(activeCount > 0 || filters.query) && (
+        {(activeCount > 0 || filters.query || sort) && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-[16px] leading-[22px] tabular-nums text-sub">
               Showing {totalMatching} of {initialTasks.length} tasks
             </span>
             <button
               type="button"
-              onClick={() => setFilters(EMPTY_FILTERS)}
+              onClick={() => {
+                setFilters(EMPTY_FILTERS);
+                setSort(null);
+              }}
               className="text-[16px] leading-[22px] font-bold text-brand underline underline-offset-[3px] cursor-pointer"
             >
-              Clear filters
+              Clear all
             </button>
           </div>
         )}
