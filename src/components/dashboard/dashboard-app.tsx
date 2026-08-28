@@ -156,13 +156,24 @@ export function DashboardApp({
                     className="flex min-h-14 w-full items-center gap-3 text-left text-fg cursor-pointer disabled:cursor-default"
                   >
                     <span className="text-field-label">{bucket.title}</span>
+                    {/*
+                      Three levels so the row can be scanned rather than read:
+                      red for a missed deadline, filled for "there is work
+                      here", quiet for empty. The old single grey pill sat at
+                      1.13:1 against the page — the digits were legible, but
+                      nothing drew the eye to them. Filled matches the
+                      Tasklist's active filter pills, so it's the same
+                      language in both interfaces.
+                    */}
                     <span
                       className={cn(
                         "inline-flex h-8 min-w-8 items-center justify-center rounded-full border-[1.5px] px-2.5",
                         "text-[15px] leading-5 font-bold tabular-nums",
                         urgentAndFull && hasMissedDeadline
                           ? "border-danger bg-danger text-white"
-                          : "border-border bg-muted text-muted-fg"
+                          : has
+                            ? "border-prim bg-prim text-on-prim"
+                            : "border-border bg-muted text-muted-fg"
                       )}
                     >
                       {bucket.entries.length}
