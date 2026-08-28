@@ -30,6 +30,46 @@ export interface BucketEntry {
   passedReminder: boolean;
 }
 
+/** How a bucket's count should read at a glance. */
+export type CountTone = "quiet" | "neutral" | "amber" | "danger";
+
+/**
+ * Volume means different things in different buckets, so one scale across
+ * all six would lie. Ten tasks in "Today" is real pressure; ten in "Later"
+ * is a healthy backlog, and colouring it red would train you to ignore red.
+ */
+type ToneRule =
+  /** A missed deadline is bad at any count — never scaled. */
+  | "urgent"
+  /** Near-term commitment, where "how many" really is "how much pressure". */
+  | "load"
+  /** Informational: a big number here is planning, not a problem. */
+  | "info";
+
+const LOAD_BUSY = 4;
+const LOAD_HEAVY = 10;
+
+function toneFor(rule: ToneRule, entries: BucketEntry[]): CountTone {
+  const count = entries.length;
+  // A zero is the absence of something, not an achievement — keep it quiet
+  // so the counts that carry information are the ones that stand out.
+  if (count === 0) return "quiet";
+
+  switch (rule) {
+    case "urgent":
+      // Preserves the earlier rule: only a genuinely missed deadline is red.
+      // A bucket holding just fired reminders stays amber.
+      return entries.some((e) => e.missedDeadline) ? "danger" : "amber";
+    case "load":
+      if (count >= LOAD_HEAVY) return "danger";
+      if (count >= LOAD_BUSY) return "amber";
+      return "neutral";
+    case "info":
+    default:
+      return "neutral";
+  }
+}
+
 export interface BucketSpec {
   key: string;
   title: string;
@@ -40,6 +80,7 @@ export interface BucketSpec {
   /** Overdue gets a danger rail, per the design reference. */
   urgent?: boolean;
   prompt?: string;
+  countTone: CountTone;
 }
 
 export interface SegmentDatum {
@@ -250,51 +291,44 @@ export function computeDashboardStats({
   const inRange = (predicate: (key: string | null) => boolean) =>
     entries.filter((e) => predicate(e.attentionKey)).sort(byAttention);
 
+  const bucket = (
+    key: string,
+    title: string,
+    rule: ToneRule,
+    predicate: (key: string | null) => boolean,
+    rest: { emptyCopy: string; defaultOpen: boolean; urgent?: boolean; prompt?: string }
+  ): BucketSpec => {
+    const bucketEntries = inRange(predicate);
+    return { key, title, entries: bucketEntries, countTone: toneFor(rule, bucketEntries), ...rest };
+  };
+
   const buckets: BucketSpec[] = [
-    {
-      key: "overdue",
-      title: "Overdue",
-      entries: inRange((k) => k !== null && k < todayKey),
+    bucket("overdue", "Overdue", "urgent", (k) => k !== null && k < todayKey, {
       emptyCopy: "Nothing overdue.",
       defaultOpen: true,
       urgent: true,
-    },
-    {
-      key: "today",
-      title: "Today",
-      entries: inRange((k) => k === todayKey),
+    }),
+    bucket("today", "Today", "load", (k) => k === todayKey, {
       emptyCopy: "Nothing for today.",
       defaultOpen: true,
-    },
-    {
-      key: "thisWeek",
-      title: "This week",
-      entries: inRange((k) => k !== null && k > todayKey && k <= endOfThisWeek),
+    }),
+    bucket("thisWeek", "This week", "load", (k) => k !== null && k > todayKey && k <= endOfThisWeek, {
       emptyCopy: "Nothing else this week.",
       defaultOpen: false,
-    },
-    {
-      key: "nextWeek",
-      title: "Next week",
-      entries: inRange((k) => k !== null && k > endOfThisWeek && k <= endOfNextWeek),
+    }),
+    bucket("nextWeek", "Next week", "info", (k) => k !== null && k > endOfThisWeek && k <= endOfNextWeek, {
       emptyCopy: "Nothing scheduled for next week.",
       defaultOpen: false,
-    },
-    {
-      key: "later",
-      title: "Later",
-      entries: inRange((k) => k !== null && k > endOfNextWeek),
+    }),
+    bucket("later", "Later", "info", (k) => k !== null && k > endOfNextWeek, {
       emptyCopy: "Nothing scheduled further out.",
       defaultOpen: false,
-    },
-    {
-      key: "nodate",
-      title: "No date set",
-      entries: inRange((k) => k === null),
+    }),
+    bucket("nodate", "No date set", "info", (k) => k === null, {
       emptyCopy: "Every task has a date.",
       defaultOpen: false,
       prompt: "Give these a deadline",
-    },
+    }),
   ];
 
   // Notes written by someone else that I haven't thumbs-upped yet.

@@ -19,8 +19,21 @@ import {
   type PersonalScope,
 } from "@/lib/dashboard-stats";
 import { cn } from "@/lib/utils";
+import type { CountTone } from "@/lib/dashboard-stats";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
+
+/**
+ * Colour reads as severity: quiet = nothing here, filled = there is work,
+ * amber = getting heavy, red = act now. The on-* label tokens flip with the
+ * theme, since both the amber and red fills invert lightness in dark mode.
+ */
+const COUNT_TONE: Record<CountTone, string> = {
+  quiet: "border-border bg-muted text-muted-fg",
+  neutral: "border-prim bg-prim text-on-prim",
+  amber: "border-accent bg-accent text-on-accent",
+  danger: "border-danger bg-danger text-on-danger",
+};
 
 export function DashboardApp({
   initialTasks,
@@ -139,9 +152,6 @@ export function DashboardApp({
               const open = isSectionOpen(bucket);
               const has = bucket.entries.length > 0;
               const urgentAndFull = bucket.urgent && has;
-              // Only a genuinely missed deadline earns the red count. A
-              // bucket holding only fired reminders shouldn't cry wolf.
-              const hasMissedDeadline = bucket.entries.some((e) => e.missedDeadline);
 
               return (
                 <div
@@ -155,29 +165,23 @@ export function DashboardApp({
                     disabled={!has}
                     className="flex min-h-14 w-full items-center gap-3 text-left text-fg cursor-pointer disabled:cursor-default"
                   >
-                    <span className="text-field-label">{bucket.title}</span>
                     {/*
-                      Three levels so the row can be scanned rather than read:
-                      red for a missed deadline, filled for "there is work
-                      here", quiet for empty. The old single grey pill sat at
-                      1.13:1 against the page — the digits were legible, but
-                      nothing drew the eye to them. Filled matches the
-                      Tasklist's active filter pills, so it's the same
-                      language in both interfaces.
+                      Count first, so every number lands in one vertical
+                      column and the panel can be scanned down a single strip
+                      rather than hunting past labels of differing lengths.
+                      Tone is decided in dashboard-stats, where the meaning of
+                      a bucket lives; this only maps tone to colour.
                     */}
                     <span
                       className={cn(
-                        "inline-flex h-8 min-w-8 items-center justify-center rounded-full border-[1.5px] px-2.5",
+                        "inline-flex h-8 min-w-9 shrink-0 items-center justify-center rounded-full border-[1.5px] px-2",
                         "text-[15px] leading-5 font-bold tabular-nums",
-                        urgentAndFull && hasMissedDeadline
-                          ? "border-danger bg-danger text-white"
-                          : has
-                            ? "border-prim bg-prim text-on-prim"
-                            : "border-border bg-muted text-muted-fg"
+                        COUNT_TONE[bucket.countTone]
                       )}
                     >
                       {bucket.entries.length}
                     </span>
+                    <span className="text-field-label">{bucket.title}</span>
                     {bucket.prompt && has && (
                       <span className="truncate text-[15px] leading-5 text-sub">{bucket.prompt}</span>
                     )}
