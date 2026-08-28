@@ -153,9 +153,9 @@ export function DashboardApp({
                       return next;
                     })
                   }
-                  className="flex min-h-14 items-center gap-3 rounded-2xl border-[1.5px] border-accent bg-card px-4 py-3 text-left text-[17px] leading-6 text-fg cursor-pointer hover:bg-muted"
+                  className="flex min-h-14 items-center gap-3 rounded-2xl border-[1.5px] border-danger bg-card px-4 py-3 text-left text-[17px] leading-6 text-fg cursor-pointer hover:bg-muted"
                 >
-                  <Bell aria-hidden className="size-5 shrink-0 text-accent" />
+                  <Bell aria-hidden className="size-5 shrink-0 text-danger" />
                   <span className="font-bold tabular-nums text-pretty">
                     {stats.remindersNeedingAttention}{" "}
                     {stats.remindersNeedingAttention === 1 ? "reminder needs" : "reminders need"} your attention
@@ -218,7 +218,7 @@ export function DashboardApp({
                     <span className="text-field-label">{bucket.title}</span>
                     {bucket.remindersNeedingAttention > 0 && (
                       <span
-                        className="inline-flex shrink-0 items-center gap-1 text-[15px] leading-5 font-bold text-accent tabular-nums"
+                        className="inline-flex shrink-0 items-center gap-1 text-[15px] leading-5 font-bold text-danger tabular-nums"
                         title={`${bucket.remindersNeedingAttention} reminder(s) waiting in this section`}
                       >
                         <Bell aria-hidden className="size-4" />
@@ -258,15 +258,23 @@ export function DashboardApp({
                           />
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 text-[15px] leading-5 font-bold tabular-nums">
                             {entry.hasReminder && (
-                              <Bell aria-hidden className="size-3.5 shrink-0 text-accent" />
+                              <Bell
+                                aria-hidden
+                                className={cn(
+                                  "size-3.5 shrink-0",
+                                  entry.reminderNeedsAttention
+                                    ? "text-danger"
+                                    : entry.reminderDismissed
+                                      ? "text-sub"
+                                      : "text-accent"
+                                )}
+                              />
                             )}
                             <span
                               className={cn(
-                                entry.missedDeadline
+                                entry.missedDeadline || entry.reminderNeedsAttention
                                   ? "text-danger"
-                                  : entry.passedReminder
-                                    ? "text-accent"
-                                    : "text-sub"
+                                  : "text-sub"
                               )}
                             >
                               {entry.primaryLabel}

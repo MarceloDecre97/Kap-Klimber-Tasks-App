@@ -1,4 +1,5 @@
 import { PRIORITY_RANK, STATUSES, STATUS_ORDER } from "@/lib/constants";
+import { reminderState } from "@/lib/reminders";
 import { getLastActivityAt } from "@/lib/tasks-view";
 import { daysBetweenKeys, formatClockTime, readableTextOn, zonedDateKey } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
@@ -66,9 +67,10 @@ function toneFor(rule: ToneRule, entries: BucketEntry[]): CountTone {
 
   switch (rule) {
     case "urgent":
-      // Preserves the earlier rule: only a genuinely missed deadline is red.
-      // A bucket holding just fired reminders stays amber.
-      return entries.some((e) => e.missedDeadline) ? "danger" : "amber";
+      // Red for anything actually demanding action now: a missed deadline,
+      // or a reminder that fired and nobody handled. Amber is left for the
+      // case where everything here has already been dealt with.
+      return entries.some((e) => e.missedDeadline || e.reminderNeedsAttention) ? "danger" : "amber";
     case "load":
       if (count >= LOAD_HEAVY) return "danger";
       if (count >= LOAD_BUSY) return "amber";
@@ -208,11 +210,9 @@ function toEntry(task: TaskWithRelations, todayKey: string, now: Date): BucketEn
   const attentionKey = attentionKeyOf(task, todayKey);
   const remTime = task.reminder_at ? formatClockTime(new Date(task.reminder_at)) : null;
 
-  const reminderDismissed = !!task.reminder_dismissed_at;
-  // Compared against the clock, not the calendar: a reminder set for 2pm
-  // today has not fired at 10am.
-  const reminderNeedsAttention =
-    !!task.reminder_at && !reminderDismissed && Date.parse(task.reminder_at) <= now.getTime();
+  const rState = reminderState(task, now);
+  const reminderDismissed = rState === "handled";
+  const reminderNeedsAttention = rState === "due";
 
   const missedDeadline = !!due && due < todayKey;
   // Only a reminder-only task can have a "passed reminder" — if there is a

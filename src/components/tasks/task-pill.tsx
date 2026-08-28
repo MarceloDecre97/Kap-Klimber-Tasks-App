@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
+import { reminderState } from "@/lib/reminders";
 import { daysSince } from "@/lib/tasks-view";
 import { cn, formatCalendarDate, formatDateGroup, formatTimestamp } from "@/lib/utils";
 import { addNote, toggleNoteAck } from "@/app/tasks/actions";
@@ -45,7 +46,10 @@ export function TaskPill({
   const [noteBody, setNoteBody] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const dismissed = !!task.reminder_dismissed_at;
+  // Amber while a reminder is still ahead of you, red once it has fired and
+  // nobody has dealt with it, muted once handled.
+  const rState = reminderState(task);
+  const dismissed = rState === "handled";
 
   function submitNote() {
     const body = noteBody.trim();
@@ -135,7 +139,9 @@ export function TaskPill({
               "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-2.5",
               "text-[15px] leading-5 font-bold transition-transform duration-150",
               onToggleReminder && "cursor-pointer active:scale-[0.97]",
-              dismissed ? "border-border bg-muted text-sub" : "border-accent text-accent"
+              rState === "handled" && "border-border bg-muted text-sub",
+              rState === "due" && "border-danger text-danger",
+              rState === "upcoming" && "border-accent text-accent"
             )}
           >
             {dismissed ? (
