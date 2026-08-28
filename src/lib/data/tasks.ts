@@ -25,6 +25,7 @@ export interface TaskWithRelations {
   priority: Priority;
   status: TaskStatus;
   reminder_at: string | null;
+  reminder_dismissed_at: string | null;
   due_date: string | null;
   created_at: string;
   updated_at: string;
@@ -36,7 +37,7 @@ export interface TaskWithRelations {
 }
 
 const TASK_SELECT = `
-  id, title, description, priority, status, reminder_at, due_date, created_at, updated_at, completed_at, created_by,
+  id, title, description, priority, status, reminder_at, reminder_dismissed_at, due_date, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
   notes:task_notes(id, body, created_at, member:members!task_notes_member_id_fkey(id, display_name, initials, color), acks:task_note_acks(member_id))
@@ -57,6 +58,7 @@ type RawTask = {
   priority: Priority;
   status: TaskStatus;
   reminder_at: string | null;
+  reminder_dismissed_at: string | null;
   due_date: string | null;
   created_at: string;
   updated_at: string;

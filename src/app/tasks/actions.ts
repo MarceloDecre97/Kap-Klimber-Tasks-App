@@ -11,6 +11,15 @@ type ActionResult<T = { taskId: string }> = { ok: true } & T | { ok: false; erro
 
 const taskIdSchema = z.string().uuid();
 
+/**
+ * Both top-level views render the same task data, so any mutation has to
+ * invalidate both — otherwise acting from one leaves the other stale.
+ */
+function revalidateTaskViews() {
+  revalidatePath("/tasks");
+  revalidatePath("/dashboard");
+}
+
 async function resolveCategoryId(
   supabase: SupabaseClient<Database>,
   memberId: string,
@@ -68,7 +77,7 @@ export async function createTask(input: unknown): Promise<ActionResult> {
       .insert(data.assigneeIds.map((memberId) => ({ task_id: task.id, member_id: memberId })));
     if (assigneeError) throw assigneeError;
 
-    revalidatePath("/tasks");
+    revalidateTaskViews();
     return { ok: true, taskId: task.id };
   } catch (error) {
     console.error("createTask failed", error);
@@ -110,7 +119,7 @@ export async function updateTask(taskIdInput: string, input: unknown): Promise<A
       .insert(data.assigneeIds.map((memberId) => ({ task_id: taskId.data, member_id: memberId })));
     if (assigneeError) throw assigneeError;
 
-    revalidatePath("/tasks");
+    revalidateTaskViews();
     return { ok: true, taskId: taskId.data };
   } catch (error) {
     console.error("updateTask failed", error);
@@ -136,11 +145,60 @@ export async function setTaskStatus(taskIdInput: string, statusInput: unknown): 
       .eq("id", taskId.data);
     if (error) throw error;
 
-    revalidatePath("/tasks");
+    revalidateTaskViews();
     return { ok: true, taskId: taskId.data };
   } catch (error) {
     console.error("setTaskStatus failed", error);
     return { ok: false, error: "Couldn't update that task. Try again." };
+  }
+}
+
+/**
+ * Toggles whether a task's reminder has been dealt with.
+ *
+ * Deliberately shared rather than per-member: any member can set or edit a
+ * task's reminder, so any member can dismiss it. Purely an attention
+ * signal — never touches status, dates, or which dashboard bucket the task
+ * sits in.
+ *
+ * The reminder itself is read back from the row rather than trusted from
+ * the client, so a stale page can't dismiss a reminder that has since been
+ * changed. Editing reminder_at clears the dismissal via a database trigger.
+ */
+export async function toggleReminderDismissal(
+  taskIdInput: string
+): Promise<ActionResult<{ taskId: string; dismissed: boolean }>> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+
+    const { data: task, error: lookupError } = await supabase
+      .from("tasks")
+      .select("reminder_at, reminder_dismissed_at")
+      .eq("id", taskId.data)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!task) return { ok: false, error: "That task no longer exists." };
+    if (!task.reminder_at) return { ok: false, error: "That task has no reminder." };
+
+    const dismissing = !task.reminder_dismissed_at;
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        reminder_dismissed_at: dismissing ? new Date().toISOString() : null,
+        reminder_dismissed_by: dismissing ? member.id : null,
+      })
+      .eq("id", taskId.data);
+    if (error) throw error;
+
+    revalidateTaskViews();
+    return { ok: true, taskId: taskId.data, dismissed: dismissing };
+  } catch (error) {
+    console.error("toggleReminderDismissal failed", error);
+    return { ok: false, error: "Couldn't update that reminder. Try again." };
   }
 }
 
@@ -156,7 +214,7 @@ export async function softDeleteTask(taskIdInput: string): Promise<ActionResult>
       .eq("id", taskId.data);
     if (error) throw error;
 
-    revalidatePath("/tasks");
+    revalidateTaskViews();
     return { ok: true, taskId: taskId.data };
   } catch (error) {
     console.error("softDeleteTask failed", error);
@@ -173,7 +231,7 @@ export async function restoreTask(taskIdInput: string): Promise<ActionResult> {
     const { error } = await supabase.from("tasks").update({ deleted_at: null }).eq("id", taskId.data);
     if (error) throw error;
 
-    revalidatePath("/tasks");
+    revalidateTaskViews();
     return { ok: true, taskId: taskId.data };
   } catch (error) {
     console.error("restoreTask failed", error);
@@ -194,7 +252,7 @@ export async function addNote(input: unknown): Promise<ActionResult<{ noteId: st
       .single();
     if (error) throw error;
 
-    revalidatePath("/tasks");
+    revalidateTaskViews();
     return { ok: true, noteId: note.id };
   } catch (error) {
     console.error("addNote failed", error);
@@ -231,7 +289,7 @@ export async function toggleNoteAck(noteIdInput: string): Promise<ActionResult<{
         .eq("note_id", noteId.data)
         .eq("member_id", member.id);
       if (error) throw error;
-      revalidatePath("/tasks");
+      revalidateTaskViews();
       return { ok: true, acked: false };
     }
 
@@ -240,7 +298,7 @@ export async function toggleNoteAck(noteIdInput: string): Promise<ActionResult<{
       .insert({ note_id: noteId.data, member_id: member.id });
     if (error) throw error;
 
-    revalidatePath("/tasks");
+    revalidateTaskViews();
     return { ok: true, acked: true };
   } catch (error) {
     console.error("toggleNoteAck failed", error);

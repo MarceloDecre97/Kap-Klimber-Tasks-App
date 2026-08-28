@@ -53,6 +53,8 @@ export interface Database {
           priority: Priority;
           status: TaskStatus;
           reminder_at: string | null;
+          reminder_dismissed_at: string | null;
+          reminder_dismissed_by: string | null;
           due_date: string | null;
           created_by: string;
           completed_at: string | null;

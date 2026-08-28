@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell, ChevronDown, Hourglass, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
+import { Bell, BellOff, ChevronDown, Hourglass, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ export function TaskPill({
   onToggleExpand,
   onSetStatus,
   onRequestDelete,
+  onToggleReminder,
 }: {
   task: TaskWithRelations;
   meId: string;
@@ -36,12 +37,15 @@ export function TaskPill({
   onToggleExpand: () => void;
   onSetStatus: (status: TaskStatus) => void;
   onRequestDelete: () => void;
+  /** Omitted where the reminder should render read-only. */
+  onToggleReminder?: () => void;
 }) {
   const priority = PRIORITIES[task.priority];
   const status = STATUSES[task.status];
   const [noteBody, setNoteBody] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const dismissed = !!task.reminder_dismissed_at;
 
   function submitNote() {
     const body = noteBody.trim();
@@ -109,15 +113,39 @@ export function TaskPill({
           <Hourglass aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
           {daysSince(task.created_at)}d
         </span>
+        {/*
+          The reminder chip doubles as its own dismiss control, so a fired
+          reminder can be marked handled from wherever the task appears —
+          this component renders in both the Tasklist and the Dashboard.
+          Dismissal is shared across the team and never changes the task's
+          status, dates, or dashboard bucket.
+        */}
         {task.reminder_at && (
-          <span
-            className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border px-2.5 text-[15px] leading-5 font-bold text-accent"
-            title={`Reminder set for ${formatTimestamp(task.reminder_at)}`}
+          <button
+            type="button"
+            onClick={() => onToggleReminder?.()}
+            disabled={!onToggleReminder || isPending}
+            aria-pressed={dismissed}
+            title={
+              dismissed
+                ? `Reminder handled — ${formatTimestamp(task.reminder_at)}. Click to un-dismiss.`
+                : `Reminder set for ${formatTimestamp(task.reminder_at)}. Click once handled.`
+            }
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-2.5",
+              "text-[15px] leading-5 font-bold transition-transform duration-150",
+              onToggleReminder && "cursor-pointer active:scale-[0.97]",
+              dismissed ? "border-border bg-muted text-sub" : "border-accent text-accent"
+            )}
           >
-            <Bell aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
-            <span className="sr-only">Reminder set for </span>
-            {formatTimestamp(task.reminder_at)}
-          </span>
+            {dismissed ? (
+              <BellOff aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+            ) : (
+              <Bell aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+            )}
+            <span className="sr-only">{dismissed ? "Reminder handled, was set for " : "Reminder set for "}</span>
+            <span className={cn(dismissed && "line-through")}>{formatTimestamp(task.reminder_at)}</span>
+          </button>
         )}
       </div>
 
@@ -144,7 +172,9 @@ export function TaskPill({
             {task.reminder_at && (
               <>
                 <dt className="text-[16px] leading-7 font-bold text-sub">Reminder</dt>
-                <dd className="text-[18px] leading-7 text-fg">{formatTimestamp(task.reminder_at)}</dd>
+                <dd className={cn("text-[18px] leading-7", dismissed ? "text-sub line-through" : "text-fg")}>
+                  {formatTimestamp(task.reminder_at)}
+                </dd>
               </>
             )}
           </dl>

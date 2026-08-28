@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { AppHeader } from "@/components/layout/app-header";
 import { BigStat, Card, EmptyLine, LegendRow, MeterRow, StackedBar } from "@/components/dashboard/cards";
 import { TaskPill } from "@/components/tasks/task-pill";
-import { restoreTask, setTaskStatus, softDeleteTask } from "@/app/tasks/actions";
+import { restoreTask, setTaskStatus, softDeleteTask, toggleReminderDismissal } from "@/app/tasks/actions";
 import {
   STALE_AFTER_DAYS,
   computeDashboardStats,
@@ -73,6 +73,17 @@ export function DashboardApp({
     });
   }
 
+  function handleToggleReminder(taskId: string) {
+    startTransition(async () => {
+      const result = await toggleReminderDismissal(taskId);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   function handleConfirmDelete() {
     const task = deleteTarget;
     if (!task) return;
@@ -124,6 +135,34 @@ export function DashboardApp({
                 </Link>
               )}
 
+              {/*
+                A fired reminder does not move its task, so on its own it can
+                sit unnoticed inside a collapsed section. This surfaces the
+                count regardless of bucket, and opens every section holding
+                one so they are never hunted for.
+              */}
+              {stats.remindersNeedingAttention > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenSections((current) => {
+                      const next = { ...current };
+                      for (const b of stats.buckets) {
+                        if (b.remindersNeedingAttention > 0) next[b.key] = true;
+                      }
+                      return next;
+                    })
+                  }
+                  className="flex min-h-14 items-center gap-3 rounded-2xl border-[1.5px] border-accent bg-card px-4 py-3 text-left text-[17px] leading-6 text-fg cursor-pointer hover:bg-muted"
+                >
+                  <Bell aria-hidden className="size-5 shrink-0 text-accent" />
+                  <span className="font-bold tabular-nums text-pretty">
+                    {stats.remindersNeedingAttention}{" "}
+                    {stats.remindersNeedingAttention === 1 ? "reminder needs" : "reminders need"} your attention
+                  </span>
+                </button>
+              )}
+
               <div role="tablist" aria-label="Scope" className="flex gap-1 rounded-full bg-muted p-1">
                 {(
                   [
@@ -151,13 +190,8 @@ export function DashboardApp({
             {stats.buckets.map((bucket) => {
               const open = isSectionOpen(bucket);
               const has = bucket.entries.length > 0;
-              const urgentAndFull = bucket.urgent && has;
-
               return (
-                <div
-                  key={bucket.key}
-                  className={cn("flex flex-col gap-3", urgentAndFull && "border-l-[1.5px] border-danger pl-4")}
-                >
+                <div key={bucket.key} className="flex flex-col gap-3">
                   <button
                     type="button"
                     onClick={() => setOpenSections((s) => ({ ...s, [bucket.key]: !open }))}
@@ -182,6 +216,15 @@ export function DashboardApp({
                       {bucket.entries.length}
                     </span>
                     <span className="text-field-label">{bucket.title}</span>
+                    {bucket.remindersNeedingAttention > 0 && (
+                      <span
+                        className="inline-flex shrink-0 items-center gap-1 text-[15px] leading-5 font-bold text-accent tabular-nums"
+                        title={`${bucket.remindersNeedingAttention} reminder(s) waiting in this section`}
+                      >
+                        <Bell aria-hidden className="size-4" />
+                        {bucket.remindersNeedingAttention}
+                      </span>
+                    )}
                     {bucket.prompt && has && (
                       <span className="truncate text-[15px] leading-5 text-sub">{bucket.prompt}</span>
                     )}
@@ -211,6 +254,7 @@ export function DashboardApp({
                             }
                             onSetStatus={(status) => handleSetStatus(entry.task.id, status)}
                             onRequestDelete={() => setDeleteTarget(entry.task)}
+                            onToggleReminder={() => handleToggleReminder(entry.task.id)}
                           />
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 text-[15px] leading-5 font-bold tabular-nums">
                             {entry.hasReminder && (

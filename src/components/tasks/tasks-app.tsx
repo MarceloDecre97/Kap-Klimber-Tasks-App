@@ -14,7 +14,7 @@ import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dro
 import { FiltersPanel } from "@/components/tasks/filters-panel";
 import { SortMenu } from "@/components/tasks/sort-menu";
 import { TaskPill } from "@/components/tasks/task-pill";
-import { setTaskStatus, softDeleteTask, restoreTask } from "@/app/tasks/actions";
+import { setTaskStatus, softDeleteTask, restoreTask, toggleReminderDismissal } from "@/app/tasks/actions";
 import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
 import {
   EMPTY_FILTERS,
@@ -88,6 +88,17 @@ export function TasksApp({
   function handleSetStatus(taskId: string, status: TaskStatus) {
     startTransition(async () => {
       const result = await setTaskStatus(taskId, status);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function handleToggleReminder(taskId: string) {
+    startTransition(async () => {
+      const result = await toggleReminderDismissal(taskId);
       if (!result.ok) {
         showToast({ message: result.error });
         return;
@@ -222,6 +233,7 @@ export function TasksApp({
                         onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}
                         onRequestDelete={() => setDeleteTarget(task)}
+                        onToggleReminder={() => handleToggleReminder(task.id)}
                       />
                     </div>
                   </div>
@@ -250,6 +262,7 @@ export function TasksApp({
                         onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}
                         onRequestDelete={() => setDeleteTarget(task)}
+                        onToggleReminder={() => handleToggleReminder(task.id)}
                       />
                     ))}
                   </div>

@@ -28,6 +28,15 @@ export interface BucketEntry {
   missedDeadline: boolean;
   /** A reminder that fired on a task with no deadline — rendered amber. */
   passedReminder: boolean;
+  /** The reminder has been marked dealt with (shared across the team). */
+  reminderDismissed: boolean;
+  /**
+   * The reminder has fired and nobody has dealt with it. This is what makes
+   * a missed reminder findable without re-bucketing the task: a reminder
+   * that fired last week on a task due next week still needs surfacing,
+   * even though the deadline correctly keeps it in "Next week".
+   */
+  reminderNeedsAttention: boolean;
 }
 
 /** How a bucket's count should read at a glance. */
@@ -81,6 +90,8 @@ export interface BucketSpec {
   urgent?: boolean;
   prompt?: string;
   countTone: CountTone;
+  /** Lets a collapsed header show that something inside is waiting. */
+  remindersNeedingAttention: number;
 }
 
 export interface SegmentDatum {
@@ -111,6 +122,8 @@ export interface DashboardStats {
   completeCount: number;
   unseenNoteCount: number;
   buckets: BucketSpec[];
+  /** Fired, undismissed reminders across the personal panel. */
+  remindersNeedingAttention: number;
   asapCount: number;
   asapTasks: TaskWithRelations[];
   statusSegments: SegmentDatum[];
@@ -189,11 +202,17 @@ function plural(n: number, word: string) {
   return `${n} ${n === 1 ? word : `${word}s`}`;
 }
 
-function toEntry(task: TaskWithRelations, todayKey: string): BucketEntry {
+function toEntry(task: TaskWithRelations, todayKey: string, now: Date): BucketEntry {
   const due = task.due_date ?? null;
   const rem = reminderKey(task);
   const attentionKey = attentionKeyOf(task, todayKey);
   const remTime = task.reminder_at ? formatClockTime(new Date(task.reminder_at)) : null;
+
+  const reminderDismissed = !!task.reminder_dismissed_at;
+  // Compared against the clock, not the calendar: a reminder set for 2pm
+  // today has not fired at 10am.
+  const reminderNeedsAttention =
+    !!task.reminder_at && !reminderDismissed && Date.parse(task.reminder_at) <= now.getTime();
 
   const missedDeadline = !!due && due < todayKey;
   // Only a reminder-only task can have a "passed reminder" — if there is a
@@ -229,6 +248,8 @@ function toEntry(task: TaskWithRelations, todayKey: string): BucketEntry {
     secondaryLabel,
     missedDeadline,
     passedReminder,
+    reminderDismissed,
+    reminderNeedsAttention,
   };
 }
 
@@ -287,7 +308,7 @@ export function computeDashboardStats({
   const endOfThisWeek = endOfWeekKey(todayKey);
   const endOfNextWeek = endOfWeekKey(todayKey, 1);
 
-  const entries = mine.map((task) => toEntry(task, todayKey));
+  const entries = mine.map((task) => toEntry(task, todayKey, now));
   const inRange = (predicate: (key: string | null) => boolean) =>
     entries.filter((e) => predicate(e.attentionKey)).sort(byAttention);
 
@@ -299,7 +320,14 @@ export function computeDashboardStats({
     rest: { emptyCopy: string; defaultOpen: boolean; urgent?: boolean; prompt?: string }
   ): BucketSpec => {
     const bucketEntries = inRange(predicate);
-    return { key, title, entries: bucketEntries, countTone: toneFor(rule, bucketEntries), ...rest };
+    return {
+      key,
+      title,
+      entries: bucketEntries,
+      countTone: toneFor(rule, bucketEntries),
+      remindersNeedingAttention: bucketEntries.filter((e) => e.reminderNeedsAttention).length,
+      ...rest,
+    };
   };
 
   const buckets: BucketSpec[] = [
@@ -447,6 +475,7 @@ export function computeDashboardStats({
     completeCount: completeTasks.length,
     unseenNoteCount,
     buckets,
+    remindersNeedingAttention: buckets.reduce((n, b) => n + b.remindersNeedingAttention, 0),
     asapCount: asapTasks.length,
     asapTasks,
     statusSegments,
