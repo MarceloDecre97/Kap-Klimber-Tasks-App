@@ -11,7 +11,14 @@ import { Input } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { reminderState } from "@/lib/reminders";
 import { daysSince } from "@/lib/tasks-view";
-import { cn, formatCalendarDate, formatDateGroup, formatTimestamp } from "@/lib/utils";
+import {
+  cn,
+  daysBetweenKeys,
+  formatCalendarDate,
+  formatDateGroup,
+  formatTimestamp,
+  zonedDateKey,
+} from "@/lib/utils";
 import { addNote, toggleNoteAck } from "@/app/tasks/actions";
 import type { TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
@@ -58,6 +65,15 @@ export function TaskPill({
   // nobody has dealt with it, muted once handled.
   const rState = reminderState(task);
   const dismissed = rState === "handled";
+  /*
+    Whole days a still-open task is past its due date. A finished task is
+    never late — it was delivered, and stamping it red forever would make
+    the Complete list read as a wall of failures.
+  */
+  const overdueDays =
+    task.due_date && task.status !== "complete"
+      ? Math.max(0, -daysBetweenKeys(zonedDateKey(new Date()), task.due_date))
+      : 0;
 
   function submitNote() {
     const body = noteBody.trim();
@@ -111,7 +127,18 @@ export function TaskPill({
 
         <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] leading-[14px] font-bold text-sub tabular-nums">
           <span>Created On {formatDateGroup(task.created_at)}</span>
-          {task.due_date && <span className="text-accent">Due For {formatCalendarDate(task.due_date)}</span>}
+          {/*
+            Normal ink rather than amber: amber is the reminder's colour
+            everywhere else in the app, and two different meanings sharing
+            one colour is how you learn to ignore both. Red, with the days
+            counted, is reserved for a date that has actually passed.
+          */}
+          {task.due_date && (
+            <span className={cn(overdueDays > 0 ? "text-danger" : "text-fg")}>
+              Due For {formatCalendarDate(task.due_date)}
+              {overdueDays > 0 && ` (Overdue: ${overdueDays} ${overdueDays === 1 ? "Day" : "Days"})`}
+            </span>
+          )}
           {lastActivityAt && <span className="lg:hidden">Updated {formatDateGroup(lastActivityAt)}</span>}
         </span>
       </button>

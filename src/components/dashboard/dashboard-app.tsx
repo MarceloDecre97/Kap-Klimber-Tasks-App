@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bell, ChevronDown, MessageSquare } from "lucide-react";
+import { AlertTriangle, Bell, BellOff, ChevronDown, MessageSquare } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -216,13 +216,30 @@ export function DashboardApp({
                       {bucket.entries.length}
                     </span>
                     <span className="text-field-label">{bucket.title}</span>
-                    {bucket.remindersNeedingAttention > 0 && (
+                    {/*
+                      One bell per heading, showing the more urgent of the
+                      two: red counts reminders that have fired and nobody
+                      has handled, amber counts ones still ahead. Without
+                      the amber case a section full of reminders due later
+                      today looked identical to one with none, which is
+                      most of what a reminder is for.
+                    */}
+                    {(bucket.remindersNeedingAttention > 0 || bucket.remindersUpcoming > 0) && (
                       <span
-                        className="inline-flex shrink-0 items-center gap-1 text-[15px] leading-5 font-bold text-danger tabular-nums"
-                        title={`${bucket.remindersNeedingAttention} reminder(s) waiting in this section`}
+                        className={cn(
+                          "inline-flex shrink-0 items-center gap-1 text-[15px] leading-5 font-bold tabular-nums",
+                          bucket.remindersNeedingAttention > 0 ? "text-danger" : "text-accent"
+                        )}
+                        title={
+                          bucket.remindersNeedingAttention > 0
+                            ? `${bucket.remindersNeedingAttention} missed reminder(s) in this section`
+                            : `${bucket.remindersUpcoming} upcoming reminder(s) in this section`
+                        }
                       >
                         <Bell aria-hidden className="size-4" />
-                        {bucket.remindersNeedingAttention}
+                        {bucket.remindersNeedingAttention > 0
+                          ? bucket.remindersNeedingAttention
+                          : bucket.remindersUpcoming}
                       </span>
                     )}
                     {bucket.prompt && has && (
@@ -256,33 +273,35 @@ export function DashboardApp({
                             onRequestDelete={() => setDeleteTarget(entry.task)}
                             onToggleReminder={() => handleToggleReminder(entry.task.id)}
                           />
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 text-[15px] leading-5 font-bold tabular-nums">
-                            {entry.hasReminder && (
-                              <Bell
-                                aria-hidden
-                                className={cn(
-                                  "size-3.5 shrink-0",
-                                  entry.reminderNeedsAttention
-                                    ? "text-danger"
-                                    : entry.reminderDismissed
-                                      ? "text-sub"
-                                      : "text-accent"
-                                )}
-                              />
-                            )}
-                            <span
+                          {/*
+                            Reminder only, and the whole line takes one
+                            colour. The due date lives on the card, where it
+                            now goes red on its own when it has passed — two
+                            dates in two colours on one line meant neither
+                            read as a signal.
+                          */}
+                          {entry.reminderLabel && (
+                            <div
                               className={cn(
-                                entry.missedDeadline || entry.reminderNeedsAttention
+                                "flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3",
+                                "text-[15px] leading-5 font-bold tabular-nums",
+                                entry.reminderTone === "missed"
                                   ? "text-danger"
-                                  : "text-sub"
+                                  : entry.reminderTone === "handled"
+                                    ? "text-sub"
+                                    : "text-accent"
                               )}
                             >
-                              {entry.primaryLabel}
-                            </span>
-                            {entry.secondaryLabel && (
-                              <span className="text-sub opacity-80">· {entry.secondaryLabel}</span>
-                            )}
-                          </div>
+                              {entry.reminderTone === "handled" ? (
+                                <BellOff aria-hidden className="size-3.5 shrink-0" />
+                              ) : (
+                                <Bell aria-hidden className="size-3.5 shrink-0" />
+                              )}
+                              <span className={cn(entry.reminderTone === "handled" && "line-through")}>
+                                {entry.reminderLabel}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

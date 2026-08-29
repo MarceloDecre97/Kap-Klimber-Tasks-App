@@ -21,14 +21,16 @@ export interface BucketEntry {
   /** Calendar day, in app time, that decided this task's bucket. */
   attentionKey: string | null;
   hasReminder: boolean;
-  /** The line explaining placement, e.g. "Due Fri 28 Aug". */
-  primaryLabel: string;
-  /** The other date, when a task carries both. */
-  secondaryLabel: string | null;
-  /** A deadline that has passed — rendered red. */
+  /**
+   * The single line under the card. Reminders only — the due date is the
+   * card's own business, so printing it twice just made the two dates
+   * compete for the same glance.
+   */
+  reminderLabel: string | null;
+  /** Colours that line, whole: amber ahead, red missed, grey handled. */
+  reminderTone: ReminderTone | null;
+  /** A deadline that has passed — drives the bucket's count colour. */
   missedDeadline: boolean;
-  /** A reminder that fired on a task with no deadline — rendered amber. */
-  passedReminder: boolean;
   /** The reminder has been marked dealt with (shared across the team). */
   reminderDismissed: boolean;
   /**
@@ -39,6 +41,9 @@ export interface BucketEntry {
    */
   reminderNeedsAttention: boolean;
 }
+
+/** How the reminder line under a card reads at a glance. */
+export type ReminderTone = "upcoming" | "missed" | "handled";
 
 /** How a bucket's count should read at a glance. */
 export type CountTone = "quiet" | "neutral" | "amber" | "danger";
@@ -94,6 +99,8 @@ export interface BucketSpec {
   countTone: CountTone;
   /** Lets a collapsed header show that something inside is waiting. */
   remindersNeedingAttention: number;
+  /** Reminders still ahead of you in this section — an amber bell. */
+  remindersUpcoming: number;
 }
 
 export interface SegmentDatum {
@@ -159,18 +166,26 @@ function reminderKey(task: TaskWithRelations): string | null {
 }
 
 /**
- * The day a task next wants attention — what decides its bucket.
+ * The day a task next wants attention — what decides its bucket. Whichever
+ * of the two dates comes first governs, but only counting dates that still
+ * want something from you:
  *
- * A due date is an obligation; a reminder is a nudge. An *upcoming* nudge
- * can pull a task forward, but a nudge that has already fired never drags a
- * task with a healthy future deadline into Overdue: it did its job, and the
- * deadline governs from then on.
+ *   due date            always counts — an obligation does not expire
+ *   reminder, upcoming  counts, and wins if it lands before the due date
+ *   reminder, fired     does not count — its bell surfaces it instead
+ *   reminder, dismissed does not count — it has been dealt with
+ *
+ * The last two are what stop a nudge from inventing urgency. A fired
+ * reminder on a task with no deadline used to land in Overdue, which
+ * claimed a deadline had been missed when the task never had one; and a
+ * reminder someone dismissed used to keep holding the task in Today long
+ * after it was handled.
  */
-function attentionKeyOf(task: TaskWithRelations, todayKey: string): string | null {
+function attentionKeyOf(task: TaskWithRelations, now: Date): string | null {
   const due = task.due_date ?? null;
-  const rem = reminderKey(task);
+  const rem = reminderState(task, now) === "upcoming" ? reminderKey(task) : null;
 
-  if (due && rem) return rem >= todayKey && rem < due ? rem : due;
+  if (due && rem) return rem < due ? rem : due;
   return due ?? rem;
 }
 
@@ -207,7 +222,7 @@ function plural(n: number, word: string) {
 function toEntry(task: TaskWithRelations, todayKey: string, now: Date): BucketEntry {
   const due = task.due_date ?? null;
   const rem = reminderKey(task);
-  const attentionKey = attentionKeyOf(task, todayKey);
+  const attentionKey = attentionKeyOf(task, now);
   const remTime = task.reminder_at ? formatClockTime(new Date(task.reminder_at)) : null;
 
   const rState = reminderState(task, now);
@@ -215,39 +230,33 @@ function toEntry(task: TaskWithRelations, todayKey: string, now: Date): BucketEn
   const reminderNeedsAttention = rState === "due";
 
   const missedDeadline = !!due && due < todayKey;
-  // Only a reminder-only task can have a "passed reminder" — if there is a
-  // deadline, that deadline is the thing being judged.
-  const passedReminder = !due && !!rem && rem < todayKey;
 
-  const reminderText = (key: string) => `Reminder ${relativeDay(key, todayKey)}, ${remTime}`;
-  const dueText = (key: string) => `Due ${relativeDay(key, todayKey)}`;
+  // One line, one subject, one colour. A missed reminder says how long it
+  // has been missed, because that is the part you act on; the others name
+  // the moment itself.
+  let reminderLabel: string | null = null;
+  let reminderTone: ReminderTone | null = null;
 
-  let primaryLabel: string;
-  let secondaryLabel: string | null = null;
-
-  if (missedDeadline) {
-    primaryLabel = `${plural(Math.abs(daysBetweenKeys(todayKey, due!)), "day")} overdue`;
-    if (rem && rem >= todayKey) secondaryLabel = reminderText(rem);
-  } else if (passedReminder) {
-    primaryLabel = `Reminder passed ${plural(Math.abs(daysBetweenKeys(todayKey, rem!)), "day")} ago`;
-  } else if (attentionKey && attentionKey === rem && rem !== due) {
-    primaryLabel = reminderText(rem);
-    if (due) secondaryLabel = dueText(due);
-  } else if (attentionKey) {
-    primaryLabel = dueText(attentionKey);
-    if (rem && rem >= todayKey) secondaryLabel = reminderText(rem);
-  } else {
-    primaryLabel = "No date set";
+  if (rem && remTime) {
+    if (rState === "due") {
+      reminderTone = "missed";
+      reminderLabel = `Reminder passed ${plural(Math.abs(daysBetweenKeys(todayKey, rem)), "day")} ago`;
+    } else if (rState === "handled") {
+      reminderTone = "handled";
+      reminderLabel = `Reminder ${relativeDay(rem, todayKey)}, ${remTime}`;
+    } else {
+      reminderTone = "upcoming";
+      reminderLabel = `Reminder ${relativeDay(rem, todayKey)}, ${remTime}`;
+    }
   }
 
   return {
     task,
     attentionKey,
     hasReminder: !!task.reminder_at,
-    primaryLabel,
-    secondaryLabel,
+    reminderLabel,
+    reminderTone,
     missedDeadline,
-    passedReminder,
     reminderDismissed,
     reminderNeedsAttention,
   };
@@ -326,6 +335,7 @@ export function computeDashboardStats({
       entries: bucketEntries,
       countTone: toneFor(rule, bucketEntries),
       remindersNeedingAttention: bucketEntries.filter((e) => e.reminderNeedsAttention).length,
+      remindersUpcoming: bucketEntries.filter((e) => e.reminderTone === "upcoming").length,
       ...rest,
     };
   };
@@ -338,7 +348,7 @@ export function computeDashboardStats({
     }),
     bucket("today", "Today", "load", (k) => k === todayKey, {
       emptyCopy: "Nothing for today.",
-      defaultOpen: true,
+      defaultOpen: false,
     }),
     bucket("thisWeek", "This week", "load", (k) => k !== null && k > todayKey && k <= endOfThisWeek, {
       emptyCopy: "Nothing else this week.",
