@@ -3,13 +3,13 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bell, BellOff, ChevronDown, MessageSquare } from "lucide-react";
+import { Bell, BellOff, ChevronDown, MessageSquare } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { AppHeader } from "@/components/layout/app-header";
-import { BigStat, Card, EmptyLine, LegendRow, MeterRow, StackedBar } from "@/components/dashboard/cards";
+import { BigStat, Card, EmptyLine, FlowChart, LegendRow, MeterRow, StackedBar } from "@/components/dashboard/cards";
 import { TaskPill } from "@/components/tasks/task-pill";
 import { restoreTask, setTaskStatus, softDeleteTask, toggleReminderDismissal } from "@/app/tasks/actions";
 import {
@@ -318,81 +318,84 @@ export function DashboardApp({
               <p className="text-[17px] leading-6 text-sub">All open tasks across the team.</p>
             </div>
 
-            <Link
-              href="/tasks"
-              className="flex items-center gap-4 rounded-2xl border-[1.5px] border-border bg-card p-5 shadow-[0_1px_3px_rgba(2,6,23,0.08)] hover:bg-muted"
-            >
-              <BigStat
-                value={stats.asapCount}
-                tone="brand"
-                icon={<AlertTriangle aria-hidden className="size-8" />}
-                caption={
-                  <span className="font-bold text-fg">
-                    {stats.asapCount === 1 ? "task is" : "tasks are"} marked ASAP
-                  </span>
-                }
-              />
-            </Link>
-
-            <Card title="Open tasks by status">
-              {openTotal === 0 ? (
-                <EmptyLine>No open tasks — the whole board is clear.</EmptyLine>
-              ) : (
-                <>
-                  <StackedBar
-                    segments={stats.statusSegments}
-                    ariaLabel={`Open tasks by status: ${stats.statusSegments
-                      .map((s) => `${s.label} ${s.count}`)
-                      .join(", ")}`}
-                  />
-                  <div className="flex flex-col gap-1">
-                    {stats.statusSegments.map((segment) => (
-                      <LegendRow key={segment.key} segment={segment} />
-                    ))}
+            {/*
+              Team-wide deadline pressure. The personal panel beside this one
+              is filtered to one person, so until now nothing on the screen
+              could answer "what does the team owe this week?" — the question
+              a shared task list exists to answer.
+            */}
+            <Card title="Deadline pressure">
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Overdue", value: stats.teamDeadlines.overdue.length, tone: "danger" as const },
+                  { label: "Due today", value: stats.teamDeadlines.dueToday, tone: "accent" as const },
+                  { label: "This week", value: stats.teamDeadlines.dueThisWeek, tone: "fg" as const },
+                ].map((cell) => (
+                  <div key={cell.label} className="flex min-w-0 flex-col gap-0.5">
+                    <span
+                      className={cn(
+                        "font-display text-[34px] leading-[38px] font-bold tabular-nums",
+                        cell.value === 0
+                          ? "text-sub"
+                          : cell.tone === "danger"
+                            ? "text-danger"
+                            : cell.tone === "accent"
+                              ? "text-accent"
+                              : "text-fg"
+                      )}
+                    >
+                      {cell.value}
+                    </span>
+                    <span className="text-[15px] leading-5 text-sub">{cell.label}</span>
                   </div>
-                </>
+                ))}
+              </div>
+
+              {stats.teamDeadlines.overdue.length > 0 && (
+                <div className="flex flex-col gap-1 border-t-[1.5px] border-border pt-3">
+                  {stats.teamDeadlines.overdue.slice(0, 4).map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex min-h-11 items-center gap-3 rounded-xl px-1 text-[17px] leading-6"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-fg">{task.title}</span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        {task.assignees.slice(0, 3).map((person) => (
+                          <Avatar key={person.id} initials={person.initials} color={person.color} size={24} />
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                  {stats.teamDeadlines.overdue.length > 4 && (
+                    <span className="px-1 text-[15px] leading-5 text-sub tabular-nums">
+                      and {stats.teamDeadlines.overdue.length - 4} more
+                    </span>
+                  )}
+                </div>
               )}
-              <p className="text-[15px] leading-5 text-sub tabular-nums">
-                {stats.completeCount} complete {stats.completeCount === 1 ? "task is" : "tasks are"} excluded from this
-                bar.
-              </p>
+
+              {/*
+                ASAP is a label somebody typed, not a commitment with a date,
+                so it sits beside the dates rather than above them. Tasks with
+                no due date at all can never appear as late — which is exactly
+                why work goes quiet there.
+              */}
+              <div className="flex flex-col gap-1 text-[15px] leading-5 text-sub tabular-nums">
+                <span>
+                  {stats.teamDeadlines.asap} marked ASAP
+                </span>
+                <span>
+                  {stats.teamDeadlines.noDueDate} open{" "}
+                  {stats.teamDeadlines.noDueDate === 1 ? "task has" : "tasks have"} no due date
+                </span>
+              </div>
+            </Card>
+
+            <Card title="Created vs completed">
+              <FlowChart weeks={stats.flowWeeks} />
             </Card>
 
             <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-              <Card title="Workload by person">
-                {stats.workload.length === 0 ? (
-                  <EmptyLine>Nobody on the roster yet.</EmptyLine>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {stats.workload.map((row) => (
-                      <div key={row.member.id} className="flex min-h-11 items-center gap-3 rounded-xl px-1">
-                        <Avatar initials={row.member.initials} color={row.member.color} size={32} />
-                        <span className="w-[70px] shrink-0 truncate text-[15px] leading-5 font-bold text-fg">
-                          {row.member.display_name.split(/\s+/)[0]}
-                        </span>
-                        <span
-                          role="img"
-                          aria-label={`${row.member.display_name}: ${row.total} open ${
-                            row.total === 1 ? "task" : "tasks"
-                          }`}
-                          className="flex h-6 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
-                        >
-                          {row.segments.map((segment) => (
-                            <span key={segment.key} style={{ width: segment.width, background: segment.fill }} />
-                          ))}
-                        </span>
-                        <span className="w-8 shrink-0 text-right text-[17px] leading-6 font-bold tabular-nums text-fg">
-                          {row.total}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className="text-[15px] leading-5 text-sub text-pretty">
-                  Tasks with multiple assignees are counted for each person.
-                </p>
-              </Card>
-
               <Card title="Age of open tasks">
                 <div className="flex flex-col gap-2">
                   {stats.ageRows.map((row) => (
@@ -408,12 +411,7 @@ export function DashboardApp({
                       <span className="flex items-center gap-2.5 text-[15px] leading-5 text-sub tabular-nums">
                         {stats.oldest.ageDays} {stats.oldest.ageDays === 1 ? "day" : "days"} old
                         {stats.oldest.task.assignees.map((person) => (
-                          <Avatar
-                            key={person.id}
-                            initials={person.initials}
-                            color={person.color}
-                            size={28}
-                          />
+                          <Avatar key={person.id} initials={person.initials} color={person.color} size={28} />
                         ))}
                       </span>
                     </div>
@@ -434,7 +432,10 @@ export function DashboardApp({
                 />
                 <div className="flex flex-col gap-1">
                   {stats.staleTasks.slice(0, 3).map((row) => (
-                    <div key={row.task.id} className="flex min-h-11 items-center gap-3 rounded-xl px-1 text-[17px] leading-6">
+                    <div
+                      key={row.task.id}
+                      className="flex min-h-11 items-center gap-3 rounded-xl px-1 text-[17px] leading-6"
+                    >
                       <span className="min-w-0 flex-1 truncate text-fg">{row.task.title}</span>
                       <span className="shrink-0 text-[15px] leading-5 font-bold tabular-nums text-sub">
                         {row.untouchedDays}d
@@ -444,48 +445,143 @@ export function DashboardApp({
                 </div>
               </Card>
 
-              <Card title="Work by category">
-                {stats.categoryRows.length === 0 ? (
-                  <EmptyLine>No open tasks to categorise.</EmptyLine>
+              {/*
+                Waiting and unowned were two cards. They read as one thing to
+                whoever is looking — this will not move unless somebody acts —
+                and the action is the same for both: name a person.
+              */}
+              <Card title="Not moving">
+                <BigStat
+                  value={stats.notMoving.length}
+                  tone="danger"
+                  caption={
+                    <>
+                      open {stats.notMoving.length === 1 ? "task is" : "tasks are"} waiting on someone, or
+                      on nobody.
+                    </>
+                  }
+                />
+                {stats.notMoving.length === 0 ? (
+                  <EmptyLine>Everything open has an owner and is moving.</EmptyLine>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {stats.categoryRows.map((row) => (
-                      <MeterRow key={row.key} row={row} labelWidth="w-[104px]" />
+                  <div className="flex flex-col gap-1">
+                    {stats.notMoving.slice(0, 4).map((row) => (
+                      <div
+                        key={row.task.id}
+                        className="flex min-h-11 items-center gap-2 rounded-xl px-1 text-[17px] leading-6"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-fg">{row.task.title}</span>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full border-[1.5px] px-2 py-0.5 text-[13px] leading-4 font-bold",
+                            row.reason === "unowned"
+                              ? "border-danger text-danger"
+                              : "border-border text-sub"
+                          )}
+                        >
+                          {row.reason === "unowned" ? "No owner" : "Waiting"}
+                        </span>
+                        <span className="shrink-0 text-[15px] leading-5 font-bold tabular-nums text-sub">
+                          {row.untouchedDays}d
+                        </span>
+                      </div>
                     ))}
                   </div>
                 )}
               </Card>
 
-              <Card title="Needs an owner">
-                <BigStat
-                  value={stats.ownerless.length}
-                  tone="danger"
-                  caption={
-                    <>open {stats.ownerless.length === 1 ? "task has" : "tasks have"} no active assignee.</>
-                  }
-                />
-                <div className="flex flex-col gap-1">
-                  {stats.ownerless.slice(0, 4).map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex min-h-11 items-center rounded-xl px-1 text-[17px] leading-6 text-fg text-pretty"
-                    >
-                      {task.title}
-                    </div>
-                  ))}
-                </div>
+              {/*
+                The scorecard for the whole system, and the one number that
+                tells a new teammate what "on time" means here without a
+                meeting. The denominator is always shown: 3 of 4 is not 75%,
+                it is a coin toss.
+              */}
+              <Card title="On-time rate">
+                {stats.onTime.rate === null ? (
+                  <>
+                    <BigStat value="—" tone="fg" caption={<span className="text-sub">Nothing to measure yet.</span>} />
+                    <EmptyLine>
+                      No task carrying a due date has been completed in the last 30 days. This starts
+                      reporting on its own once one is.
+                    </EmptyLine>
+                  </>
+                ) : (
+                  <>
+                    <BigStat
+                      value={`${stats.onTime.rate}%`}
+                      tone={stats.onTime.rate >= 80 ? "fg" : stats.onTime.rate >= 50 ? "accent" : "danger"}
+                      caption={
+                        <span className="text-sub">
+                          finished on or before their due date.
+                        </span>
+                      }
+                    />
+                    <p className="text-[15px] leading-5 text-sub tabular-nums">
+                      {stats.onTime.onTime} of {stats.onTime.completed} completed with a due date, last 30
+                      days.
+                    </p>
+                  </>
+                )}
               </Card>
 
-              <Card title="Completed this week">
-                <BigStat
-                  value={stats.doneThisWeek}
-                  caption={
-                    <span className="text-sub">
-                      {stats.doneThisWeek === 1 ? "task" : "tasks"} completed since Monday.
-                    </span>
-                  }
-                />
-                <p className="text-[15px] leading-5 text-sub tabular-nums">{stats.doneLastWeek} last week.</p>
+              <Card title="Load per person">
+                {stats.workload.length === 0 ? (
+                  <EmptyLine>Nobody on the roster yet.</EmptyLine>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {stats.workload.map((row) => (
+                      <div key={row.member.id} className="flex min-h-11 items-center gap-3 rounded-xl px-1">
+                        <Avatar initials={row.member.initials} color={row.member.color} size={32} />
+                        <span className="w-[70px] shrink-0 truncate text-[15px] leading-5 font-bold text-fg">
+                          {row.member.display_name.split(/\s+/)[0]}
+                        </span>
+                        <span
+                          role="img"
+                          aria-label={`${row.member.display_name}: ${row.total} open ${
+                            row.total === 1 ? "task" : "tasks"
+                          }, ${row.inProgress} in progress`}
+                          className="flex h-6 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
+                        >
+                          {row.segments.map((segment) => (
+                            <span key={segment.key} style={{ width: segment.width, background: segment.fill }} />
+                          ))}
+                        </span>
+                        <span className="shrink-0 text-right text-[15px] leading-5 tabular-nums text-sub">
+                          <span className="font-bold text-fg">{row.inProgress}</span>/{row.total}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[15px] leading-5 text-sub text-pretty">
+                  In progress / total open. Two or three genuinely in progress per person is the usual
+                  working limit — past that, everything slows down for everyone. Tasks with several
+                  assignees count for each.
+                </p>
+              </Card>
+
+              <Card title="Work in progress by status">
+                {openTotal === 0 ? (
+                  <EmptyLine>No open tasks — the whole board is clear.</EmptyLine>
+                ) : (
+                  <>
+                    <StackedBar
+                      segments={stats.statusSegments}
+                      ariaLabel={`Open tasks by status: ${stats.statusSegments
+                        .map((s) => `${s.label} ${s.count}`)
+                        .join(", ")}`}
+                    />
+                    <div className="flex flex-col gap-1">
+                      {stats.statusSegments.map((segment) => (
+                        <LegendRow key={segment.key} segment={segment} />
+                      ))}
+                    </div>
+                  </>
+                )}
+                <p className="text-[15px] leading-5 text-sub tabular-nums">
+                  {stats.completeCount} complete {stats.completeCount === 1 ? "task is" : "tasks are"}{" "}
+                  excluded from this bar.
+                </p>
               </Card>
             </div>
           </div>

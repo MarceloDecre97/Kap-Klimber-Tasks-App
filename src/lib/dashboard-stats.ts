@@ -113,9 +113,49 @@ export interface SegmentDatum {
   fg: string;
 }
 
+/** A week in the created-vs-completed chart. */
+export interface FlowWeek {
+  key: string;
+  /** "4 Aug" — the Monday that starts the week. */
+  label: string;
+  created: number;
+  completed: number;
+  /** Bar heights as CSS percentages of the tallest bar on the chart. */
+  createdHeight: string;
+  completedHeight: string;
+}
+
+/** Team-wide deadline pressure — the whole roster, not just me. */
+export interface TeamDeadlines {
+  overdue: TaskWithRelations[];
+  dueToday: number;
+  dueThisWeek: number;
+  asap: number;
+  noDueDate: number;
+}
+
+/** Work that nobody is going to move without an intervention. */
+export interface NotMovingRow {
+  task: TaskWithRelations;
+  /** Why it is here — a person is waiting, or nobody owns it. */
+  reason: "waiting" | "unowned";
+  untouchedDays: number;
+}
+
+/** Did we finish what we said we would, when we said we would? */
+export interface OnTimeStats {
+  /** Tasks with a due date completed inside the window. */
+  completed: number;
+  onTime: number;
+  /** Null when nothing has completed yet — not zero, which would read as failure. */
+  rate: number | null;
+}
+
 export interface WorkloadRow {
   member: MemberSummary;
   total: number;
+  /** Started but unfinished — the number a WIP limit is about. */
+  inProgress: number;
   segments: { key: string; fill: string; width: string; count: number; label: string }[];
 }
 
@@ -140,10 +180,10 @@ export interface DashboardStats {
   ageRows: BarRow[];
   oldest: { task: TaskWithRelations; ageDays: number } | null;
   staleTasks: { task: TaskWithRelations; untouchedDays: number }[];
-  categoryRows: BarRow[];
-  ownerless: TaskWithRelations[];
-  doneThisWeek: number;
-  doneLastWeek: number;
+  teamDeadlines: TeamDeadlines;
+  flowWeeks: FlowWeek[];
+  notMoving: NotMovingRow[];
+  onTime: OnTimeStats;
 }
 
 function pct(n: number, total: number): string {
@@ -396,12 +436,20 @@ export function computeDashboardStats({
     };
   });
 
+  /*
+    Roster order, deliberately not sorted by count. Sorted descending it read
+    as a leaderboard, and a leaderboard of task counts is the classic way to
+    make a metric worse than useless: it rewards taking on many small things
+    and quietly punishes helping someone else finish theirs. This card is for
+    spotting imbalance, not ranking people.
+  */
   const workload: WorkloadRow[] = roster
     .map((member) => {
       const own = openTasks.filter((t) => t.assignees.some((a) => a.id === member.id));
       return {
         member,
         total: own.length,
+        inProgress: own.filter((t) => t.status === "in_progress").length,
         segments: OPEN_STATUSES.map((status) => {
           const count = own.filter((t) => t.status === status).length;
           return {
@@ -413,8 +461,7 @@ export function computeDashboardStats({
           };
         }).filter((s) => s.count > 0),
       };
-    })
-    .sort((a, b) => b.total - a.total);
+    });
 
   const ageOf = (task: TaskWithRelations) => daysBetweenKeys(zonedDateKey(new Date(task.created_at)), todayKey);
   const untouchedFor = (task: TaskWithRelations) =>
@@ -442,43 +489,88 @@ export function computeDashboardStats({
     .filter((row) => row.untouchedDays >= STALE_AFTER_DAYS)
     .sort((a, b) => b.untouchedDays - a.untouchedDays);
 
-  // Top five categories by open-task count, with the long tail folded into
-  // "Other" so the card never grows unbounded.
-  const tally = new Map<string, number>();
-  let uncategorized = 0;
-  for (const task of openTasks) {
-    if (!task.category) uncategorized += 1;
-    else tally.set(task.category.label, (tally.get(task.category.label) ?? 0) + 1);
+  // ---- Team-wide deadline pressure ---------------------------------------
+  // The personal panel above is filtered to one person; this is the same
+  // question asked of everyone, which nothing on the screen answered before.
+  const teamDeadlines: TeamDeadlines = {
+    overdue: openTasks
+      .filter((t) => t.due_date !== null && t.due_date < todayKey)
+      .sort(sortByUrgency(todayKey)),
+    dueToday: openTasks.filter((t) => t.due_date === todayKey).length,
+    dueThisWeek: openTasks.filter(
+      (t) => t.due_date !== null && t.due_date > todayKey && t.due_date <= endOfThisWeek
+    ).length,
+    asap: openTasks.filter((t) => t.priority === "asap").length,
+    // A task with no date cannot be late, which is exactly why work hides here.
+    noDueDate: openTasks.filter((t) => t.due_date === null).length,
+  };
+
+  // ---- Created vs completed, four weeks -----------------------------------
+  // The clearest read on whether the team is keeping up: if intake outruns
+  // completion week after week, no amount of effort inside one week fixes it.
+  const thisMonday = startOfWeek(now);
+  const flowRaw: { key: string; label: string; created: number; completed: number }[] = [];
+  for (let i = 3; i >= 0; i--) {
+    const start = new Date(thisMonday);
+    start.setDate(start.getDate() - i * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    const from = start.getTime();
+    const to = end.getTime();
+    const within = (iso: string | null) => {
+      if (!iso) return false;
+      const at = Date.parse(iso);
+      return at >= from && at < to;
+    };
+    flowRaw.push({
+      key: start.toISOString().slice(0, 10),
+      label: new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short" }).format(start),
+      created: tasks.filter((t) => within(t.created_at)).length,
+      completed: tasks.filter((t) => within(t.completed_at)).length,
+    });
   }
-  const named = [...tally.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
-  const categoryList = named.slice(0, 5);
-  const restCount = named.slice(5).reduce((n, r) => n + r.count, 0);
-  if (restCount > 0) categoryList.push({ label: "Other", count: restCount });
-  if (uncategorized > 0) categoryList.push({ label: "Uncategorized", count: uncategorized });
-  const categoryMax = Math.max(1, ...categoryList.map((r) => r.count));
-  const categoryRows: BarRow[] = categoryList.map((r) => ({
-    key: r.label,
-    label: r.label,
-    count: r.count,
-    width: pct(r.count, categoryMax),
+  // One shared scale across both series, or the two bars in a week would not
+  // be comparable — which is the entire point of putting them side by side.
+  const flowMax = Math.max(1, ...flowRaw.flatMap((w) => [w.created, w.completed]));
+  const flowWeeks: FlowWeek[] = flowRaw.map((w) => ({
+    ...w,
+    createdHeight: pct(w.created, flowMax),
+    completedHeight: pct(w.completed, flowMax),
   }));
 
+  // ---- Not moving ---------------------------------------------------------
   // "No owner" means nobody on the *active* roster is on it — a task whose
-  // only assignee has since been deactivated still needs picking up.
+  // only assignee has since been deactivated still needs picking up. Waiting
+  // and unowned are one card because they read the same to whoever is
+  // looking: this will not move unless you do something, and the something
+  // is the same in both cases — name a person.
   const activeIds = new Set(roster.map((m) => m.id));
-  const ownerless = openTasks.filter((t) => !t.assignees.some((a) => activeIds.has(a.id)));
+  const notMoving: NotMovingRow[] = openTasks
+    .filter((t) => t.status === "waiting" || !t.assignees.some((a) => activeIds.has(a.id)))
+    .map((task) => ({
+      task,
+      reason: (!task.assignees.some((a) => activeIds.has(a.id)) ? "unowned" : "waiting") as
+        | "waiting"
+        | "unowned",
+      untouchedDays: untouchedFor(task),
+    }))
+    .sort((a, b) => b.untouchedDays - a.untouchedDays);
 
-  const thisMonday = startOfWeek(now).getTime();
-  const lastMonday = thisMonday - 7 * 86_400_000;
-  const completedAt = (t: TaskWithRelations) => (t.completed_at ? Date.parse(t.completed_at) : null);
-  const doneThisWeek = completeTasks.filter((t) => {
-    const at = completedAt(t);
-    return at !== null && at >= thisMonday;
-  }).length;
-  const doneLastWeek = completeTasks.filter((t) => {
-    const at = completedAt(t);
-    return at !== null && at >= lastMonday && at < thisMonday;
-  }).length;
+  // ---- On-time rate -------------------------------------------------------
+  // Only tasks that carried a due date can be judged against one. Comparing
+  // calendar days, not instants: finishing at 11pm on the due date is on time.
+  const windowStart = now.getTime() - 30 * 86_400_000;
+  const judged = completeTasks.filter(
+    (t) => t.due_date !== null && t.completed_at !== null && Date.parse(t.completed_at) >= windowStart
+  );
+  const onTimeCount = judged.filter(
+    (t) => zonedDateKey(new Date(t.completed_at!)) <= t.due_date!
+  ).length;
+  const onTime: OnTimeStats = {
+    completed: judged.length,
+    onTime: onTimeCount,
+    rate: judged.length === 0 ? null : Math.round((onTimeCount / judged.length) * 100),
+  };
 
   return {
     openTasks,
@@ -493,9 +585,9 @@ export function computeDashboardStats({
     ageRows,
     oldest,
     staleTasks,
-    categoryRows,
-    ownerless,
-    doneThisWeek,
-    doneLastWeek,
+    teamDeadlines,
+    flowWeeks,
+    notMoving,
+    onTime,
   };
 }
