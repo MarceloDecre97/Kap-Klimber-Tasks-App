@@ -25,7 +25,7 @@ import {
   type SortMode,
   type TaskFilters,
 } from "@/lib/tasks-view";
-import { formatDateGroup } from "@/lib/utils";
+import { cn, formatDateGroup } from "@/lib/utils";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
@@ -181,17 +181,27 @@ export function TasksApp({
             </div>
 
             {/*
-              Icon-only until `sm`: on a phone the label costs more width
-              than the search field can spare, and the `+` is unambiguous
-              beside a search box. `aria-label` carries the name either way.
+              Icon-only until `sm`, where the label costs more width than the
+              search field can spare — and filled brand red there, not white.
+              The white resting state was designed to turn red on hover, but a
+              phone has no hover, so on touch the button would have been stuck
+              in its quietest form forever. Red at rest is that same intent,
+              delivered on the device that can't hover. `aria-label` carries
+              the name at every size.
             */}
             <Link href="/tasks/new" className="shrink-0">
               <Button
                 size="md"
                 aria-label="New task"
-                className="h-12 w-12 justify-center px-0 bg-white text-black border-[1.5px] border-border hover:bg-brand hover:text-white hover:border-brand active:bg-brand active:text-white active:border-brand sm:w-auto sm:px-4"
+                className={cn(
+                  "size-12 justify-center rounded-full px-0 border-[1.5px]",
+                  "bg-brand text-on-brand border-brand",
+                  "sm:w-auto sm:rounded-xl sm:px-4 sm:bg-white sm:text-black sm:border-border",
+                  "sm:hover:bg-brand sm:hover:text-on-brand sm:hover:border-brand",
+                  "sm:active:bg-brand sm:active:text-on-brand sm:active:border-brand"
+                )}
               >
-                <Plus aria-hidden className="size-4" />
+                <Plus aria-hidden className="size-6 sm:size-4" strokeWidth={2.5} />
                 <span className="hidden sm:inline">New Task</span>
               </Button>
             </Link>

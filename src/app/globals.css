@@ -18,9 +18,10 @@
   --color-brand: #87252b;
   --color-accent: #a16207;
   --color-danger: #dc2626;
-  /* Labels for text sitting ON a solid accent/danger fill. Both fills
-     invert lightness between themes, so a hardcoded white would fail in
-     one mode or the other. */
+  /* Labels for text sitting ON a solid brand/accent/danger fill. All three
+     fills invert lightness between themes, so a hardcoded white would fail
+     in one mode or the other. */
+  --color-on-brand: #ffffff;
   --color-on-accent: #ffffff;
   --color-on-danger: #ffffff;
   --color-danger-hover-bg: #fef2f2;
@@ -46,7 +47,8 @@
   --color-brand: #e8969c;
   --color-accent: #fbbf5c;
   --color-danger: #f87171;
-  /* Dark mode lightens both fills, so their labels go dark. */
+  /* Dark mode lightens all three fills, so their labels go dark. */
+  --color-on-brand: #0b1220;
   --color-on-accent: #0b1220;
   --color-on-danger: #0b1220;
   --color-danger-hover-bg: #2a1416;
@@ -70,6 +72,7 @@
   --color-prim-active: var(--color-prim-active);
   --color-on-prim: var(--color-on-prim);
   --color-brand: var(--color-brand);
+  --color-on-brand: var(--color-on-brand);
   --color-accent: var(--color-accent);
   --color-on-accent: var(--color-on-accent);
   --color-danger: var(--color-danger);
