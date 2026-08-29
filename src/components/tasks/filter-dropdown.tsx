@@ -55,7 +55,8 @@ export function FilterDropdown<T extends string>({
           panelRef={panelRef}
           style={style}
           width={PANEL_WIDTH}
-          className="z-50 max-h-80 overflow-y-auto rounded-2xl border-[1.5px] border-border bg-card p-2 shadow-[0_4px_16px_rgba(2,6,23,0.16)]"
+          maxHeight={320}
+          className="z-50 rounded-2xl border-[1.5px] border-border bg-card p-2 shadow-[0_4px_16px_rgba(2,6,23,0.16)]"
         >
           {options.map((option) => {
             const isSelected = selected.includes(option.value);

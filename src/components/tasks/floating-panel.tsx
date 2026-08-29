@@ -55,12 +55,15 @@ export function FloatingPanel({
   panelRef,
   style,
   width,
+  maxHeight,
   className,
   children,
 }: {
   panelRef: RefObject<HTMLDivElement | null>;
   style: { top: number; left: number } | null;
   width: number;
+  /** Optional cap on top of the viewport clamp, for short option lists. */
+  maxHeight?: number;
   className?: string;
   children: ReactNode;
 }) {
@@ -69,11 +72,30 @@ export function FloatingPanel({
   const margin = 16;
   const left = Math.max(margin, Math.min(style.left, window.innerWidth - width - margin));
 
+  /*
+    A fixed panel does not move when the page scrolls, so anything hanging
+    past the bottom edge of the viewport is unreachable — there is no
+    gesture that can bring it into view. Cap the panel to the room actually
+    below its top edge and let it scroll inside itself instead. The floor
+    keeps a panel opened near the bottom of the screen usable rather than
+    collapsing it to nothing; `contain` stops that inner scroll from
+    chaining out to the task list behind it once it hits an end.
+  */
+  const room = Math.max(160, window.innerHeight - style.top - margin);
+
   return createPortal(
     <div
       ref={panelRef}
       role="listbox"
-      style={{ position: "fixed", top: style.top, left, width }}
+      style={{
+        position: "fixed",
+        top: style.top,
+        left,
+        width,
+        maxHeight: Math.min(room, maxHeight ?? Infinity),
+        overflowY: "auto",
+        overscrollBehavior: "contain",
+      }}
       className={className}
     >
       {children}
