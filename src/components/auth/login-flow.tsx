@@ -11,11 +11,16 @@ import type { RosterEntry } from "@/lib/supabase/database.types";
 
 type Step = { name: "pick" } | { name: "password"; member: RosterEntry };
 
-export function LoginFlow({ roster }: { roster: RosterEntry[] }) {
+/** Where to land when nothing else was asked for. */
+const DEFAULT_LANDING = "/dashboard";
+
+export function LoginFlow({ roster, next }: { roster: RosterEntry[]; next?: string | null }) {
   const [step, setStep] = useState<Step>({ name: "pick" });
 
   if (step.name === "password") {
-    return <PasswordStep member={step.member} onBack={() => setStep({ name: "pick" })} />;
+    return (
+      <PasswordStep member={step.member} next={next} onBack={() => setStep({ name: "pick" })} />
+    );
   }
 
   return <PickStep roster={roster} onPick={(member) => setStep({ name: "password", member })} />;
@@ -55,7 +60,15 @@ function PickStep({ roster, onPick }: { roster: RosterEntry[]; onPick: (member: 
   );
 }
 
-function PasswordStep({ member, onBack }: { member: RosterEntry; onBack: () => void }) {
+function PasswordStep({
+  member,
+  next,
+  onBack,
+}: {
+  member: RosterEntry;
+  next?: string | null;
+  onBack: () => void;
+}) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -72,7 +85,10 @@ function PasswordStep({ member, onBack }: { member: RosterEntry; onBack: () => v
         setError(result.error);
         return;
       }
-      router.replace("/tasks");
+      // Back to whatever they were trying to reach, or the Dashboard. The
+      // value was already vetted server-side; this never builds a URL from
+      // anything the browser handed us directly.
+      router.replace(next ?? DEFAULT_LANDING);
       router.refresh();
     });
   }

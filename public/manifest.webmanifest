@@ -2,7 +2,7 @@
   "name": "Kap Klimber Tasks",
   "short_name": "Tasks",
   "description": "Shared task list for the Kap Klimber team.",
-  "start_url": "/tasks",
+  "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#0f172a",

@@ -210,3 +210,21 @@ export function formatCalendarDate(dateStr: string): string {
     new Date(`${dateStr}T00:00:00Z`)
   );
 }
+
+/**
+ * A `?next=` value that is safe to navigate to after sign-in.
+ *
+ * The value arrives in the URL, so anyone can put anything there. Without
+ * this check a crafted link could send a teammate who has just typed their
+ * password straight to another site — with the app's name still in their
+ * head. Only same-site absolute paths are allowed through: it must start
+ * with a single slash, which rules out "https://elsewhere" as well as the
+ * protocol-relative "//elsewhere" and the "/\\elsewhere" that some
+ * browsers normalise into it.
+ */
+export function safeInternalPath(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (!value.startsWith("/")) return null;
+  if (value.startsWith("//") || value.startsWith("/\\")) return null;
+  return value;
+}
