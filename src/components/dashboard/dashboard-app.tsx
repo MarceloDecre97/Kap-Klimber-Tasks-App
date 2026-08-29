@@ -112,7 +112,7 @@ export function DashboardApp({
   const openTotal = stats.openTasks.length;
 
   return (
-    <div className="flex h-dvh flex-col bg-bg">
+    <div className="flex h-full flex-col bg-bg">
       <AppHeader current="/dashboard" />
 
       <div className="flex-1 overflow-y-auto px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+32px)]">

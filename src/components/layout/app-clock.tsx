@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { APP_TIMEZONE_LABEL, formatClockTime, formatLongDate, getGmtOffsetLabel } from "@/lib/utils";
+import { APP_TIMEZONE_LABEL, cn, formatClockTime, formatLongDate, getGmtOffsetLabel } from "@/lib/utils";
 
 /**
  * Non-interactive readout of the app's fixed working timezone. Not a button
@@ -12,8 +12,12 @@ import { APP_TIMEZONE_LABEL, formatClockTime, formatLongDate, getGmtOffsetLabel 
  * server's clock and the viewer's would disagree and React would flag a
  * hydration mismatch. The panel reserves its width up front so nothing in
  * the header shifts when the time appears.
+ *
+ * Below `lg` it drops the long date and shrinks to roughly half its width:
+ * the zone is the part that matters when half the team isn't in it, and on a
+ * phone this pill has to share a row with the view switcher.
  */
-export function AppClock() {
+export function AppClock({ className }: { className?: string }) {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -30,13 +34,22 @@ export function AppClock() {
   const zoneLine = `${APP_TIMEZONE_LABEL}${now ? ` (${getGmtOffsetLabel(now)})` : ""}`;
 
   return (
-    <div className="flex h-14 min-w-[214px] shrink-0 flex-col justify-center gap-0.5 rounded-2xl border-[1.5px] border-border bg-muted px-4 whitespace-nowrap">
-      <span className="text-[13px] leading-4 font-bold text-fg tabular-nums">
+    <div
+      className={cn(
+        "flex shrink-0 flex-col justify-center whitespace-nowrap border-[1.5px] border-border bg-muted",
+        "h-12 min-w-[114px] rounded-xl px-2.5",
+        "lg:h-14 lg:min-w-[214px] lg:gap-0.5 lg:rounded-2xl lg:px-4",
+        className
+      )}
+    >
+      <span className="hidden text-[13px] leading-4 font-bold text-fg tabular-nums lg:block">
         {now ? formatLongDate(now) : " "}
       </span>
-      <span className="flex items-baseline gap-1.5 text-[13px] leading-4">
-        <span className="italic text-sub">{zoneLine}</span>
-        <span className="font-bold text-fg tabular-nums">{now ? formatClockTime(now) : ""}</span>
+      <span className="flex flex-col lg:flex-row lg:items-baseline lg:gap-1.5">
+        <span className="text-[10px] leading-[13px] italic text-sub lg:text-[13px] lg:leading-4">{zoneLine}</span>
+        <span className="text-[12px] leading-[15px] font-bold text-fg tabular-nums lg:text-[13px] lg:leading-4">
+          {now ? formatClockTime(now) : ""}
+        </span>
       </span>
     </div>
   );

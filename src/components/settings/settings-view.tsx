@@ -18,7 +18,7 @@ export function SettingsView({
   const [isPending, startTransition] = useTransition();
 
   return (
-    <div className="flex h-dvh flex-col bg-bg">
+    <div className="flex h-full flex-col bg-bg">
       <header className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-border bg-card px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-3">
         <Link
           href="/tasks"

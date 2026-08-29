@@ -18,7 +18,7 @@ export function ViewNav({ current, className }: { current: "/tasks" | "/dashboar
   return (
     <nav
       aria-label="Views"
-      className={cn("flex shrink-0 gap-1 rounded-full bg-muted p-1", className)}
+      className={cn("flex gap-1 rounded-full bg-muted p-1", className)}
     >
       {VIEWS.map((view) => {
         const isCurrent = view.href === current;
@@ -28,8 +28,8 @@ export function ViewNav({ current, className }: { current: "/tasks" | "/dashboar
             href={view.href}
             aria-current={isCurrent ? "page" : undefined}
             className={cn(
-              "flex h-12 flex-1 items-center justify-center whitespace-nowrap rounded-full px-5",
-              "text-[17px] leading-6 font-bold transition-colors duration-150",
+              "flex h-12 flex-1 items-center justify-center whitespace-nowrap rounded-full px-3 lg:px-5",
+              "text-[15px] leading-6 font-bold transition-colors duration-150 lg:text-[17px]",
               isCurrent ? "bg-prim text-on-prim" : "text-muted-fg hover:text-fg"
             )}
           >

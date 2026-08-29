@@ -121,7 +121,7 @@ export function TaskForm({
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-bg">
+    <div className="flex h-full flex-col bg-bg">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b-[1.5px] border-border bg-card px-5 pt-[calc(env(safe-area-inset-top)+8px)] pb-4">
         <button
           type="button"

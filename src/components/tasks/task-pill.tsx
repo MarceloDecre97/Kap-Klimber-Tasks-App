@@ -31,6 +31,7 @@ export function TaskPill({
   onSetStatus,
   onRequestDelete,
   onToggleReminder,
+  lastActivityAt,
 }: {
   task: TaskWithRelations;
   meId: string;
@@ -40,6 +41,13 @@ export function TaskPill({
   onRequestDelete: () => void;
   /** Omitted where the reminder should render read-only. */
   onToggleReminder?: () => void;
+  /**
+   * Last activity on the task. Rendered in the card's own date line below
+   * `lg`, where the Tasklist's left rail is hidden; from `lg` up the rail
+   * shows it instead, so the card hides it rather than printing the same
+   * date twice.
+   */
+  lastActivityAt?: string;
 }) {
   const priority = PRIORITIES[task.priority];
   const status = STATUSES[task.status];
@@ -104,6 +112,7 @@ export function TaskPill({
         <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] leading-[14px] font-bold text-sub tabular-nums">
           <span>Created On {formatDateGroup(task.created_at)}</span>
           {task.due_date && <span className="text-accent">Due For {formatCalendarDate(task.due_date)}</span>}
+          {lastActivityAt && <span className="lg:hidden">Updated {formatDateGroup(lastActivityAt)}</span>}
         </span>
       </button>
 
@@ -157,31 +166,50 @@ export function TaskPill({
 
       {expanded && (
         <div className="flex flex-col gap-4 border-t-[1.5px] border-border pt-3">
-          <dl className="grid grid-cols-[104px_1fr] gap-x-3 gap-y-2 items-baseline">
-            <dt className="text-[16px] leading-7 font-bold text-sub">Assigned to</dt>
-            <dd className="flex flex-wrap items-center gap-2">
-              {task.assignees.map((person) => (
-                <span key={person.id} className="inline-flex items-center gap-1.5">
-                  <Avatar initials={person.initials} color={person.color} size={24} />
-                  <span className="text-[18px] leading-7 text-fg">{person.display_name}</span>
-                </span>
-              ))}
-            </dd>
-            <dt className="text-[16px] leading-7 font-bold text-sub">Category</dt>
-            <dd className="text-[18px] leading-7 text-fg">{task.category?.label ?? "None"}</dd>
+          {/*
+            Below `sm` the label sits above its value rather than beside it:
+            a 104px label column leaves roughly 150px for the value inside a
+            phone-width card, which is not enough for a full name or a
+            timestamp. Each pair is wrapped so the stacked spacing can be
+            tighter than the spacing between pairs; `sm:contents` dissolves
+            the wrappers again so the two-column grid sees dt/dd directly.
+          */}
+          <dl className="flex flex-col gap-3 sm:grid sm:grid-cols-[104px_minmax(0,1fr)] sm:gap-x-3 sm:gap-y-2 sm:items-baseline">
+            <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
+              <dt className="text-[16px] leading-7 font-bold text-sub">Assigned to</dt>
+              <dd className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                {task.assignees.map((person) => (
+                  <span key={person.id} className="inline-flex min-w-0 items-center gap-1.5">
+                    <Avatar initials={person.initials} color={person.color} size={24} />
+                    <span className="min-w-0 break-words text-[18px] leading-7 text-fg">{person.display_name}</span>
+                  </span>
+                ))}
+              </dd>
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
+              <dt className="text-[16px] leading-7 font-bold text-sub">Category</dt>
+              <dd className="min-w-0 break-words text-[18px] leading-7 text-fg">{task.category?.label ?? "None"}</dd>
+            </div>
             {task.due_date && (
-              <>
+              <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
                 <dt className="text-[16px] leading-7 font-bold text-sub">Due date</dt>
-                <dd className="text-[18px] leading-7 text-fg">{formatCalendarDate(task.due_date)}</dd>
-              </>
+                <dd className="min-w-0 break-words text-[18px] leading-7 text-fg">
+                  {formatCalendarDate(task.due_date)}
+                </dd>
+              </div>
             )}
             {task.reminder_at && (
-              <>
+              <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
                 <dt className="text-[16px] leading-7 font-bold text-sub">Reminder</dt>
-                <dd className={cn("text-[18px] leading-7", dismissed ? "text-sub line-through" : "text-fg")}>
+                <dd
+                  className={cn(
+                    "min-w-0 break-words text-[18px] leading-7",
+                    dismissed ? "text-sub line-through" : "text-fg"
+                  )}
+                >
                   {formatTimestamp(task.reminder_at)}
                 </dd>
-              </>
+              </div>
             )}
           </dl>
 

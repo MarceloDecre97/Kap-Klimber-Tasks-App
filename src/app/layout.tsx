@@ -48,7 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${atkinson.variable} ${baiJamjuree.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-canvas text-fg">
+      <body className="h-full flex flex-col overflow-hidden bg-canvas text-fg">
         <ThemeProvider>
           <ToastProvider>{children}</ToastProvider>
         </ThemeProvider>

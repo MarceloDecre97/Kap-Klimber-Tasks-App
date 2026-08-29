@@ -132,57 +132,70 @@ export function TasksApp({
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-bg">
+    <div className="flex h-full flex-col bg-bg">
       <AppHeader current="/tasks">
         {/*
-          One wrapping row rather than a horizontal scroller: six controls
-          including a text field can't scroll usefully on a phone, and
-          wrapping also keeps this container free of `overflow-x-auto`,
-          which is what used to clip the dropdown panels.
+          Six controls wrapped into four stacked rows on a phone, which ate
+          most of the screen before a single task appeared. They are now two
+          rows below `lg`: search plus New Task on top, where the thumb is,
+          and the four filters on a row that scrolls sideways. The scroller
+          is safe here because the dropdown panels render through a portal
+          (see `floating-panel.tsx`) and so are not clipped by it. From `lg`
+          up the two groups sit side by side and it reads as one row again.
         */}
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterDropdown label="Priority" options={priorityOptions} selected={filters.priority} onChange={(priority) => setFilters({ ...filters, priority })} />
-          <FilterDropdown
-            label="Assigned to"
-            icon={<Users aria-hidden className="size-4" />}
-            options={assigneeOptions}
-            selected={filters.assigneeIds}
-            onChange={(assigneeIds) => setFilters({ ...filters, assigneeIds })}
-          />
-          <FiltersPanel filters={filters} onChange={setFilters} categories={categories} />
-          <SortMenu value={sort} onChange={setSort} />
-
-          <div className="relative min-w-[220px] flex-1">
-            <Search aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-sub" />
-            <input
-              type="text"
-              value={filters.query}
-              onChange={(event) => setFilters({ ...filters, query: event.target.value })}
-              placeholder="Search tasks, notes, people…"
-              aria-label="Search tasks"
-              className="h-12 w-full rounded-full border-[1.5px] border-border bg-card pl-10 pr-10 text-[16px] text-fg placeholder:text-sub focus-visible:border-prim focus-visible:outline-[3px] focus-visible:outline-offset-2"
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="order-2 -mx-5 -my-1 flex items-center gap-2 overflow-x-auto px-5 py-1 lg:order-1 lg:mx-0 lg:my-0 lg:overflow-x-visible lg:px-0 lg:py-0">
+            <FilterDropdown label="Priority" options={priorityOptions} selected={filters.priority} onChange={(priority) => setFilters({ ...filters, priority })} />
+            <FilterDropdown
+              label="Assigned to"
+              icon={<Users aria-hidden className="size-4" />}
+              options={assigneeOptions}
+              selected={filters.assigneeIds}
+              onChange={(assigneeIds) => setFilters({ ...filters, assigneeIds })}
             />
-            {filters.query && (
-              <button
-                type="button"
-                onClick={() => setFilters({ ...filters, query: "" })}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-sub cursor-pointer hover:bg-muted"
-              >
-                <X aria-hidden className="size-4" />
-              </button>
-            )}
+            <FiltersPanel filters={filters} onChange={setFilters} categories={categories} />
+            <SortMenu value={sort} onChange={setSort} />
           </div>
 
-          <Link href="/tasks/new" className="shrink-0">
-            <Button
-              size="md"
-              className="h-12 justify-center px-4 bg-white text-black border border-transparent hover:bg-brand hover:text-white active:bg-brand active:text-white"
-            >
-              <Plus aria-hidden className="size-4" />
-              New Task
-            </Button>
-          </Link>
+          <div className="order-1 flex min-w-0 items-center gap-2 lg:order-2 lg:flex-1">
+            <div className="relative min-w-0 flex-1">
+              <Search aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-sub" />
+              <input
+                type="text"
+                value={filters.query}
+                onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+                placeholder="Search tasks, notes, people…"
+                aria-label="Search tasks"
+                className="h-12 w-full rounded-full border-[1.5px] border-border bg-card pl-10 pr-10 text-[16px] text-fg placeholder:text-sub focus-visible:border-prim focus-visible:outline-[3px] focus-visible:outline-offset-2"
+              />
+              {filters.query && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...filters, query: "" })}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-sub cursor-pointer hover:bg-muted"
+                >
+                  <X aria-hidden className="size-4" />
+                </button>
+              )}
+            </div>
+
+            {/*
+              Icon-only until `sm`: on a phone the label costs more width
+              than the search field can spare, and the `+` is unambiguous
+              beside a search box. `aria-label` carries the name either way.
+            */}
+            <Link href="/tasks/new" className="shrink-0">
+              <Button
+                size="md"
+                aria-label="New task"
+                className="h-12 w-12 justify-center px-0 bg-white text-black border-[1.5px] border-border hover:bg-brand hover:text-white hover:border-brand active:bg-brand active:text-white active:border-brand sm:w-auto sm:px-4"
+              >
+                <Plus aria-hidden className="size-4" />
+                <span className="hidden sm:inline">New Task</span>
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {(activeCount > 0 || filters.query || sort) && (
@@ -211,9 +224,17 @@ export function TasksApp({
           <div className="flex flex-col gap-6">
             {groups.map((group) => (
               <div key={group.key} className="flex flex-col gap-3">
+                {/*
+                  The rail costs 104px of a 390px phone — 27% of the screen —
+                  to show a heading and a date the card can carry itself. Below
+                  `lg` the heading becomes a plain row above the list and the
+                  date moves into the card; from `lg` up, where the width is
+                  free, the rail comes back exactly as it was.
+                */}
+                <div className="text-[15px] leading-[20px] font-bold text-sub lg:hidden">{group.label}</div>
                 {group.tasks.map((task, taskIndex) => (
-                  <div key={task.id} className="grid grid-cols-[92px_1fr] gap-3">
-                    <div className="flex flex-col items-end gap-1 pt-0.5">
+                  <div key={task.id} className="lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-3">
+                    <div className="hidden flex-col items-end gap-1 pt-0.5 lg:flex">
                       {taskIndex === 0 && (
                         <div className="sticky top-0 text-[15px] leading-[20px] font-bold text-sub text-right whitespace-nowrap">
                           {group.label}
@@ -234,6 +255,7 @@ export function TasksApp({
                         onSetStatus={(status) => handleSetStatus(task.id, status)}
                         onRequestDelete={() => setDeleteTarget(task)}
                         onToggleReminder={() => handleToggleReminder(task.id)}
+                        lastActivityAt={getLastActivityAt(task)}
                       />
                     </div>
                   </div>
