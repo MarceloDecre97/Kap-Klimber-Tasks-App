@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
-import { noteInputSchema, statusEnum, taskInputSchema } from "@/lib/validation";
+import { noteEditSchema, noteInputSchema, statusEnum, taskInputSchema } from "@/lib/validation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -247,7 +247,12 @@ export async function addNote(input: unknown): Promise<ActionResult<{ noteId: st
     const { supabase, member } = await getCurrentMember();
     const { data: note, error } = await supabase
       .from("task_notes")
-      .insert({ task_id: parsed.data.taskId, member_id: member.id, body: parsed.data.body })
+      .insert({
+        task_id: parsed.data.taskId,
+        member_id: member.id,
+        body: parsed.data.body,
+        parent_note_id: parsed.data.parentNoteId ?? null,
+      })
       .select("id")
       .single();
     if (error) throw error;
@@ -260,14 +265,50 @@ export async function addNote(input: unknown): Promise<ActionResult<{ noteId: st
   }
 }
 
+/**
+ * Edits the body of a note you wrote.
+ *
+ * Authorship is enforced twice over, and neither check is here: the RLS
+ * policy limits the update to rows whose member_id is the caller's, and a
+ * trigger pins every column except the body so an edit cannot reassign a
+ * note or move it to another task. This action only has to send the text —
+ * which is why it does not read the row back first to compare.
+ */
+export async function editNote(input: unknown): Promise<ActionResult<{ noteId: string }>> {
+  const parsed = noteEditSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That note isn't valid." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { data, error } = await supabase
+      .from("task_notes")
+      .update({ body: parsed.data.body })
+      .eq("id", parsed.data.noteId)
+      .select("id");
+    if (error) throw error;
+    // RLS returns zero rows rather than an error when the note is not yours.
+    if (!data || data.length === 0) {
+      return { ok: false, error: "You can only edit notes you wrote." };
+    }
+
+    revalidateTaskViews();
+    return { ok: true, noteId: parsed.data.noteId };
+  } catch (error) {
+    console.error("editNote failed", error);
+    return { ok: false, error: "Couldn't save that edit. Try again." };
+  }
+}
+
 const noteIdSchema = z.string().uuid();
 
 /**
- * Toggles the current member's own acknowledgment ("seen/recognized") on a
- * note. Purely a reference signal between teammates — never touches
- * task.status, so it can't affect the done/total counters.
+ * Toggles the current member's like on a note.
+ *
+ * A like is now only a reaction. What counts as *read* is tracked separately
+ * and written automatically by `markTaskRead`, so nobody has to press
+ * anything for the Dashboard's unread count to be right.
  */
-export async function toggleNoteAck(noteIdInput: string): Promise<ActionResult<{ acked: boolean }>> {
+export async function toggleNoteLike(noteIdInput: string): Promise<ActionResult<{ liked: boolean }>> {
   const noteId = noteIdSchema.safeParse(noteIdInput);
   if (!noteId.success) return { ok: false, error: "Invalid note." };
 
@@ -275,7 +316,7 @@ export async function toggleNoteAck(noteIdInput: string): Promise<ActionResult<{
     const { supabase, member } = await getCurrentMember();
 
     const { data: existing, error: lookupError } = await supabase
-      .from("task_note_acks")
+      .from("task_note_likes")
       .select("note_id")
       .eq("note_id", noteId.data)
       .eq("member_id", member.id)
@@ -284,24 +325,50 @@ export async function toggleNoteAck(noteIdInput: string): Promise<ActionResult<{
 
     if (existing) {
       const { error } = await supabase
-        .from("task_note_acks")
+        .from("task_note_likes")
         .delete()
         .eq("note_id", noteId.data)
         .eq("member_id", member.id);
       if (error) throw error;
       revalidateTaskViews();
-      return { ok: true, acked: false };
+      return { ok: true, liked: false };
     }
 
     const { error } = await supabase
-      .from("task_note_acks")
+      .from("task_note_likes")
       .insert({ note_id: noteId.data, member_id: member.id });
     if (error) throw error;
 
     revalidateTaskViews();
-    return { ok: true, acked: true };
+    return { ok: true, liked: true };
   } catch (error) {
-    console.error("toggleNoteAck failed", error);
+    console.error("toggleNoteLike failed", error);
     return { ok: false, error: "Couldn't update that. Try again." };
+  }
+}
+
+/**
+ * Records that the current member has just looked at a task.
+ *
+ * Called when a task card is expanded. Deliberately silent: it returns
+ * nothing the UI waits on and never surfaces an error, because failing to
+ * record a read must not interrupt someone reading. The views are not
+ * revalidated either — re-rendering the list the instant you open a card
+ * would collapse the very thing you opened.
+ */
+export async function markTaskRead(taskIdInput: string): Promise<void> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  if (!taskId.success) return;
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+    await supabase
+      .from("task_reads")
+      .upsert(
+        { task_id: taskId.data, member_id: member.id, last_read_at: new Date().toISOString() },
+        { onConflict: "task_id,member_id" }
+      );
+  } catch (error) {
+    console.error("markTaskRead failed", error);
   }
 }

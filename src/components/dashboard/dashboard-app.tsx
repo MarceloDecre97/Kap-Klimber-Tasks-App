@@ -11,7 +11,13 @@ import { useToast } from "@/components/ui/toast";
 import { AppHeader } from "@/components/layout/app-header";
 import { BigStat, Card, EmptyLine, FlowChart, LegendRow, MeterRow, StackedBar } from "@/components/dashboard/cards";
 import { TaskPill } from "@/components/tasks/task-pill";
-import { restoreTask, setTaskStatus, softDeleteTask, toggleReminderDismissal } from "@/app/tasks/actions";
+import {
+  markTaskRead,
+  restoreTask,
+  setTaskStatus,
+  softDeleteTask,
+  toggleReminderDismissal,
+} from "@/app/tasks/actions";
 import {
   STALE_AFTER_DAYS,
   computeDashboardStats,
@@ -60,6 +66,18 @@ export function DashboardApp({
 
   function isSectionOpen(bucket: BucketSpec) {
     return openSections[bucket.key] ?? bucket.defaultOpen;
+  }
+
+  /*
+    Opening a task is what marks it read — nobody has to press anything, which
+    is the only reason the Dashboard's unread count can be trusted. Fired and
+    forgotten: it deliberately does not revalidate, because re-rendering the
+    list the moment you open a card would collapse the card you just opened.
+  */
+  function handleToggleExpand(taskId: string) {
+    const opening = expandedId !== taskId;
+    setExpandedId(opening ? taskId : null);
+    if (opening) void markTaskRead(taskId);
   }
 
   function handleSetStatus(taskId: string, status: TaskStatus) {
@@ -129,8 +147,8 @@ export function DashboardApp({
                 >
                   <MessageSquare aria-hidden className="size-5 shrink-0 text-brand" />
                   <span className="font-bold tabular-nums text-pretty">
-                    {stats.unseenNoteCount} {stats.unseenNoteCount === 1 ? "note" : "notes"} you haven&apos;t marked
-                    seen
+                    {stats.unseenNoteCount} new {stats.unseenNoteCount === 1 ? "note" : "notes"} since you last
+                    looked
                   </span>
                 </Link>
               )}
@@ -266,12 +284,11 @@ export function DashboardApp({
                             task={entry.task}
                             meId={me.id}
                             expanded={expandedId === entry.task.id}
-                            onToggleExpand={() =>
-                              setExpandedId((id) => (id === entry.task.id ? null : entry.task.id))
-                            }
+                            onToggleExpand={() => handleToggleExpand(entry.task.id)}
                             onSetStatus={(status) => handleSetStatus(entry.task.id, status)}
                             onRequestDelete={() => setDeleteTarget(entry.task)}
                             onToggleReminder={() => handleToggleReminder(entry.task.id)}
+                            roster={roster}
                           />
                           {/*
                             Reminder only, and the whole line takes one

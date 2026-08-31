@@ -33,6 +33,13 @@ export type TaskInput = z.infer<typeof taskInputSchema>;
 export const noteInputSchema = z.object({
   taskId: z.string().uuid(),
   body: z.string().trim().min(1, "Say what happened.").max(2000),
+  /** Present when this note is a reply to another. */
+  parentNoteId: z.string().uuid().optional(),
+});
+
+export const noteEditSchema = z.object({
+  noteId: z.string().uuid(),
+  body: z.string().trim().min(1, "A note can't be emptied — say what happened.").max(2000),
 });
 
 export const taskFiltersSchema = z.object({

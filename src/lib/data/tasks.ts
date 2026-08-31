@@ -14,8 +14,12 @@ export interface TaskNote {
   id: string;
   body: string;
   created_at: string;
+  /** Null unless the author has changed it since posting. */
+  edited_at: string | null;
   member: MemberSummary | null;
-  ackedByMemberIds: string[];
+  likedByMemberIds: string[];
+  /** Replies to this note, oldest first. Only ever one level deep. */
+  replies: TaskNote[];
 }
 
 export interface TaskWithRelations {
@@ -34,21 +38,29 @@ export interface TaskWithRelations {
   category: { id: string; label: string } | null;
   assignees: MemberSummary[];
   notes: TaskNote[];
+  /**
+   * When the signed-in member last opened this task, or null if never. RLS on
+   * `task_reads` only returns the caller's own row, so this is always theirs.
+   */
+  last_read_at: string | null;
 }
 
 const TASK_SELECT = `
   id, title, description, priority, status, reminder_at, reminder_dismissed_at, due_date, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
+  reads:task_reads(last_read_at),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
-  notes:task_notes(id, body, created_at, member:members!task_notes_member_id_fkey(id, display_name, initials, color), acks:task_note_acks(member_id))
+  notes:task_notes(id, body, created_at, edited_at, parent_note_id, member:members!task_notes_member_id_fkey(id, display_name, initials, color), likes:task_note_likes(member_id))
 `;
 
 type RawTaskNote = {
   id: string;
   body: string;
   created_at: string;
+  edited_at: string | null;
+  parent_note_id: string | null;
   member: MemberSummary | null;
-  acks: { member_id: string }[] | null;
+  likes: { member_id: string }[] | null;
 };
 
 type RawTask = {
@@ -67,15 +79,50 @@ type RawTask = {
   category: { id: string; label: string } | null;
   assignees: { member: MemberSummary | null }[] | null;
   notes: RawTaskNote[] | null;
+  reads: { last_read_at: string }[] | null;
 };
+
+/**
+ * Postgres returns every note on the task in one flat list, replies included.
+ * Nest them here rather than in the query: one round trip, and the component
+ * receives the shape it renders.
+ *
+ * A reply whose parent is missing is promoted to top level rather than
+ * dropped. That should not happen — the parent cascades to its replies — but
+ * silently losing someone's writing is the worse failure of the two.
+ */
+function nestNotes(rows: RawTaskNote[]): TaskNote[] {
+  const byCreated = (a: TaskNote, b: TaskNote) => a.created_at.localeCompare(b.created_at);
+  const toNote = (row: RawTaskNote): TaskNote => ({
+    id: row.id,
+    body: row.body,
+    created_at: row.created_at,
+    edited_at: row.edited_at,
+    member: row.member,
+    likedByMemberIds: (row.likes ?? []).map((l) => l.member_id),
+    replies: [],
+  });
+
+  const notes = new Map(rows.map((row) => [row.id, toNote(row)]));
+  const top: TaskNote[] = [];
+
+  for (const row of rows) {
+    const note = notes.get(row.id)!;
+    const parent = row.parent_note_id ? notes.get(row.parent_note_id) : undefined;
+    if (parent) parent.replies.push(note);
+    else top.push(note);
+  }
+
+  for (const note of notes.values()) note.replies.sort(byCreated);
+  return top.sort(byCreated);
+}
 
 function mapTask(row: RawTask): TaskWithRelations {
   return {
     ...row,
     assignees: (row.assignees ?? []).map((a) => a.member).filter((m): m is MemberSummary => !!m),
-    notes: (row.notes ?? [])
-      .map((note) => ({ ...note, ackedByMemberIds: (note.acks ?? []).map((a) => a.member_id) }))
-      .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    notes: nestNotes(row.notes ?? []),
+    last_read_at: row.reads?.[0]?.last_read_at ?? null,
   };
 }
 

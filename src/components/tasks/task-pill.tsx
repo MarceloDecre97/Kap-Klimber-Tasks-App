@@ -20,8 +20,8 @@ import {
   formatTimestamp,
   zonedDateKey,
 } from "@/lib/utils";
-import { addNote, toggleNoteAck } from "@/app/tasks/actions";
-import type { TaskNote, TaskWithRelations } from "@/lib/data/tasks";
+import { addNote, editNote, toggleNoteLike } from "@/app/tasks/actions";
+import type { MemberSummary, TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
 /**
@@ -44,6 +44,7 @@ export function TaskPill({
   onSetStatus,
   onRequestDelete,
   onToggleReminder,
+  roster,
   lastActivityAt,
 }: {
   task: TaskWithRelations;
@@ -54,6 +55,8 @@ export function TaskPill({
   onRequestDelete: () => void;
   /** Omitted where the reminder should render read-only. */
   onToggleReminder?: () => void;
+  /** Needed to name and picture whoever liked a note. */
+  roster: MemberSummary[];
   /**
    * Last activity on the task. Rendered in the card's own date line below
    * `lg`, where the Tasklist's left rail is hidden; from `lg` up the rail
@@ -286,7 +289,14 @@ export function TaskPill({
             <div className="text-section-heading">Notes</div>
             {task.notes.length === 0 && <p className="text-[18px] leading-7 text-sub">No notes yet.</p>}
             {task.notes.map((note) => (
-              <NoteRow key={note.id} note={note} meId={meId} />
+              <NoteRow
+                key={note.id}
+                note={note}
+                taskId={task.id}
+                meId={meId}
+                roster={roster}
+                lastReadAt={task.last_read_at}
+              />
             ))}
             {/*
               A text box, not a single line. Enter now does what Enter should
@@ -364,34 +374,248 @@ export function TaskPill({
   );
 }
 
-function NoteRow({ note, meId }: { note: TaskNote; meId: string }) {
+/**
+ * One note, plus its replies.
+ *
+ * Three affordances, all author- or reader-scoped: the author can edit their
+ * own text, anyone can reply, and anyone can like. A note written by someone
+ * else since you last opened the task is marked unread — automatically, with
+ * nothing to press.
+ */
+function NoteRow({
+  note,
+  taskId,
+  meId,
+  roster,
+  lastReadAt,
+  isReply = false,
+}: {
+  note: TaskNote;
+  taskId: string;
+  meId: string;
+  roster: MemberSummary[];
+  lastReadAt: string | null;
+  isReply?: boolean;
+}) {
   const [isPending, startTransition] = useTransition();
-  const iAcked = note.ackedByMemberIds.includes(meId);
-  const count = note.ackedByMemberIds.length;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note.body);
+  const [replying, setReplying] = useState(false);
+  const [replyBody, setReplyBody] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const iLiked = note.likedByMemberIds.includes(meId);
+  const mine = note.member?.id === meId;
+  const unread = !mine && (lastReadAt === null || note.created_at > lastReadAt);
+
+  const likers = note.likedByMemberIds
+    .map((id) => roster.find((m) => m.id === id))
+    .filter((m): m is MemberSummary => !!m);
+
+  function saveEdit() {
+    const body = draft.trim();
+    if (!body || body === note.body) {
+      setEditing(false);
+      setDraft(note.body);
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await editNote({ noteId: note.id, body });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setEditing(false);
+    });
+  }
+
+  function submitReply() {
+    const body = replyBody.trim();
+    if (!body) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await addNote({ taskId, body, parentNoteId: note.id });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setReplyBody("");
+      setReplying(false);
+    });
+  }
 
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-border bg-bg p-4">
-      <div className="text-timestamp text-sub">
-        {note.member?.display_name ?? "Someone"} · {formatTimestamp(note.created_at)}
-      </div>
-      <NoteBody body={note.body} className="text-[18px] leading-7 text-fg whitespace-pre-wrap break-words" />
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={() =>
-          startTransition(async () => {
-            await toggleNoteAck(note.id);
-          })
-        }
-        aria-pressed={iAcked}
+    <div className={cn("flex flex-col gap-2", isReply && "ml-4 border-l-[1.5px] border-border pl-3")}>
+      <div
         className={cn(
-          "inline-flex w-fit items-center gap-1.5 self-start rounded-full border-[1.5px] px-3 py-1.5 text-[15px] leading-5 font-bold cursor-pointer transition-transform duration-150 active:scale-[0.97] disabled:opacity-60",
-          iAcked ? "border-prim bg-prim text-on-prim" : "border-border bg-card text-sub"
+          "flex flex-col gap-2 rounded-2xl border-[1.5px] p-4",
+          // The unread marker is a border, not a badge: it reads at a glance
+          // down a column of notes without adding another thing to look at.
+          unread ? "border-brand bg-card" : "border-border bg-bg"
         )}
       >
-        <ThumbsUp aria-hidden className="size-3.5" fill={iAcked ? "currentColor" : "none"} />
-        {count > 0 ? count : "Seen"}
-      </button>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-timestamp text-sub">
+          <span>{note.member?.display_name ?? "Someone"}</span>
+          <span aria-hidden>·</span>
+          <span>{formatTimestamp(note.created_at)}</span>
+          {note.edited_at && (
+            <span title={`Edited ${formatTimestamp(note.edited_at)}`} className="italic">
+              · edited
+            </span>
+          )}
+          {unread && <span className="font-bold text-brand">· new</span>}
+        </div>
+
+        {editing ? (
+          <div className="flex flex-col gap-2">
+            <Textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              aria-label="Edit note"
+              rows={3}
+              maxLength={NOTE_MAX}
+              className="min-h-[96px] resize-y"
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button size="md" className="w-auto px-4" disabled={isPending || !draft.trim()} onClick={saveEdit}>
+                Save
+              </Button>
+              <Button
+                variant="secondary"
+                size="md"
+                className="w-auto px-4"
+                disabled={isPending}
+                onClick={() => {
+                  setEditing(false);
+                  setDraft(note.body);
+                  setError(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <NoteBody body={note.body} className="text-[18px] leading-7 text-fg whitespace-pre-wrap break-words" />
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(async () => {
+                await toggleNoteLike(note.id);
+              })
+            }
+            aria-pressed={iLiked}
+            title={likers.length > 0 ? `Liked by ${likers.map((m) => m.display_name).join(", ")}` : "Like this note"}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border-[1.5px] px-3 py-1.5",
+              "text-[15px] leading-5 font-bold cursor-pointer transition-transform duration-150",
+              "active:scale-[0.97] disabled:opacity-60",
+              iLiked ? "border-brand bg-brand text-on-brand" : "border-border bg-card text-sub"
+            )}
+          >
+            <ThumbsUp aria-hidden className="size-3.5" fill={iLiked ? "currentColor" : "none"} />
+            {/*
+              Who liked it, not just how many — the point of a like here is
+              knowing which teammate saw it and agreed.
+            */}
+            <span className="sr-only">{iLiked ? "Unlike this note" : "Like this note"}</span>
+            {likers.length > 0 ? likers.length : "Like"}
+          </button>
+
+          {likers.length > 0 && (
+            <span className="flex items-center gap-1">
+              {likers.map((m) => (
+                <Avatar key={m.id} initials={m.initials} color={m.color} size={22} />
+              ))}
+            </span>
+          )}
+
+          {mine && !editing && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[15px] leading-5 font-bold text-sub cursor-pointer hover:text-fg"
+            >
+              <Pencil aria-hidden className="size-3.5" />
+              Edit
+            </button>
+          )}
+
+          {/* One level only, so a reply carries no reply button of its own. */}
+          {!isReply && !replying && (
+            <button
+              type="button"
+              onClick={() => setReplying(true)}
+              className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[15px] leading-5 font-bold text-sub cursor-pointer hover:text-fg"
+            >
+              <MessageSquare aria-hidden className="size-3.5" />
+              Reply
+            </button>
+          )}
+        </div>
+
+        {error && <p className="text-[16px] leading-[22px] font-bold text-danger">{error}</p>}
+      </div>
+
+      {note.replies.map((reply) => (
+        <NoteRow
+          key={reply.id}
+          note={reply}
+          taskId={taskId}
+          meId={meId}
+          roster={roster}
+          lastReadAt={lastReadAt}
+          isReply
+        />
+      ))}
+
+      {replying && (
+        <div className="ml-4 flex flex-col gap-2 border-l-[1.5px] border-border pl-3">
+          <Textarea
+            value={replyBody}
+            onChange={(event) => setReplyBody(event.target.value)}
+            placeholder={`Reply to ${note.member?.display_name ?? "this note"}…`}
+            aria-label="Write a reply"
+            rows={2}
+            maxLength={NOTE_MAX}
+            className="min-h-[80px] resize-y"
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                submitReply();
+              }
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="md"
+              className="w-auto px-4"
+              disabled={isPending || !replyBody.trim()}
+              onClick={submitReply}
+            >
+              Reply
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              className="w-auto px-4"
+              disabled={isPending}
+              onClick={() => {
+                setReplying(false);
+                setReplyBody("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

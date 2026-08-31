@@ -2,7 +2,7 @@ import { PRIORITY_RANK, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { reminderState } from "@/lib/reminders";
 import { getLastActivityAt } from "@/lib/tasks-view";
 import { daysBetweenKeys, formatClockTime, readableTextOn, zonedDateKey } from "@/lib/utils";
-import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
+import type { MemberSummary, TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 
 /** Statuses that count as "open" — everything except complete. */
 export const OPEN_STATUSES = STATUS_ORDER.filter((s) => s !== "complete");
@@ -409,11 +409,28 @@ export function computeDashboardStats({
     }),
   ];
 
-  // Notes written by someone else that I haven't thumbs-upped yet.
+  /*
+    Notes written by someone else since I last opened the task — replies
+    included, since a reply is news too.
+
+    This used to count notes I had not pressed "Seen" on, which made the
+    number a measure of how diligently people pressed a button rather than of
+    what they had actually read. Reading is recorded automatically now, so an
+    unread note is one nobody has looked at.
+  */
+  const isUnreadFor = (note: TaskNote, lastReadAt: string | null) =>
+    note.member?.id !== meId && (lastReadAt === null || note.created_at > lastReadAt);
+
   const unseenNoteCount = openTasks.reduce(
     (sum, task) =>
       sum +
-      task.notes.filter((note) => note.member?.id !== meId && !note.ackedByMemberIds.includes(meId)).length,
+      task.notes.reduce(
+        (n, note) =>
+          n +
+          (isUnreadFor(note, task.last_read_at) ? 1 : 0) +
+          note.replies.filter((reply) => isUnreadFor(reply, task.last_read_at)).length,
+        0
+      ),
     0
   );
 

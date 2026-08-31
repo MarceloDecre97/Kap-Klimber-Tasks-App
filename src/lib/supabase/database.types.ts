@@ -90,6 +90,8 @@ export interface Database {
           member_id: string;
           body: string;
           created_at: string;
+          edited_at: string | null;
+          parent_note_id: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["task_notes"]["Row"]> & {
           task_id: string;
@@ -99,17 +101,30 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["task_notes"]["Row"]>;
         Relationships: [];
       };
-      task_note_acks: {
+      task_note_likes: {
         Row: {
           note_id: string;
           member_id: string;
           created_at: string;
         };
-        Insert: Partial<Database["public"]["Tables"]["task_note_acks"]["Row"]> & {
+        Insert: Partial<Database["public"]["Tables"]["task_note_likes"]["Row"]> & {
           note_id: string;
           member_id: string;
         };
-        Update: Partial<Database["public"]["Tables"]["task_note_acks"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["task_note_likes"]["Row"]>;
+        Relationships: [];
+      };
+      task_reads: {
+        Row: {
+          task_id: string;
+          member_id: string;
+          last_read_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["task_reads"]["Row"]> & {
+          task_id: string;
+          member_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["task_reads"]["Row"]>;
         Relationships: [];
       };
     };

@@ -14,7 +14,13 @@ import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dro
 import { FiltersPanel } from "@/components/tasks/filters-panel";
 import { SortMenu } from "@/components/tasks/sort-menu";
 import { TaskPill } from "@/components/tasks/task-pill";
-import { setTaskStatus, softDeleteTask, restoreTask, toggleReminderDismissal } from "@/app/tasks/actions";
+import {
+  markTaskRead,
+  restoreTask,
+  setTaskStatus,
+  softDeleteTask,
+  toggleReminderDismissal,
+} from "@/app/tasks/actions";
 import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
 import {
   EMPTY_FILTERS,
@@ -84,6 +90,18 @@ export function TasksApp({
       })),
     [roster]
   );
+
+  /*
+    Opening a task is what marks it read — nobody has to press anything, which
+    is the only reason the Dashboard's unread count can be trusted. Fired and
+    forgotten: it deliberately does not revalidate, because re-rendering the
+    list the moment you open a card would collapse the card you just opened.
+  */
+  function handleToggleExpand(taskId: string) {
+    const opening = expandedId !== taskId;
+    setExpandedId(opening ? taskId : null);
+    if (opening) void markTaskRead(taskId);
+  }
 
   function handleSetStatus(taskId: string, status: TaskStatus) {
     startTransition(async () => {
@@ -261,10 +279,11 @@ export function TasksApp({
                         task={task}
                         meId={me.id}
                         expanded={expandedId === task.id}
-                        onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
+                        onToggleExpand={() => handleToggleExpand(task.id)}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}
                         onRequestDelete={() => setDeleteTarget(task)}
                         onToggleReminder={() => handleToggleReminder(task.id)}
+                        roster={roster}
                         lastActivityAt={getLastActivityAt(task)}
                       />
                     </div>
@@ -291,10 +310,11 @@ export function TasksApp({
                         task={task}
                         meId={me.id}
                         expanded={expandedId === task.id}
-                        onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
+                        onToggleExpand={() => handleToggleExpand(task.id)}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}
                         onRequestDelete={() => setDeleteTarget(task)}
                         onToggleReminder={() => handleToggleReminder(task.id)}
+                        roster={roster}
                       />
                     ))}
                   </div>
