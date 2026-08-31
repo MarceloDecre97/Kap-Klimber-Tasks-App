@@ -10,6 +10,20 @@ export interface MemberSummary {
   color: string;
 }
 
+/**
+ * Something the system recorded about a task, as opposed to something a
+ * person wrote. Rendered in the same timeline as notes so a task has one
+ * history rather than two.
+ */
+export interface TaskEvent {
+  id: string;
+  kind: "created" | "status" | "due_date";
+  from_value: string | null;
+  to_value: string | null;
+  created_at: string;
+  member: MemberSummary | null;
+}
+
 export interface TaskNote {
   id: string;
   body: string;
@@ -38,6 +52,8 @@ export interface TaskWithRelations {
   category: { id: string; label: string } | null;
   assignees: MemberSummary[];
   notes: TaskNote[];
+  /** Status and due-date changes, oldest first. Empty until 0007 is applied. */
+  events: TaskEvent[];
   /**
    * When the signed-in member last opened this task, or null if never. RLS on
    * `task_reads` only returns the caller's own row, so this is always theirs.
@@ -49,6 +65,7 @@ const TASK_SELECT = `
   id, title, description, priority, status, reminder_at, reminder_dismissed_at, due_date, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
   reads:task_reads(last_read_at),
+  events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
   notes:task_notes(id, body, created_at, edited_at, parent_note_id, member:members!task_notes_member_id_fkey(id, display_name, initials, color), likes:task_note_likes(member_id))
 `;
@@ -80,6 +97,16 @@ type RawTask = {
   assignees: { member: MemberSummary | null }[] | null;
   notes: RawTaskNote[] | null;
   reads: { last_read_at: string }[] | null;
+  events: RawTaskEvent[] | null;
+};
+
+type RawTaskEvent = {
+  id: string;
+  kind: "created" | "status" | "due_date";
+  from_value: string | null;
+  to_value: string | null;
+  created_at: string;
+  member: MemberSummary | null;
 };
 
 /**
@@ -123,6 +150,7 @@ function mapTask(row: RawTask): TaskWithRelations {
     assignees: (row.assignees ?? []).map((a) => a.member).filter((m): m is MemberSummary => !!m),
     notes: nestNotes(row.notes ?? []),
     last_read_at: row.reads?.[0]?.last_read_at ?? null,
+    events: (row.events ?? []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at)),
   };
 }
 

@@ -114,6 +114,20 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["task_note_likes"]["Row"]>;
         Relationships: [];
       };
+      task_events: {
+        Row: {
+          id: string;
+          task_id: string;
+          member_id: string | null;
+          kind: "created" | "status" | "due_date";
+          from_value: string | null;
+          to_value: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       task_reads: {
         Row: {
           task_id: string;

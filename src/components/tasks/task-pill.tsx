@@ -2,7 +2,17 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell, BellOff, ChevronDown, Hourglass, MessageSquare, Pencil, ThumbsUp, Trash2 } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  ChevronDown,
+  GitCommitHorizontal,
+  Hourglass,
+  MessageSquare,
+  Pencil,
+  ThumbsUp,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -11,6 +21,7 @@ import { NoteBody } from "@/components/tasks/note-body";
 import { Textarea } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { reminderState } from "@/lib/reminders";
+import { buildTimeline } from "@/lib/task-timeline";
 import { daysSince } from "@/lib/tasks-view";
 import {
   cn,
@@ -79,6 +90,7 @@ export function TaskPill({
     never late — it was delivered, and stamping it red forever would make
     the Complete list read as a wall of failures.
   */
+  const timeline = buildTimeline(task);
   const overdueDays =
     task.due_date && task.status !== "complete"
       ? Math.max(0, -daysBetweenKeys(zonedDateKey(new Date()), task.due_date))
@@ -286,18 +298,38 @@ export function TaskPill({
           </div>
 
           <div className="flex flex-col gap-3">
-            <div className="text-section-heading">Notes</div>
-            {task.notes.length === 0 && <p className="text-[18px] leading-7 text-sub">No notes yet.</p>}
-            {task.notes.map((note) => (
-              <NoteRow
-                key={note.id}
-                note={note}
-                taskId={task.id}
-                meId={meId}
-                roster={roster}
-                lastReadAt={task.last_read_at}
-              />
-            ))}
+            <div className="text-section-heading">Activity</div>
+            {/*
+              Notes and status changes in one chronological list. Kept apart,
+              a note saying "blocked on the supplier" read as news when it was
+              really a consequence of the move to Waiting an hour earlier.
+            */}
+            {timeline.length === 0 && (
+              <p className="text-[18px] leading-7 text-sub">Nothing here yet — add the first note.</p>
+            )}
+            {timeline.map((item) =>
+              item.kind === "note" ? (
+                <NoteRow
+                  key={item.note.id}
+                  note={item.note}
+                  taskId={task.id}
+                  meId={meId}
+                  roster={roster}
+                  lastReadAt={task.last_read_at}
+                />
+              ) : (
+                <div
+                  key={item.event.id}
+                  className="flex items-baseline gap-2.5 px-1 text-[16px] leading-6 text-sub"
+                >
+                  <GitCommitHorizontal aria-hidden className="size-4 shrink-0 translate-y-0.5" />
+                  <span className="min-w-0 text-pretty">
+                    {item.label}
+                    <span className="text-timestamp"> · {formatTimestamp(item.event.created_at)}</span>
+                  </span>
+                </div>
+              )
+            )}
             {/*
               A text box, not a single line. Enter now does what Enter should
               do in a box — start a new line — so one update with four points
