@@ -419,7 +419,9 @@ export function computeDashboardStats({
     unread note is one nobody has looked at.
   */
   const isUnreadFor = (note: TaskNote, lastReadAt: string | null) =>
-    note.member?.id !== meId && (lastReadAt === null || note.created_at > lastReadAt);
+    !note.deleted &&
+    note.member?.id !== meId &&
+    (lastReadAt === null || note.created_at > lastReadAt);
 
   const unseenNoteCount = openTasks.reduce(
     (sum, task) =>

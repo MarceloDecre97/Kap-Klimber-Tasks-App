@@ -30,6 +30,12 @@ export interface TaskNote {
   created_at: string;
   /** Null unless the author has changed it since posting. */
   edited_at: string | null;
+  /**
+   * True only for a removed note that still has replies under it — it is kept
+   * as a marker so the surviving replies are not left answering nothing. A
+   * removed note with no replies never reaches the component at all.
+   */
+  deleted: boolean;
   member: MemberSummary | null;
   likedByMemberIds: string[];
   /** Replies to this note, oldest first. Only ever one level deep. */
@@ -67,7 +73,7 @@ const TASK_SELECT = `
   reads:task_reads(last_read_at),
   events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
-  notes:task_notes(id, body, created_at, edited_at, parent_note_id, member:members!task_notes_member_id_fkey(id, display_name, initials, color), likes:task_note_likes(member_id))
+  notes:task_notes(id, body, created_at, edited_at, parent_note_id, deleted_at, member:members!task_notes_member_id_fkey(id, display_name, initials, color), likes:task_note_likes(member_id))
 `;
 
 type RawTaskNote = {
@@ -76,6 +82,7 @@ type RawTaskNote = {
   created_at: string;
   edited_at: string | null;
   parent_note_id: string | null;
+  deleted_at: string | null;
   member: MemberSummary | null;
   likes: { member_id: string }[] | null;
 };
@@ -109,6 +116,11 @@ type RawTaskEvent = {
   member: MemberSummary | null;
 };
 
+/** Every note actually shown on a task, replies included, markers excluded. */
+export function countNotes(notes: TaskNote[]): number {
+  return notes.reduce((n, note) => n + (note.deleted ? 0 : 1) + note.replies.length, 0);
+}
+
 /**
  * Postgres returns every note on the task in one flat list, replies included.
  * Nest them here rather than in the query: one round trip, and the component
@@ -125,6 +137,7 @@ function nestNotes(rows: RawTaskNote[]): TaskNote[] {
     body: row.body,
     created_at: row.created_at,
     edited_at: row.edited_at,
+    deleted: row.deleted_at !== null,
     member: row.member,
     likedByMemberIds: (row.likes ?? []).map((l) => l.member_id),
     replies: [],
@@ -140,8 +153,14 @@ function nestNotes(rows: RawTaskNote[]): TaskNote[] {
     else top.push(note);
   }
 
-  for (const note of notes.values()) note.replies.sort(byCreated);
-  return top.sort(byCreated);
+  for (const note of notes.values()) {
+    // A removed reply just goes. Nothing hangs off it.
+    note.replies = note.replies.filter((reply) => !reply.deleted).sort(byCreated);
+  }
+
+  // A removed note disappears entirely — unless replies survive under it, in
+  // which case a marker stays so the thread still reads as a conversation.
+  return top.filter((note) => !note.deleted || note.replies.length > 0).sort(byCreated);
 }
 
 function mapTask(row: RawTask): TaskWithRelations {

@@ -92,6 +92,7 @@ export interface Database {
           created_at: string;
           edited_at: string | null;
           parent_note_id: string | null;
+          deleted_at: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["task_notes"]["Row"]> & {
           task_id: string;

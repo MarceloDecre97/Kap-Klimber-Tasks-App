@@ -302,6 +302,42 @@ export async function editNote(input: unknown): Promise<ActionResult<{ noteId: s
 const noteIdSchema = z.string().uuid();
 
 /**
+ * Removes a note you wrote.
+ *
+ * Soft, because `parent_note_id` cascades: a hard delete of a note carrying
+ * replies would take those replies with it, and they may be somebody else's.
+ * The row stays, the app stops showing it, and where replies survive a marker
+ * is left in its place.
+ *
+ * Authorship is enforced by the same RLS policy that governs editing — this
+ * is an update like any other, so a note that is not yours matches no row.
+ */
+export async function deleteNote(noteIdInput: string): Promise<ActionResult<{ noteId: string }>> {
+  const noteId = noteIdSchema.safeParse(noteIdInput);
+  if (!noteId.success) return { ok: false, error: "Invalid note." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { data, error } = await supabase
+      .from("task_notes")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", noteId.data)
+      .is("deleted_at", null)
+      .select("id");
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      return { ok: false, error: "You can only delete notes you wrote." };
+    }
+
+    revalidateTaskViews();
+    return { ok: true, noteId: noteId.data };
+  } catch (error) {
+    console.error("deleteNote failed", error);
+    return { ok: false, error: "Couldn't delete that note. Try again." };
+  }
+}
+
+/**
  * Toggles the current member's like on a note.
  *
  * A like is now only a reaction. What counts as *read* is tracked separately

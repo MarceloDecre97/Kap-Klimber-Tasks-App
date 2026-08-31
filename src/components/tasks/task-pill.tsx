@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { reminderState } from "@/lib/reminders";
 import { buildTimeline } from "@/lib/task-timeline";
+import { countNotes } from "@/lib/data/tasks";
 import { daysSince } from "@/lib/tasks-view";
 import {
   cn,
@@ -31,7 +32,7 @@ import {
   formatTimestamp,
   zonedDateKey,
 } from "@/lib/utils";
-import { addNote, editNote, toggleNoteLike } from "@/app/tasks/actions";
+import { addNote, deleteNote, editNote, toggleNoteLike } from "@/app/tasks/actions";
 import type { MemberSummary, TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
@@ -91,6 +92,7 @@ export function TaskPill({
     the Complete list read as a wall of failures.
   */
   const timeline = buildTimeline(task);
+  const noteCount = countNotes(task.notes);
   const overdueDays =
     task.due_date && task.status !== "complete"
       ? Math.max(0, -daysBetweenKeys(zonedDateKey(new Date()), task.due_date))
@@ -179,13 +181,13 @@ export function TaskPill({
           said anything about it, which meant opening every card to find the
           one with news.
         */}
-        {task.notes.length > 0 && (
+        {noteCount > 0 && (
           <span
             className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border px-2.5 text-[15px] leading-5 font-bold text-sub"
-            title={`${task.notes.length} ${task.notes.length === 1 ? "note" : "notes"} on this task`}
+            title={`${noteCount} ${noteCount === 1 ? "note" : "notes"} on this task`}
           >
             <MessageSquare aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
-            {task.notes.length}
+            {noteCount}
           </span>
         )}
         {/*
@@ -434,6 +436,7 @@ function NoteRow({
   const [draft, setDraft] = useState(note.body);
   const [replying, setReplying] = useState(false);
   const [replyBody, setReplyBody] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const iLiked = note.likedByMemberIds.includes(meId);
@@ -462,6 +465,17 @@ function NoteRow({
     });
   }
 
+  function confirmDelete() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteNote(note.id);
+      if (!result.ok) {
+        setError(result.error);
+        setConfirmingDelete(false);
+      }
+    });
+  }
+
   function submitReply() {
     const body = replyBody.trim();
     if (!body) return;
@@ -475,6 +489,31 @@ function NoteRow({
       setReplyBody("");
       setReplying(false);
     });
+  }
+
+  /*
+    A removed note only reaches this component when replies survive under it.
+    Leaving a line where it was keeps those replies from appearing to answer
+    nothing — and it says the note was removed rather than pretending the
+    conversation always looked this way.
+  */
+  if (note.deleted) {
+    return (
+      <div className={cn("flex flex-col gap-2", isReply && "ml-4 border-l-[1.5px] border-border pl-3")}>
+        <p className="px-1 text-[16px] leading-6 italic text-sub">Note deleted by its author.</p>
+        {note.replies.map((reply) => (
+          <NoteRow
+            key={reply.id}
+            note={reply}
+            taskId={taskId}
+            meId={meId}
+            roster={roster}
+            lastReadAt={lastReadAt}
+            isReply
+          />
+        ))}
+      </div>
+    );
   }
 
   return (
@@ -576,6 +615,44 @@ function NoteRow({
               <Pencil aria-hidden className="size-3.5" />
               Edit
             </button>
+          )}
+
+          {mine && !editing && !confirmingDelete && (
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[15px] leading-5 font-bold text-sub cursor-pointer hover:text-danger"
+            >
+              <Trash2 aria-hidden className="size-3.5" />
+              Delete
+            </button>
+          )}
+
+          {/*
+            Confirmed in place rather than with an undo toast: on a phone a
+            toast is easy to miss, and this way nothing is gone until the
+            second, clearly-labelled tap.
+          */}
+          {confirmingDelete && (
+            <span className="inline-flex flex-wrap items-center gap-2 text-[15px] leading-5">
+              <span className="font-bold text-fg">Delete this note?</span>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmDelete}
+                className="rounded-full border-[1.5px] border-danger px-3 py-1 font-bold text-danger cursor-pointer disabled:opacity-60"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setConfirmingDelete(false)}
+                className="rounded-full border-[1.5px] border-border px-3 py-1 font-bold text-sub cursor-pointer disabled:opacity-60"
+              >
+                Keep
+              </button>
+            </span>
           )}
 
           {/* One level only, so a reply carries no reply button of its own. */}
