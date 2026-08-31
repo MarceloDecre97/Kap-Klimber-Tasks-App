@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell, BellOff, ChevronDown, Hourglass, Pencil, Send, ThumbsUp, Trash2 } from "lucide-react";
+import { Bell, BellOff, ChevronDown, Hourglass, MessageSquare, Pencil, ThumbsUp, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { Input } from "@/components/ui/input";
+import { NoteBody } from "@/components/tasks/note-body";
+import { Textarea } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { reminderState } from "@/lib/reminders";
 import { daysSince } from "@/lib/tasks-view";
@@ -29,6 +30,11 @@ import type { TaskStatus } from "@/lib/supabase/database.types";
  * flicker, and the two-line clamp is what actually bounds the card.
  */
 const COMPACT_TITLE_CHARS = 55;
+
+/** Matches the `task_notes.body` check constraint and the zod schema. */
+const NOTE_MAX = 2000;
+/** Where the counter starts warning rather than just informing. */
+const NOTE_LONG = 1800;
 
 export function TaskPill({
   task,
@@ -154,6 +160,20 @@ export function TaskPill({
           {daysSince(task.created_at)}d
         </span>
         {/*
+          Without this you had to expand a task to discover whether anyone had
+          said anything about it, which meant opening every card to find the
+          one with news.
+        */}
+        {task.notes.length > 0 && (
+          <span
+            className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-border px-2.5 text-[15px] leading-5 font-bold text-sub"
+            title={`${task.notes.length} ${task.notes.length === 1 ? "note" : "notes"} on this task`}
+          >
+            <MessageSquare aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+            {task.notes.length}
+          </span>
+        )}
+        {/*
           The reminder chip doubles as its own dismiss control, so a fired
           reminder can be marked handled from wherever the task appears —
           this component renders in both the Tasklist and the Dashboard.
@@ -268,29 +288,53 @@ export function TaskPill({
             {task.notes.map((note) => (
               <NoteRow key={note.id} note={note} meId={meId} />
             ))}
-            <div className="flex min-w-0 gap-2">
-              <Input
+            {/*
+              A text box, not a single line. Enter now does what Enter should
+              do in a box — start a new line — so one update with four points
+              is one note instead of four. The button submits; ⌘/Ctrl+Enter
+              does too, for anyone typing at a keyboard.
+            */}
+            <div className="flex flex-col gap-2">
+              <Textarea
                 value={noteBody}
                 onChange={(event) => setNoteBody(event.target.value)}
-                placeholder="What happened?"
+                placeholder="What happened? Enter starts a new line."
                 aria-label="Add a note"
-                className="min-w-0 flex-1"
+                rows={3}
+                maxLength={NOTE_MAX}
+                className="min-h-[104px] resize-y"
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                     event.preventDefault();
                     submitNote();
                   }
                 }}
               />
-              <Button
-                variant="secondary"
-                className="w-14 shrink-0 px-0"
-                aria-label="Add note"
-                disabled={isPending || !noteBody.trim()}
-                onClick={submitNote}
-              >
-                <Send aria-hidden className="size-5" />
-              </Button>
+              <div className="flex items-center justify-between gap-3">
+                <span
+                  aria-live="polite"
+                  className={cn(
+                    "text-[15px] leading-5 font-bold tabular-nums",
+                    noteBody.length >= NOTE_MAX
+                      ? "text-danger"
+                      : noteBody.length > NOTE_LONG
+                        ? "text-accent"
+                        : "text-sub"
+                  )}
+                >
+                  {/* Only worth showing once it is close to mattering. */}
+                  {noteBody.length > NOTE_LONG ? `${noteBody.length}/${NOTE_MAX}` : ""}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="w-auto shrink-0 px-5"
+                  disabled={isPending || !noteBody.trim()}
+                  onClick={submitNote}
+                >
+                  Add note
+                </Button>
+              </div>
             </div>
             {noteError && <p className="text-[16px] leading-[22px] font-bold text-danger">{noteError}</p>}
           </div>
@@ -330,7 +374,7 @@ function NoteRow({ note, meId }: { note: TaskNote; meId: string }) {
       <div className="text-timestamp text-sub">
         {note.member?.display_name ?? "Someone"} · {formatTimestamp(note.created_at)}
       </div>
-      <div className="text-[18px] leading-7 text-fg text-pretty">{note.body}</div>
+      <NoteBody body={note.body} className="text-[18px] leading-7 text-fg whitespace-pre-wrap break-words" />
       <button
         type="button"
         disabled={isPending}
