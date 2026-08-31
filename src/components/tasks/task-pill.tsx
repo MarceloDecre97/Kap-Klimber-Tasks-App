@@ -22,8 +22,7 @@ import { Textarea } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { reminderState } from "@/lib/reminders";
 import { buildTimeline } from "@/lib/task-timeline";
-import { countNotes } from "@/lib/data/tasks";
-import { daysSince } from "@/lib/tasks-view";
+import { countNotes, daysSince } from "@/lib/tasks-view";
 import {
   cn,
   daysBetweenKeys,

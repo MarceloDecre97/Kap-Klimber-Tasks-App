@@ -1,4 +1,4 @@
-import type { TaskWithRelations } from "@/lib/data/tasks";
+import type { TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import { PRIORITY_RANK } from "@/lib/constants";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
@@ -36,6 +36,17 @@ export function getLastActivityAt(task: TaskWithRelations): string {
   const latestNote = task.notes[task.notes.length - 1];
   if (!latestNote) return task.updated_at;
   return Date.parse(latestNote.created_at) > Date.parse(task.updated_at) ? latestNote.created_at : task.updated_at;
+}
+
+/**
+ * Every note actually shown on a task, replies included, markers excluded.
+ *
+ * Lives here rather than beside the note types in `data/tasks.ts`, because
+ * that module is `server-only` and the task card that renders this count is a
+ * client component.
+ */
+export function countNotes(notes: TaskNote[]): number {
+  return notes.reduce((n, note) => n + (note.deleted ? 0 : 1) + note.replies.length, 0);
 }
 
 /** Whole days elapsed since `iso`, floored (0 on the day it was created). */

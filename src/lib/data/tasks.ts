@@ -116,11 +116,6 @@ type RawTaskEvent = {
   member: MemberSummary | null;
 };
 
-/** Every note actually shown on a task, replies included, markers excluded. */
-export function countNotes(notes: TaskNote[]): number {
-  return notes.reduce((n, note) => n + (note.deleted ? 0 : 1) + note.replies.length, 0);
-}
-
 /**
  * Postgres returns every note on the task in one flat list, replies included.
  * Nest them here rather than in the query: one round trip, and the component
