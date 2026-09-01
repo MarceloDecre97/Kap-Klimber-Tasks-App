@@ -51,31 +51,27 @@ const URGENT_KINDS = new Set<NotificationKind>(["reminder_due", "overdue"]);
  * on which task, on both views, and is the same row that web push and email
  * will send later — so what arrives on your phone and what is waiting in the
  * app can never disagree.
+ *
+ * Opening the panel does not clear the count. It first did, on the reasoning
+ * that having looked is having seen; in use that was wrong, because glancing
+ * at the bell to decide whether anything mattered destroyed the record of
+ * what had not been dealt with. The count now falls when you act: tapping a
+ * row opens its task, and opening a task marks it read. "Mark all read" is
+ * there for the rest, so a notification you have decided to ignore still
+ * takes exactly one tap rather than staying up forever.
  */
 export function NotificationBell({ feed, className }: { feed: NotificationFeed; className?: string }) {
   const { open, setOpen, triggerRef, panelRef, style } = useFloatingPanel<HTMLButtonElement>();
   const [cleared, setCleared] = useState(false);
 
   /*
-    Opening the panel is what clears the count. The bell answers one question
-    — "is there something you have not seen?" — and once you have opened it,
-    the answer is no. Requiring a tap per row would turn it back into the
-    chore the old "press Seen on every note" flow was.
-
-    The rows keep their unread styling for this render, though: the count is
-    a prompt, the highlight is the answer to "which ones", and wiping both in
-    the same instant would leave you looking at a list with nothing marked.
+    Fired and forgotten. The badge and the row highlights have already gone
+    locally, and the next page render reads the rows back as read; nothing on
+    screen is waiting on this to come back.
   */
-  function handleToggle() {
-    const opening = !open;
-    setOpen(opening);
-    if (opening && feed.unread > 0 && !cleared) {
-      setCleared(true);
-      // Fired and forgotten. The badge has already gone to zero locally, and
-      // the next page render reads the rows back as read; nothing on screen
-      // is waiting on this to come back.
-      void markNotificationsRead();
-    }
+  function handleMarkAllRead() {
+    setCleared(true);
+    void markNotificationsRead();
   }
 
   const unread = cleared ? 0 : feed.unread;
@@ -84,7 +80,7 @@ export function NotificationBell({ feed, className }: { feed: NotificationFeed; 
     <>
       <IconButton
         ref={triggerRef}
-        onClick={handleToggle}
+        onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
@@ -112,11 +108,23 @@ export function NotificationBell({ feed, className }: { feed: NotificationFeed; 
           role="dialog"
           className="z-50 rounded-2xl border-[1.5px] border-border bg-card p-2 shadow-[0_4px_16px_rgba(2,6,23,0.16)]"
         >
-          <p className="px-3 pt-2 pb-3 text-[15px] leading-5 font-bold text-sub">
-            {feed.items.length === 0
-              ? "Notifications"
-              : `Notifications · ${feed.items.length}`}
-          </p>
+          <div className="flex items-center gap-3 px-3 pt-2 pb-3">
+            {/*
+              Just the word. A "· N new" suffix wrapped to two lines at 320px,
+              and it was saying a third time what the badge on the bell and the
+              outlined rows below already say.
+            */}
+            <p className="flex-1 truncate text-[15px] leading-5 font-bold text-sub">Notifications</p>
+            {unread > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                className="shrink-0 text-[15px] leading-5 font-bold text-brand underline underline-offset-[3px] cursor-pointer"
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
 
           {feed.items.length === 0 ? (
             <p className="px-3 pb-3 text-[16px] leading-6 text-sub text-pretty">
@@ -126,7 +134,7 @@ export function NotificationBell({ feed, className }: { feed: NotificationFeed; 
             <ul className="flex flex-col gap-1">
               {feed.items.map((item) => (
                 <li key={item.id}>
-                  <NotificationRow item={item} onNavigate={() => setOpen(false)} />
+                  <NotificationRow item={item} read={cleared} onNavigate={() => setOpen(false)} />
                 </li>
               ))}
             </ul>
@@ -137,14 +145,27 @@ export function NotificationBell({ feed, className }: { feed: NotificationFeed; 
   );
 }
 
-function NotificationRow({ item, onNavigate }: { item: NotificationItem; onNavigate: () => void }) {
+function NotificationRow({
+  item,
+  read,
+  onNavigate,
+}: {
+  item: NotificationItem;
+  /** Set once "Mark all read" has run, before the server round trip lands. */
+  read: boolean;
+  onNavigate: () => void;
+}) {
   const { headline, detail } = describeNotification(item);
   const Icon = KIND_ICON[item.kind] ?? Bell;
-  const unread = item.read_at === null;
+  const unread = !read && item.read_at === null;
 
   return (
     <Link
       href={`/tasks?task=${item.task.id}`}
+      // The destination positions its own list on the task this is about.
+      // Next's scroll-on-navigate would fight that, and it reaches for
+      // scrollIntoView to do it — the one call that can move the app shell.
+      scroll={false}
       onClick={onNavigate}
       className={cn(
         "flex gap-3 rounded-xl border-[1.5px] px-3 py-2.5 text-left",

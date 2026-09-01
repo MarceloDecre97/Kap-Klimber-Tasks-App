@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Search, Users, X } from "lucide-react";
@@ -69,17 +69,45 @@ export function TasksApp({
   );
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
   const [, startTransition] = useTransition();
+  const listRef = useRef<HTMLDivElement>(null);
 
   /*
     Arriving from a notification: bring the task into view and record that it
     has been read, which is also what clears the notification that sent you
     here. Runs once per focused id — re-scrolling on every render would fight
     anyone who scrolled away.
+
+    Arriving this way once left the app with no header: no logo, no bell, no
+    way back to the Dashboard, and no gesture that brought it back. The shell
+    is not supposed to be able to scroll at all — body is `overflow: hidden`
+    and the list is the only thing that moves — but `overflow: hidden` is
+    still scrollable under program control, and scrollIntoView walks every
+    scrollable ancestor it can find rather than just the one you meant.
+
+    So this scrolls the list directly, and then pins everything above it. The
+    pin is belt-and-braces: an isolated copy of this shell would not reproduce
+    the fault, so rather than guess at which ancestor moved, nothing above the
+    list is allowed to stay scrolled. The header is the only route back, and
+    losing it is not a bug worth risking twice.
   */
   useEffect(() => {
     if (!focusTaskId) return;
     void markTaskRead(focusTaskId);
-    document.getElementById(`task-${focusTaskId}`)?.scrollIntoView({ block: "center" });
+
+    const list = listRef.current;
+    const card = document.getElementById(`task-${focusTaskId}`);
+    if (!list || !card) return;
+
+    const offset = card.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    // A little breathing room above the card, so it does not sit flush
+    // against the top edge and read as cut off.
+    list.scrollTop += offset - 12;
+
+    for (let node = list.parentElement; node; node = node.parentElement) {
+      node.scrollTop = 0;
+      node.scrollLeft = 0;
+    }
+    window.scrollTo(0, 0);
   }, [focusTaskId]);
 
   const activeCount = countActiveFilters(filters);
@@ -271,7 +299,10 @@ export function TasksApp({
         )}
       </AppHeader>
 
-      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+24px)]"
+      >
         {groups.length === 0 && complete.length === 0 ? (
           <EmptyState hasFilters={activeCount > 0 || !!filters.query} onClearFilters={() => setFilters(EMPTY_FILTERS)} />
         ) : (
