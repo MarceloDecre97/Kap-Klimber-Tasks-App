@@ -2,7 +2,7 @@ import { PRIORITY_RANK, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { reminderState } from "@/lib/reminders";
 import { getLastActivityAt } from "@/lib/tasks-view";
 import { daysBetweenKeys, formatClockTime, readableTextOn, zonedDateKey } from "@/lib/utils";
-import type { MemberSummary, TaskNote, TaskWithRelations } from "@/lib/data/tasks";
+import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 
 /** Statuses that count as "open" — everything except complete. */
 export const OPEN_STATUSES = STATUS_ORDER.filter((s) => s !== "complete");
@@ -169,7 +169,6 @@ export interface BarRow {
 export interface DashboardStats {
   openTasks: TaskWithRelations[];
   completeCount: number;
-  unseenNoteCount: number;
   buckets: BucketSpec[];
   /** Fired, undismissed reminders across the personal panel. */
   remindersNeedingAttention: number;
@@ -409,33 +408,6 @@ export function computeDashboardStats({
     }),
   ];
 
-  /*
-    Notes written by someone else since I last opened the task — replies
-    included, since a reply is news too.
-
-    This used to count notes I had not pressed "Seen" on, which made the
-    number a measure of how diligently people pressed a button rather than of
-    what they had actually read. Reading is recorded automatically now, so an
-    unread note is one nobody has looked at.
-  */
-  const isUnreadFor = (note: TaskNote, lastReadAt: string | null) =>
-    !note.deleted &&
-    note.member?.id !== meId &&
-    (lastReadAt === null || note.created_at > lastReadAt);
-
-  const unseenNoteCount = openTasks.reduce(
-    (sum, task) =>
-      sum +
-      task.notes.reduce(
-        (n, note) =>
-          n +
-          (isUnreadFor(note, task.last_read_at) ? 1 : 0) +
-          note.replies.filter((reply) => isUnreadFor(reply, task.last_read_at)).length,
-        0
-      ),
-    0
-  );
-
   // ---- Team overview ------------------------------------------------------
   const asapTasks = openTasks.filter((t) => t.priority === "asap").sort(sortByUrgency(todayKey));
 
@@ -594,7 +566,6 @@ export function computeDashboardStats({
   return {
     openTasks,
     completeCount: completeTasks.length,
-    unseenNoteCount,
     buckets,
     remindersNeedingAttention: buckets.reduce((n, b) => n + b.remindersNeedingAttention, 0),
     asapCount: asapTasks.length,

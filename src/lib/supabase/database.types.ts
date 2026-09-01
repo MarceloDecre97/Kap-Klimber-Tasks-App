@@ -1,6 +1,23 @@
 export type Priority = "asap" | "high" | "medium" | "low" | "someday";
 export type TaskStatus = "not_started" | "in_progress" | "for_review" | "waiting" | "complete";
 
+/**
+ * Every reason the app has to tell somebody something. The first five are
+ * written by triggers as things happen; the rest arrive with @mentions and
+ * the scheduled rules that watch reminders and deadlines.
+ */
+export type NotificationKind =
+  | "note"
+  | "reply"
+  | "assigned"
+  | "status"
+  | "due_date"
+  | "mention"
+  | "reminder_upcoming"
+  | "reminder_due"
+  | "due_soon"
+  | "overdue";
+
 export interface RosterEntry {
   id: string;
   display_name: string;
@@ -55,6 +72,7 @@ export interface Database {
           reminder_at: string | null;
           reminder_dismissed_at: string | null;
           reminder_dismissed_by: string | null;
+          reminder_set_by: string | null;
           due_date: string | null;
           created_by: string;
           completed_at: string | null;
@@ -120,13 +138,34 @@ export interface Database {
           id: string;
           task_id: string;
           member_id: string | null;
-          kind: "created" | "status" | "due_date";
+          kind: "created" | "status" | "due_date" | "reminder";
           from_value: string | null;
           to_value: string | null;
           created_at: string;
         };
         Insert: never;
         Update: never;
+        Relationships: [];
+      };
+      notifications: {
+        Row: {
+          id: string;
+          member_id: string;
+          actor_id: string | null;
+          task_id: string;
+          note_id: string | null;
+          kind: NotificationKind;
+          payload: Record<string, unknown>;
+          dedupe_key: string | null;
+          created_at: string;
+          read_at: string | null;
+          pushed_at: string | null;
+          emailed_at: string | null;
+        };
+        /** Rows come from database triggers only — never from the app. */
+        Insert: never;
+        /** The one permitted change is read_at; a trigger pins the rest. */
+        Update: { read_at?: string | null };
         Relationships: [];
       };
       task_reads: {

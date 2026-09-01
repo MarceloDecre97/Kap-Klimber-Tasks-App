@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, ChevronDown, MessageSquare } from "lucide-react";
+import { Bell, BellOff, ChevronDown } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -26,6 +25,7 @@ import {
 } from "@/lib/dashboard-stats";
 import { cn } from "@/lib/utils";
 import type { CountTone } from "@/lib/dashboard-stats";
+import type { NotificationFeed } from "@/lib/data/notifications";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
@@ -45,10 +45,12 @@ export function DashboardApp({
   initialTasks,
   roster,
   me,
+  notifications,
 }: {
   initialTasks: TaskWithRelations[];
   roster: MemberSummary[];
   me: { id: string; display_name: string; initials: string; color: string };
+  notifications: NotificationFeed;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -131,7 +133,7 @@ export function DashboardApp({
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <AppHeader current="/dashboard" />
+      <AppHeader current="/dashboard" notifications={notifications} />
 
       <div className="flex-1 overflow-y-auto px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+32px)]">
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[400px_minmax(0,1fr)]">
@@ -139,19 +141,6 @@ export function DashboardApp({
           <div className="flex min-w-0 flex-col gap-5">
             <div className="flex flex-col gap-4">
               <h1 className="text-screen-title text-fg">Hello, {firstName}</h1>
-
-              {stats.unseenNoteCount > 0 && (
-                <Link
-                  href="/tasks"
-                  className="flex min-h-14 items-center gap-3 rounded-2xl border-[1.5px] border-border bg-card px-4 py-3 text-[17px] leading-6 text-fg hover:bg-muted"
-                >
-                  <MessageSquare aria-hidden className="size-5 shrink-0 text-brand" />
-                  <span className="font-bold tabular-nums text-pretty">
-                    {stats.unseenNoteCount} new {stats.unseenNoteCount === 1 ? "note" : "notes"} since you last
-                    looked
-                  </span>
-                </Link>
-              )}
 
               {/*
                 A fired reminder does not move its task, so on its own it can

@@ -17,7 +17,7 @@ export interface MemberSummary {
  */
 export interface TaskEvent {
   id: string;
-  kind: "created" | "status" | "due_date";
+  kind: "created" | "status" | "due_date" | "reminder";
   from_value: string | null;
   to_value: string | null;
   created_at: string;
@@ -50,6 +50,8 @@ export interface TaskWithRelations {
   status: TaskStatus;
   reminder_at: string | null;
   reminder_dismissed_at: string | null;
+  /** Who set the current reminder. Follows reminder_at, not the row. */
+  reminder_set_by: string | null;
   due_date: string | null;
   created_at: string;
   updated_at: string;
@@ -68,7 +70,7 @@ export interface TaskWithRelations {
 }
 
 const TASK_SELECT = `
-  id, title, description, priority, status, reminder_at, reminder_dismissed_at, due_date, created_at, updated_at, completed_at, created_by,
+  id, title, description, priority, status, reminder_at, reminder_dismissed_at, reminder_set_by, due_date, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
   reads:task_reads(last_read_at),
   events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
@@ -95,6 +97,7 @@ type RawTask = {
   status: TaskStatus;
   reminder_at: string | null;
   reminder_dismissed_at: string | null;
+  reminder_set_by: string | null;
   due_date: string | null;
   created_at: string;
   updated_at: string;
@@ -109,7 +112,7 @@ type RawTask = {
 
 type RawTaskEvent = {
   id: string;
-  kind: "created" | "status" | "due_date";
+  kind: "created" | "status" | "due_date" | "reminder";
   from_value: string | null;
   to_value: string | null;
   created_at: string;

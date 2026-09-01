@@ -111,13 +111,40 @@ export async function updateTask(taskIdInput: string, input: unknown): Promise<A
       .eq("id", taskId.data);
     if (error) throw error;
 
-    const { error: deleteError } = await supabase.from("task_assignees").delete().eq("task_id", taskId.data);
-    if (deleteError) throw deleteError;
-
-    const { error: assigneeError } = await supabase
+    /*
+      Diffed rather than wiped and rewritten. Deleting every assignee and
+      re-inserting the same people made an edit to the title look, to anything
+      watching the table, exactly like assigning four people from scratch: it
+      reset every assigned_at, and now it would fire an "assigned you to this
+      task" notification at everyone on every save. Only real additions and
+      real removals touch the table.
+    */
+    const { data: currentRows, error: currentError } = await supabase
       .from("task_assignees")
-      .insert(data.assigneeIds.map((memberId) => ({ task_id: taskId.data, member_id: memberId })));
-    if (assigneeError) throw assigneeError;
+      .select("member_id")
+      .eq("task_id", taskId.data);
+    if (currentError) throw currentError;
+
+    const current = new Set((currentRows ?? []).map((row) => row.member_id));
+    const wanted = new Set(data.assigneeIds);
+    const removed = [...current].filter((id) => !wanted.has(id));
+    const added = [...wanted].filter((id) => !current.has(id));
+
+    if (removed.length > 0) {
+      const { error: deleteError } = await supabase
+        .from("task_assignees")
+        .delete()
+        .eq("task_id", taskId.data)
+        .in("member_id", removed);
+      if (deleteError) throw deleteError;
+    }
+
+    if (added.length > 0) {
+      const { error: assigneeError } = await supabase
+        .from("task_assignees")
+        .insert(added.map((memberId) => ({ task_id: taskId.data, member_id: memberId })));
+      if (assigneeError) throw assigneeError;
+    }
 
     revalidateTaskViews();
     return { ok: true, taskId: taskId.data };
@@ -391,6 +418,11 @@ export async function toggleNoteLike(noteIdInput: string): Promise<ActionResult<
  * record a read must not interrupt someone reading. The views are not
  * revalidated either — re-rendering the list the instant you open a card
  * would collapse the very thing you opened.
+ *
+ * It also clears the task's notifications. Opening a task is the strongest
+ * possible evidence that you have seen what happened on it, and a bell still
+ * counting a note you are looking at is how a notification badge becomes
+ * something people learn to ignore.
  */
 export async function markTaskRead(taskIdInput: string): Promise<void> {
   const taskId = taskIdSchema.safeParse(taskIdInput);
@@ -398,12 +430,19 @@ export async function markTaskRead(taskIdInput: string): Promise<void> {
 
   try {
     const { supabase, member } = await getCurrentMember();
-    await supabase
-      .from("task_reads")
-      .upsert(
-        { task_id: taskId.data, member_id: member.id, last_read_at: new Date().toISOString() },
-        { onConflict: "task_id,member_id" }
-      );
+    await Promise.all([
+      supabase
+        .from("task_reads")
+        .upsert(
+          { task_id: taskId.data, member_id: member.id, last_read_at: new Date().toISOString() },
+          { onConflict: "task_id,member_id" }
+        ),
+      supabase
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("task_id", taskId.data)
+        .is("read_at", null),
+    ]);
   } catch (error) {
     console.error("markTaskRead failed", error);
   }

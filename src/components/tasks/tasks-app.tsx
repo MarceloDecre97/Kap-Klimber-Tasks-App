@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Search, Users, X } from "lucide-react";
@@ -32,6 +32,7 @@ import {
   type TaskFilters,
 } from "@/lib/tasks-view";
 import { cn, formatDateGroup } from "@/lib/utils";
+import type { NotificationFeed } from "@/lib/data/notifications";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
@@ -40,21 +41,46 @@ export function TasksApp({
   roster,
   categories,
   me,
+  notifications,
+  focusTaskId,
 }: {
   initialTasks: TaskWithRelations[];
   roster: MemberSummary[];
   categories: { id: string; label: string; is_default: boolean }[];
   me: { id: string; display_name: string; initials: string; color: string };
+  notifications: NotificationFeed;
+  /** A task to open on arrival — set when a notification was tapped. */
+  focusTaskId: string | null;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [filters, setFilters] = useState<TaskFilters>(EMPTY_FILTERS);
   // null until the user picks one, so the button can read a plain "Sort".
   const [sort, setSort] = useState<SortMode | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [showComplete, setShowComplete] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(focusTaskId);
+  /*
+    A completed task lives inside a collapsed section, so arriving from a
+    notification about one would land on a list that visibly does not contain
+    it. Opening the section is the difference between "here it is" and "it is
+    gone".
+  */
+  const [showComplete, setShowComplete] = useState(
+    () => initialTasks.find((task) => task.id === focusTaskId)?.status === "complete"
+  );
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
   const [, startTransition] = useTransition();
+
+  /*
+    Arriving from a notification: bring the task into view and record that it
+    has been read, which is also what clears the notification that sent you
+    here. Runs once per focused id — re-scrolling on every render would fight
+    anyone who scrolled away.
+  */
+  useEffect(() => {
+    if (!focusTaskId) return;
+    void markTaskRead(focusTaskId);
+    document.getElementById(`task-${focusTaskId}`)?.scrollIntoView({ block: "center" });
+  }, [focusTaskId]);
 
   const activeCount = countActiveFilters(filters);
 
@@ -151,7 +177,7 @@ export function TasksApp({
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <AppHeader current="/tasks">
+      <AppHeader current="/tasks" notifications={notifications}>
         {/*
           Six controls wrapped into four stacked rows on a phone, which ate
           most of the screen before a single task appeared. They are now two
@@ -261,7 +287,11 @@ export function TasksApp({
                 */}
                 <div className="text-[15px] leading-[20px] font-bold text-sub lg:hidden">{group.label}</div>
                 {group.tasks.map((task, taskIndex) => (
-                  <div key={task.id} className="lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-3">
+                  <div
+                    key={task.id}
+                    id={`task-${task.id}`}
+                    className="lg:grid lg:grid-cols-[92px_minmax(0,1fr)] lg:gap-3"
+                  >
                     <div className="hidden flex-col items-end gap-1 pt-0.5 lg:flex">
                       {taskIndex === 0 && (
                         <div className="sticky top-0 text-[15px] leading-[20px] font-bold text-sub text-right whitespace-nowrap">
@@ -305,17 +335,18 @@ export function TasksApp({
                 {showComplete && (
                   <div className="flex flex-col gap-3">
                     {complete.map((task) => (
-                      <TaskPill
-                        key={task.id}
-                        task={task}
-                        meId={me.id}
-                        expanded={expandedId === task.id}
-                        onToggleExpand={() => handleToggleExpand(task.id)}
-                        onSetStatus={(status) => handleSetStatus(task.id, status)}
-                        onRequestDelete={() => setDeleteTarget(task)}
-                        onToggleReminder={() => handleToggleReminder(task.id)}
-                        roster={roster}
-                      />
+                      <div key={task.id} id={`task-${task.id}`} className="min-w-0">
+                        <TaskPill
+                          task={task}
+                          meId={me.id}
+                          expanded={expandedId === task.id}
+                          onToggleExpand={() => handleToggleExpand(task.id)}
+                          onSetStatus={(status) => handleSetStatus(task.id, status)}
+                          onRequestDelete={() => setDeleteTarget(task)}
+                          onToggleReminder={() => handleToggleReminder(task.id)}
+                          roster={roster}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}

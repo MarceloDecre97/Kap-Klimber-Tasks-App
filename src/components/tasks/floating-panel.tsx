@@ -56,21 +56,28 @@ export function FloatingPanel({
   style,
   width,
   maxHeight,
+  role = "listbox",
   className,
   children,
 }: {
   panelRef: RefObject<HTMLDivElement | null>;
   style: { top: number; left: number } | null;
+  /** Preferred width; narrowed to fit when the screen is smaller. */
   width: number;
   /** Optional cap on top of the viewport clamp, for short option lists. */
   maxHeight?: number;
+  /** Panels that are not a list of options say what they actually are. */
+  role?: string;
   className?: string;
   children: ReactNode;
 }) {
   if (!style || typeof document === "undefined") return null;
 
   const margin = 16;
-  const left = Math.max(margin, Math.min(style.left, window.innerWidth - width - margin));
+  // A panel wider than the phone it opens on cannot be clamped into view by
+  // shifting it — there is nowhere to shift it to. Narrow it instead.
+  const panelWidth = Math.min(width, window.innerWidth - margin * 2);
+  const left = Math.max(margin, Math.min(style.left, window.innerWidth - panelWidth - margin));
 
   /*
     A fixed panel does not move when the page scrolls, so anything hanging
@@ -86,12 +93,12 @@ export function FloatingPanel({
   return createPortal(
     <div
       ref={panelRef}
-      role="listbox"
+      role={role}
       style={{
         position: "fixed",
         top: style.top,
         left,
-        width,
+        width: panelWidth,
         maxHeight: Math.min(room, maxHeight ?? Infinity),
         overflowY: "auto",
         overscrollBehavior: "contain",

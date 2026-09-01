@@ -1,7 +1,7 @@
 import { STATUSES } from "@/lib/constants";
 import type { TaskEvent, TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
-import { formatCalendarDate } from "@/lib/utils";
+import { formatCalendarDate, formatTimestamp } from "@/lib/utils";
 
 /**
  * A task's history had been kept in two places that never met: notes, which
@@ -42,6 +42,14 @@ export function describeEvent(event: TaskEvent): string | null {
       // date" alone would hide it.
       if (!event.from_value) return `${who} set the due date to ${to}`;
       return `${who} moved the due date from ${formatCalendarDate(event.from_value)} to ${to}`;
+    }
+    case "reminder": {
+      // Unlike a due date, a reminder is a specific moment, so it prints with
+      // its time — "Sep 5" would be useless for something meant to fire at 3pm.
+      if (!event.to_value) return `${who} removed the reminder`;
+      const to = formatTimestamp(event.to_value);
+      if (!event.from_value) return `${who} set a reminder for ${to}`;
+      return `${who} moved the reminder from ${formatTimestamp(event.from_value)} to ${to}`;
     }
     default:
       return null;
