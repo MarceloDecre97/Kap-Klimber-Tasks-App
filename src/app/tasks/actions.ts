@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
-import { noteEditSchema, noteInputSchema, statusEnum, taskInputSchema } from "@/lib/validation";
+import {
+  deletionReasonSchema,
+  noteEditSchema,
+  noteInputSchema,
+  statusEnum,
+  taskInputSchema,
+} from "@/lib/validation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -229,41 +235,128 @@ export async function toggleReminderDismissal(
   }
 }
 
-export async function softDeleteTask(taskIdInput: string): Promise<ActionResult> {
+/*
+  ---------------------------------------------------------------------------
+  Deleting a task
+
+  None of these write to the tasks table. Every rule about who may delete
+  what lives in database functions (0014), and a plain UPDATE that tries to
+  set deleted_at has it pinned straight back by a trigger — so the approval
+  flow is not something a caller can route around, here or from the SQL
+  editor.
+
+  The messages those functions raise are written for people to read
+  ("Only the person who created this task can delete it. Ask them instead."),
+  so they are passed through rather than replaced with a generic apology. The
+  fallback only covers the case where something failed for a reason nobody
+  anticipated.
+  ---------------------------------------------------------------------------
+*/
+function rpcError(error: unknown, fallback: string): string {
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === "string" && message.trim() ? message : fallback;
+}
+
+/** Delete a task you created. No approval — there is nobody to ask. */
+export async function deleteOwnTask(taskIdInput: string): Promise<ActionResult> {
   const taskId = taskIdSchema.safeParse(taskIdInput);
   if (!taskId.success) return { ok: false, error: "Invalid task." };
 
-  try {
-    const { supabase } = await getCurrentMember();
-    const { error } = await supabase
-      .from("tasks")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", taskId.data);
-    if (error) throw error;
-
-    revalidateTaskViews();
-    return { ok: true, taskId: taskId.data };
-  } catch (error) {
-    console.error("softDeleteTask failed", error);
-    return { ok: false, error: "Couldn't delete that task. Try again." };
+  const { supabase } = await getCurrentMember();
+  const { error } = await supabase.rpc("delete_own_task", { p_task_id: taskId.data });
+  if (error) {
+    console.error("deleteOwnTask failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't delete that task. Try again.") };
   }
+
+  revalidateTaskViews();
+  return { ok: true, taskId: taskId.data };
 }
 
+/**
+ * Ask the creator to delete a task you did not create.
+ *
+ * The reason is required, and that is the point of it: "Keith wants to delete
+ * this" is not something anyone can decide on from a phone, while "duplicate
+ * of the Sep 4 one" is.
+ */
+export async function requestTaskDeletion(
+  taskIdInput: string,
+  reasonInput: unknown
+): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  const reason = deletionReasonSchema.safeParse(reasonInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+  if (!reason.success) {
+    return { ok: false, error: reason.error.issues[0]?.message ?? "Say why it should go." };
+  }
+
+  const { supabase } = await getCurrentMember();
+  const { error } = await supabase.rpc("request_task_deletion", {
+    p_task_id: taskId.data,
+    p_reason: reason.data,
+  });
+  if (error) {
+    console.error("requestTaskDeletion failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't send that request. Try again.") };
+  }
+
+  revalidateTaskViews();
+  return { ok: true, taskId: taskId.data };
+}
+
+/** The creator's answer. `approve` deletes it; anything else keeps it. */
+export async function resolveTaskDeletion(
+  taskIdInput: string,
+  approve: boolean
+): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+
+  const { supabase } = await getCurrentMember();
+  const { error } = await supabase.rpc("resolve_task_deletion", {
+    p_task_id: taskId.data,
+    p_approve: approve,
+  });
+  if (error) {
+    console.error("resolveTaskDeletion failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't record that. Try again.") };
+  }
+
+  revalidateTaskViews();
+  return { ok: true, taskId: taskId.data };
+}
+
+/** Withdrawing your own request. */
+export async function cancelTaskDeletion(taskIdInput: string): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+
+  const { supabase } = await getCurrentMember();
+  const { error } = await supabase.rpc("cancel_task_deletion", { p_task_id: taskId.data });
+  if (error) {
+    console.error("cancelTaskDeletion failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't withdraw that. Try again.") };
+  }
+
+  revalidateTaskViews();
+  return { ok: true, taskId: taskId.data };
+}
+
+/** Bringing back one of your own, from the undo banner or from the bin. */
 export async function restoreTask(taskIdInput: string): Promise<ActionResult> {
   const taskId = taskIdSchema.safeParse(taskIdInput);
   if (!taskId.success) return { ok: false, error: "Invalid task." };
 
-  try {
-    const { supabase } = await getCurrentMember();
-    const { error } = await supabase.from("tasks").update({ deleted_at: null }).eq("id", taskId.data);
-    if (error) throw error;
-
-    revalidateTaskViews();
-    return { ok: true, taskId: taskId.data };
-  } catch (error) {
+  const { supabase } = await getCurrentMember();
+  const { error } = await supabase.rpc("restore_task", { p_task_id: taskId.data });
+  if (error) {
     console.error("restoreTask failed", error);
-    return { ok: false, error: "Couldn't undo that delete." };
+    return { ok: false, error: rpcError(error, "Couldn't bring that back.") };
   }
+
+  revalidateTaskViews();
+  return { ok: true, taskId: taskId.data };
 }
 
 export async function addNote(input: unknown): Promise<ActionResult<{ noteId: string }>> {

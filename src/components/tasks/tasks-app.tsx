@@ -6,23 +6,25 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Search, Users, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { AppHeader } from "@/components/layout/app-header";
 import { EmptyState } from "@/components/tasks/empty-state";
 import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dropdown";
 import { FiltersPanel } from "@/components/tasks/filters-panel";
 import { SortMenu } from "@/components/tasks/sort-menu";
+import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog";
 import { TaskPill } from "@/components/tasks/task-pill";
 import {
+  cancelTaskDeletion,
   markTaskRead,
+  resolveTaskDeletion,
   restoreTask,
   setTaskStatus,
-  softDeleteTask,
   toggleReminderDismissal,
 } from "@/app/tasks/actions";
 import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
 import {
+  DELETED_VISIBLE_DAYS,
   EMPTY_FILTERS,
   countActiveFilters,
   getLastActivityAt,
@@ -42,6 +44,7 @@ export function TasksApp({
   categories,
   me,
   notifications,
+  deletedTasks,
   focusTaskId,
 }: {
   initialTasks: TaskWithRelations[];
@@ -49,6 +52,8 @@ export function TasksApp({
   categories: { id: string; label: string; is_default: boolean }[];
   me: { id: string; display_name: string; initials: string; color: string };
   notifications: NotificationFeed;
+  /** This member's own deleted tasks, newest first. Nobody else's exist here. */
+  deletedTasks: TaskWithRelations[];
   /** A task to open on arrival — set when a notification was tapped. */
   focusTaskId: string | null;
 }) {
@@ -64,6 +69,7 @@ export function TasksApp({
     it. Opening the section is the difference between "here it is" and "it is
     gone".
   */
+  const [showDeleted, setShowDeleted] = useState(false);
   const [showComplete, setShowComplete] = useState(
     () => initialTasks.find((task) => task.id === focusTaskId)?.status === "complete"
   );
@@ -179,27 +185,79 @@ export function TasksApp({
     });
   }
 
-  function handleConfirmDelete() {
-    const task = deleteTarget;
-    if (!task) return;
+  function handleDeleted(task: TaskWithRelations) {
     setDeleteTarget(null);
+    router.refresh();
+    showToast({
+      message: "Task deleted",
+      actionLabel: "Undo",
+      onAction: () => {
+        startTransition(async () => {
+          await restoreTask(task.id);
+          router.refresh();
+        });
+      },
+    });
+  }
+
+  function handleRequested(task: TaskWithRelations) {
+    setDeleteTarget(null);
+    router.refresh();
+    const creator = roster.find((m) => m.id === task.created_by);
+    showToast({
+      message: `Delete requested — waiting on ${creator?.display_name ?? "the creator"}`,
+      actionLabel: "Withdraw",
+      onAction: () => handleCancelDeletion(task.id),
+    });
+  }
+
+  /*
+    Two paths behind one button, decided by who created the task. The creator
+    deletes; everybody else asks, and the dialog collects the reason. Which of
+    the two you get is worked out here rather than inside the dialog so the
+    card's own label can say the same thing before you tap it.
+
+    listRoster only returns active members, so a creator missing from it has
+    been deactivated — and then anyone may decide, or a pending request would
+    be stuck against that task forever.
+  */
+  function canDecide(task: TaskWithRelations) {
+    return task.created_by === me.id || !roster.some((m) => m.id === task.created_by);
+  }
+
+  function handleRestore(taskId: string) {
     startTransition(async () => {
-      const result = await softDeleteTask(task.id);
+      const result = await restoreTask(taskId);
       if (!result.ok) {
         showToast({ message: result.error });
         return;
       }
       router.refresh();
-      showToast({
-        message: "Task deleted",
-        actionLabel: "Undo",
-        onAction: () => {
-          startTransition(async () => {
-            await restoreTask(task.id);
-            router.refresh();
-          });
-        },
-      });
+      showToast({ message: "Task restored" });
+    });
+  }
+
+  function handleResolveDeletion(taskId: string, approve: boolean) {
+    startTransition(async () => {
+      const result = await resolveTaskDeletion(taskId, approve);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      router.refresh();
+      showToast({ message: approve ? "Task deleted" : "Request declined — task kept" });
+    });
+  }
+
+  function handleCancelDeletion(taskId: string) {
+    startTransition(async () => {
+      const result = await cancelTaskDeletion(taskId);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      router.refresh();
+      showToast({ message: "Request withdrawn" });
     });
   }
 
@@ -343,6 +401,8 @@ export function TasksApp({
                         onToggleExpand={() => handleToggleExpand(task.id)}
                         onSetStatus={(status) => handleSetStatus(task.id, status)}
                         onRequestDelete={() => setDeleteTarget(task)}
+                        onResolveDeletion={(approve) => handleResolveDeletion(task.id, approve)}
+                        onCancelDeletion={() => handleCancelDeletion(task.id)}
                         onToggleReminder={() => handleToggleReminder(task.id)}
                         roster={roster}
                         lastActivityAt={getLastActivityAt(task)}
@@ -374,9 +434,70 @@ export function TasksApp({
                           onToggleExpand={() => handleToggleExpand(task.id)}
                           onSetStatus={(status) => handleSetStatus(task.id, status)}
                           onRequestDelete={() => setDeleteTarget(task)}
+                        onResolveDeletion={(approve) => handleResolveDeletion(task.id, approve)}
+                        onCancelDeletion={() => handleCancelDeletion(task.id)}
                           onToggleReminder={() => handleToggleReminder(task.id)}
                           roster={roster}
                         />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/*
+              The bin, at the bottom, in the same collapsed shape as Complete.
+              It only exists for the person who deleted these — a deleted task
+              is invisible to everybody else, by policy rather than by filter —
+              and it disappears entirely when there is nothing in it, so it
+              never costs anything on a normal day.
+
+              This is the safety net for the one unguarded path in the design:
+              deleting a task you created needs no approval, because there is
+              nobody to ask.
+            */}
+            {deletedTasks.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleted((v) => !v)}
+                  className="flex h-14 w-full items-center gap-3 rounded-2xl border-[1.5px] border-border bg-card px-4 text-[18px] leading-7 font-bold text-fg cursor-pointer"
+                >
+                  <ChevronDown
+                    aria-hidden
+                    className={`size-5 transition-transform duration-150 ${showDeleted ? "rotate-180" : "-rotate-90"}`}
+                  />
+                  Recently deleted ({deletedTasks.length})
+                </button>
+                {showDeleted && (
+                  <div className="flex flex-col gap-2">
+                    <p className="px-1 text-[16px] leading-6 text-sub text-pretty">
+                      Tasks you deleted in the last {DELETED_VISIBLE_DAYS} days. Only you can see
+                      these.
+                    </p>
+                    {deletedTasks.map((task) => (
+                      <div
+                        key={task.id}
+                        className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border-[1.5px] border-border bg-card px-4 py-3"
+                      >
+                        <span className="min-w-0 grow text-[17px] leading-6 text-fg text-pretty">
+                          {task.title}
+                          {task.deleted_at && (
+                            <span className="text-timestamp">
+                              {" "}
+                              · deleted {formatDateGroup(task.deleted_at)}
+                            </span>
+                          )}
+                        </span>
+                        <Button
+                          variant="secondary"
+                          size="md"
+                          className="w-auto shrink-0 px-4"
+                          onClick={() => handleRestore(task.id)}
+                        >
+                          Restore
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -387,20 +508,14 @@ export function TasksApp({
         )}
       </div>
 
-      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
-        {deleteTarget && (
-          <>
-            <div className="text-section-heading text-pretty">Delete &ldquo;{deleteTarget.title}&rdquo;?</div>
-            <p className="text-[18px] leading-7 text-sub text-pretty">This can&apos;t be undone once the undo message goes away.</p>
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              Keep the task
-            </Button>
-            <Button variant="destructive" onClick={handleConfirmDelete}>
-              Delete it
-            </Button>
-          </>
-        )}
-      </Dialog>
+      <DeleteTaskDialog
+        task={deleteTarget}
+        canDecide={deleteTarget ? canDecide(deleteTarget) : false}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={handleDeleted}
+        onRequested={handleRequested}
+        onError={(message) => showToast({ message })}
+      />
     </div>
   );
 }

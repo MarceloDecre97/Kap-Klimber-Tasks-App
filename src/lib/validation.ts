@@ -66,6 +66,17 @@ export const noteEditSchema = z.object({
   }),
 });
 
+/**
+ * Why a task should go. Required, because the creator has to be able to
+ * decide from this line alone — checked here as well as in the database so
+ * the message a person sees is written for people.
+ */
+export const deletionReasonSchema = z
+  .string()
+  .trim()
+  .min(1, "Say why it should go — the creator decides from this alone.")
+  .max(300, "Keep the reason under 300 characters.");
+
 export const taskFiltersSchema = z.object({
   mine: z.boolean().default(false),
   status: z.array(statusEnum).default([]),

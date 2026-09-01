@@ -115,3 +115,13 @@ export function groupTasks(tasks: TaskWithRelations[], sort: SortMode): TaskGrou
   if (tasks.length === 0) return [];
   return [{ key: "update-log", label: "Update Log", tasks: tasks.slice().sort((a, b) => compareTasks(a, b, sort)) }];
 }
+
+/**
+ * How long a deleted task stays in its creator's Recently deleted list.
+ *
+ * Lives here rather than beside the query that uses it because the dialog
+ * quotes the number to the person deleting, and data/tasks.ts is server-only
+ * — a client component importing from there fails at bundle time, which
+ * typecheck does not catch.
+ */
+export const DELETED_VISIBLE_DAYS = 15;

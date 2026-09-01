@@ -13,10 +13,28 @@ export type NotificationKind =
   | "status"
   | "due_date"
   | "mention"
+  | "delete_requested"
+  | "delete_denied"
+  | "deleted"
   | "reminder_upcoming"
   | "reminder_due"
   | "due_soon"
   | "overdue";
+
+/**
+ * Everything a task's Activity can record. The deletion kinds are what make
+ * an approved or refused request survive the notification that announced it.
+ */
+export type TaskEventKind =
+  | "created"
+  | "status"
+  | "due_date"
+  | "reminder"
+  | "delete_requested"
+  | "delete_denied"
+  | "delete_cancelled"
+  | "deleted"
+  | "restored";
 
 export interface RosterEntry {
   id: string;
@@ -73,6 +91,9 @@ export interface Database {
           reminder_dismissed_at: string | null;
           reminder_dismissed_by: string | null;
           reminder_set_by: string | null;
+          deletion_requested_by: string | null;
+          deletion_requested_at: string | null;
+          deletion_reason: string | null;
           due_date: string | null;
           created_by: string;
           completed_at: string | null;
@@ -138,7 +159,7 @@ export interface Database {
           id: string;
           task_id: string;
           member_id: string | null;
-          kind: "created" | "status" | "due_date" | "reminder";
+          kind: TaskEventKind;
           from_value: string | null;
           to_value: string | null;
           created_at: string;
@@ -188,6 +209,11 @@ export interface Database {
         Args: Record<string, never>;
         Returns: RosterEntry[];
       };
+      request_task_deletion: { Args: { p_task_id: string; p_reason: string }; Returns: void };
+      resolve_task_deletion: { Args: { p_task_id: string; p_approve: boolean }; Returns: void };
+      cancel_task_deletion: { Args: { p_task_id: string }; Returns: void };
+      delete_own_task: { Args: { p_task_id: string }; Returns: void };
+      restore_task: { Args: { p_task_id: string }; Returns: void };
     };
   };
 }

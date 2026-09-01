@@ -4,17 +4,17 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, BellOff, ChevronDown } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { AppHeader } from "@/components/layout/app-header";
 import { BigStat, Card, EmptyLine, FlowChart, LegendRow, MeterRow, StackedBar } from "@/components/dashboard/cards";
+import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog";
 import { TaskPill } from "@/components/tasks/task-pill";
 import {
+  cancelTaskDeletion,
   markTaskRead,
+  resolveTaskDeletion,
   restoreTask,
   setTaskStatus,
-  softDeleteTask,
   toggleReminderDismissal,
 } from "@/app/tasks/actions";
 import {
@@ -104,27 +104,67 @@ export function DashboardApp({
     });
   }
 
-  function handleConfirmDelete() {
-    const task = deleteTarget;
-    if (!task) return;
+  function handleDeleted(task: TaskWithRelations) {
     setDeleteTarget(null);
+    router.refresh();
+    showToast({
+      message: "Task deleted",
+      actionLabel: "Undo",
+      onAction: () => {
+        startTransition(async () => {
+          await restoreTask(task.id);
+          router.refresh();
+        });
+      },
+    });
+  }
+
+  function handleRequested(task: TaskWithRelations) {
+    setDeleteTarget(null);
+    router.refresh();
+    const creator = roster.find((m) => m.id === task.created_by);
+    showToast({
+      message: `Delete requested — waiting on ${creator?.display_name ?? "the creator"}`,
+      actionLabel: "Withdraw",
+      onAction: () => handleCancelDeletion(task.id),
+    });
+  }
+
+  /*
+    Two paths behind one button, decided by who created the task. The creator
+    deletes; everybody else asks, and the dialog collects the reason. Which of
+    the two you get is worked out here rather than inside the dialog so the
+    card's own label can say the same thing before you tap it.
+
+    listRoster only returns active members, so a creator missing from it has
+    been deactivated — and then anyone may decide, or a pending request would
+    be stuck against that task forever.
+  */
+  function canDecide(task: TaskWithRelations) {
+    return task.created_by === me.id || !roster.some((m) => m.id === task.created_by);
+  }
+
+  function handleResolveDeletion(taskId: string, approve: boolean) {
     startTransition(async () => {
-      const result = await softDeleteTask(task.id);
+      const result = await resolveTaskDeletion(taskId, approve);
       if (!result.ok) {
         showToast({ message: result.error });
         return;
       }
       router.refresh();
-      showToast({
-        message: "Task deleted",
-        actionLabel: "Undo",
-        onAction: () => {
-          startTransition(async () => {
-            await restoreTask(task.id);
-            router.refresh();
-          });
-        },
-      });
+      showToast({ message: approve ? "Task deleted" : "Request declined — task kept" });
+    });
+  }
+
+  function handleCancelDeletion(taskId: string) {
+    startTransition(async () => {
+      const result = await cancelTaskDeletion(taskId);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      router.refresh();
+      showToast({ message: "Request withdrawn" });
     });
   }
 
@@ -276,6 +316,8 @@ export function DashboardApp({
                             onToggleExpand={() => handleToggleExpand(entry.task.id)}
                             onSetStatus={(status) => handleSetStatus(entry.task.id, status)}
                             onRequestDelete={() => setDeleteTarget(entry.task)}
+                            onResolveDeletion={(approve) => handleResolveDeletion(entry.task.id, approve)}
+                            onCancelDeletion={() => handleCancelDeletion(entry.task.id)}
                             onToggleReminder={() => handleToggleReminder(entry.task.id)}
                             roster={roster}
                           />
@@ -594,22 +636,14 @@ export function DashboardApp({
         </div>
       </div>
 
-      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
-        {deleteTarget && (
-          <>
-            <div className="text-section-heading text-pretty">Delete &ldquo;{deleteTarget.title}&rdquo;?</div>
-            <p className="text-[18px] leading-7 text-sub text-pretty">
-              This can&apos;t be undone once the undo message goes away.
-            </p>
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              Keep the task
-            </Button>
-            <Button variant="destructive" onClick={handleConfirmDelete}>
-              Delete it
-            </Button>
-          </>
-        )}
-      </Dialog>
+      <DeleteTaskDialog
+        task={deleteTarget}
+        canDecide={deleteTarget ? canDecide(deleteTarget) : false}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={handleDeleted}
+        onRequested={handleRequested}
+        onError={(message) => showToast({ message })}
+      />
     </div>
   );
 }

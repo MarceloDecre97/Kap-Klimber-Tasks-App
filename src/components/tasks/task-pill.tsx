@@ -55,6 +55,8 @@ export function TaskPill({
   onToggleExpand,
   onSetStatus,
   onRequestDelete,
+  onResolveDeletion,
+  onCancelDeletion,
   onToggleReminder,
   roster,
   lastActivityAt,
@@ -65,6 +67,10 @@ export function TaskPill({
   onToggleExpand: () => void;
   onSetStatus: (status: TaskStatus) => void;
   onRequestDelete: () => void;
+  /** The creator's answer to a pending request: delete it, or keep it. */
+  onResolveDeletion?: (approve: boolean) => void;
+  /** The requester withdrawing their own ask. */
+  onCancelDeletion?: () => void;
   /** Omitted where the reminder should render read-only. */
   onToggleReminder?: () => void;
   /** Needed to name and picture whoever liked a note. */
@@ -91,6 +97,19 @@ export function TaskPill({
     never late — it was delivered, and stamping it red forever would make
     the Complete list read as a wall of failures.
   */
+  /*
+    Who may decide. Normally the creator — but a task whose creator has been
+    deactivated would otherwise be undeletable by anybody, with any pending
+    request stuck against it forever. listRoster only returns active members,
+    so a creator missing from it is one who has been switched off.
+  */
+  const creatorActive = roster.some((m) => m.id === task.created_by);
+  const canDecide = task.created_by === meId || !creatorActive;
+  const pending = task.deletion_requested_at !== null;
+  const requester = roster.find((m) => m.id === task.deletion_requested_by) ?? null;
+  const creator = roster.find((m) => m.id === task.created_by) ?? null;
+  const iRequested = task.deletion_requested_by === meId;
+
   const timeline = buildTimeline(task);
   const noteCount = countNotes(task.notes);
   const overdueDays =
@@ -198,6 +217,18 @@ export function TaskPill({
           </span>
         )}
         {/*
+          A pending request is visible without opening the card. The task
+          itself carries on working normally — same bucket, same reminder,
+          same everything — because only the cleanup is waiting, never the
+          work.
+        */}
+        {pending && (
+          <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-danger px-2.5 text-[15px] leading-5 font-bold text-danger">
+            <Trash2 aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+            {canDecide ? "Delete requested" : "Delete pending"}
+          </span>
+        )}
+        {/*
           The reminder chip doubles as its own dismiss control, so a fired
           reminder can be marked handled from wherever the task appears —
           this component renders in both the Tasklist and the Dashboard.
@@ -237,6 +268,77 @@ export function TaskPill({
 
       {expanded && (
         <div className="flex flex-col gap-4 border-t-[1.5px] border-border pt-3">
+          {/*
+            The decision, where the task is — not in the notification that
+            announced it. Deciding whether something should exist needs to see
+            what it is, who is on it, and what has been happening on it, and a
+            dropdown row shows none of that.
+          */}
+          {pending && (
+            <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-danger bg-card p-3.5">
+              <p className="text-[17px] leading-6 text-fg text-pretty">
+                <span className="font-bold">
+                  {iRequested ? "You asked" : `${requester?.display_name ?? "Someone"} asked`}
+                </span>{" "}
+                to delete this task.
+              </p>
+              {task.deletion_reason && (
+                <p className="text-[17px] leading-6 text-sub text-pretty">
+                  &ldquo;{task.deletion_reason}&rdquo;
+                </p>
+              )}
+
+              {canDecide && onResolveDeletion ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="destructive"
+                    size="md"
+                    className="w-auto px-4"
+                    disabled={isPending}
+                    onClick={() => onResolveDeletion(true)}
+                  >
+                    Delete it
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="w-auto px-4"
+                    disabled={isPending}
+                    onClick={() => onResolveDeletion(false)}
+                  >
+                    Keep it
+                  </Button>
+                </div>
+              ) : iRequested && onCancelDeletion ? (
+                <>
+                  {/*
+                    The sentence first, the button under it — same shape as
+                    the creator's version above. Side by side, a long name
+                    wrapped and left the button sitting above its own
+                    explanation.
+                  */}
+                  <p className="text-[16px] leading-6 text-sub">
+                    Waiting on {creator?.display_name ?? "the creator"}.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      className="w-auto px-4"
+                      disabled={isPending}
+                      onClick={onCancelDeletion}
+                    >
+                      Withdraw
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-[16px] leading-6 text-sub">
+                  Waiting on {creator?.display_name ?? "the creator"}.
+                </p>
+              )}
+            </div>
+          )}
           {/*
             Below `sm` the label sits above its value rather than beside it:
             a 104px label column leaves roughly 150px for the value inside a
@@ -399,9 +501,13 @@ export function TaskPill({
                 Edit task
               </Button>
             </Link>
-            <Button variant="destructive" onClick={onRequestDelete}>
+            {/*
+              Only the creator deletes. Everyone else asks — and the label
+              says so, rather than offering an action that would be refused.
+            */}
+            <Button variant="destructive" onClick={onRequestDelete} disabled={pending}>
               <Trash2 aria-hidden className="size-5" />
-              Delete task
+              {pending ? "Delete already requested" : canDecide ? "Delete task" : "Request delete"}
             </Button>
           </div>
         </div>

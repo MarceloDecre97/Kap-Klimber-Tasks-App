@@ -30,6 +30,11 @@ function statusLabel(value: unknown): string {
   return STATUSES[value as TaskStatus]?.label ?? value;
 }
 
+function reasonOf(item: NotificationItem): string | null {
+  const reason = item.payload.reason;
+  return typeof reason === "string" && reason.trim() ? reason.trim() : null;
+}
+
 function dateLabel(value: unknown): string | null {
   return typeof value === "string" && value ? formatCalendarDate(value) : null;
 }
@@ -69,6 +74,17 @@ export function describeNotification(item: NotificationItem): NotificationCopy {
       return { headline: `${who} mentioned you on ${task}`, detail: noteDetail(item) };
     case "assigned":
       return { headline: `${who} assigned you to ${task}`, detail: null };
+    case "delete_requested":
+      return {
+        headline: `${who} wants to delete ${task}`,
+        // The reason is the whole point of the notification: it is what turns
+        // "somebody wants this gone" into a decision you can make from a phone.
+        detail: reasonOf(item) ?? "No reason given",
+      };
+    case "delete_denied":
+      return { headline: `${who} kept ${task}`, detail: reasonOf(item) };
+    case "deleted":
+      return { headline: `${who} deleted ${task}`, detail: null };
     case "status": {
       const from = statusLabel(item.payload.from);
       return {

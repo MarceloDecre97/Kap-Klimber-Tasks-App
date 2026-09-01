@@ -8,6 +8,8 @@ import {
   CalendarClock,
   CircleDot,
   MessageSquare,
+  Trash2,
+  Undo2,
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
@@ -33,6 +35,9 @@ const KIND_ICON: Record<NotificationKind, LucideIcon> = {
   assigned: UserPlus,
   status: CircleDot,
   due_date: CalendarClock,
+  delete_requested: Trash2,
+  delete_denied: Undo2,
+  deleted: Trash2,
   reminder_upcoming: Bell,
   reminder_due: Bell,
   due_soon: CalendarClock,
@@ -40,7 +45,13 @@ const KIND_ICON: Record<NotificationKind, LucideIcon> = {
 };
 
 /** The kinds that mean "act now" get the danger colour; nothing else does. */
-const URGENT_KINDS = new Set<NotificationKind>(["reminder_due", "overdue"]);
+const URGENT_KINDS = new Set<NotificationKind>([
+  "reminder_due",
+  "overdue",
+  // Somebody is waiting on you to decide, and the task sits in limbo until
+  // you do.
+  "delete_requested",
+]);
 
 /**
  * The app's one place where something finds you, rather than you finding it.
@@ -159,21 +170,16 @@ function NotificationRow({
   const Icon = KIND_ICON[item.kind] ?? Bell;
   const unread = !read && item.read_at === null;
 
-  return (
-    <Link
-      href={`/tasks?task=${item.task.id}`}
-      // The destination positions its own list on the task this is about.
-      // Next's scroll-on-navigate would fight that, and it reaches for
-      // scrollIntoView to do it — the one call that can move the app shell.
-      scroll={false}
-      onClick={onNavigate}
-      className={cn(
-        "flex gap-3 rounded-xl border-[1.5px] px-3 py-2.5 text-left",
-        // Same language as the unread marker on a note: a border, not a
-        // badge, so it reads at a glance without adding another symbol.
-        unread ? "border-brand bg-card" : "border-transparent bg-bg hover:bg-muted"
-      )}
-    >
+  const className = cn(
+    "flex w-full gap-3 rounded-xl border-[1.5px] px-3 py-2.5 text-left",
+    // Same language as the unread marker on a note: a border, not a
+    // badge, so it reads at a glance without adding another symbol.
+    unread ? "border-brand bg-card" : "border-transparent bg-bg",
+    !item.taskGone && "hover:bg-muted"
+  );
+
+  const inner = (
+    <>
       {/*
         One visual per row, not two. The actor's name is already the first
         word of the headline, so an avatar beside it would say the same thing
@@ -199,6 +205,24 @@ function NotificationRow({
           {formatTimestamp(item.created_at)}
         </span>
       </span>
+    </>
+  );
+
+  // Nothing to open: the task is gone, and for everyone but its creator it is
+  // gone for good. A link here would be a dead end dressed as a way forward.
+  if (item.taskGone) return <div className={className}>{inner}</div>;
+
+  return (
+    <Link
+      href={`/tasks?task=${item.task.id}`}
+      // The destination positions its own list on the task this is about.
+      // Next's scroll-on-navigate would fight that, and it reaches for
+      // scrollIntoView to do it — the one call that can move the app shell.
+      scroll={false}
+      onClick={onNavigate}
+      className={className}
+    >
+      {inner}
     </Link>
   );
 }

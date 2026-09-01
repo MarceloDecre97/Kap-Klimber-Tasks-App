@@ -1,6 +1,6 @@
 import { getCurrentMember } from "@/lib/get-current-member";
 import { listNotifications } from "@/lib/data/notifications";
-import { listCategories, listRoster, listTasks } from "@/lib/data/tasks";
+import { listCategories, listDeletedTasks, listRoster, listTasks } from "@/lib/data/tasks";
 import { TasksApp } from "@/components/tasks/tasks-app";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +16,14 @@ export default async function TasksPage({
 }) {
   const { supabase, member } = await getCurrentMember();
 
-  const [{ task }, tasks, roster, categories, notifications] = await Promise.all([
+  const [{ task }, tasks, roster, categories, notifications, deletedTasks] = await Promise.all([
     searchParams,
     listTasks(supabase),
     listRoster(supabase),
     listCategories(supabase),
     listNotifications(supabase),
+    // Only ever this member's own — enforced by RLS, not just by the query.
+    listDeletedTasks(supabase, member.id),
   ]);
 
   /*
@@ -42,6 +44,7 @@ export default async function TasksPage({
       categories={categories}
       me={member}
       notifications={notifications}
+      deletedTasks={deletedTasks}
       focusTaskId={focusTaskId}
     />
   );

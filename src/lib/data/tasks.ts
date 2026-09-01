@@ -1,7 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, Priority, TaskStatus } from "@/lib/supabase/database.types";
+import { DELETED_VISIBLE_DAYS } from "@/lib/tasks-view";
+import type { Database, Priority, TaskEventKind, TaskStatus } from "@/lib/supabase/database.types";
 
 export interface MemberSummary {
   id: string;
@@ -17,7 +18,7 @@ export interface MemberSummary {
  */
 export interface TaskEvent {
   id: string;
-  kind: "created" | "status" | "due_date" | "reminder";
+  kind: TaskEventKind;
   from_value: string | null;
   to_value: string | null;
   created_at: string;
@@ -52,6 +53,16 @@ export interface TaskWithRelations {
   reminder_dismissed_at: string | null;
   /** Who set the current reminder. Follows reminder_at, not the row. */
   reminder_set_by: string | null;
+  /**
+   * Set while somebody who did not create this task is waiting on its
+   * creator to approve deleting it. The task carries on working normally
+   * meanwhile — only the cleanup waits, never the work.
+   */
+  deletion_requested_by: string | null;
+  deletion_requested_at: string | null;
+  deletion_reason: string | null;
+  /** Set only in the creator's own Recently deleted list. */
+  deleted_at: string | null;
   due_date: string | null;
   created_at: string;
   updated_at: string;
@@ -70,7 +81,9 @@ export interface TaskWithRelations {
 }
 
 const TASK_SELECT = `
-  id, title, description, priority, status, reminder_at, reminder_dismissed_at, reminder_set_by, due_date, created_at, updated_at, completed_at, created_by,
+  id, title, description, priority, status, reminder_at, reminder_dismissed_at, reminder_set_by,
+  deletion_requested_by, deletion_requested_at, deletion_reason, deleted_at,
+  due_date, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
   reads:task_reads(last_read_at),
   events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
@@ -98,6 +111,10 @@ type RawTask = {
   reminder_at: string | null;
   reminder_dismissed_at: string | null;
   reminder_set_by: string | null;
+  deletion_requested_by: string | null;
+  deletion_requested_at: string | null;
+  deletion_reason: string | null;
+  deleted_at: string | null;
   due_date: string | null;
   created_at: string;
   updated_at: string;
@@ -112,7 +129,7 @@ type RawTask = {
 
 type RawTaskEvent = {
   id: string;
-  kind: "created" | "status" | "due_date" | "reminder";
+  kind: TaskEventKind;
   from_value: string | null;
   to_value: string | null;
   created_at: string;
@@ -195,6 +212,35 @@ export async function getTask(
 
   if (error) throw error;
   return data ? mapTask(data as unknown as RawTask) : null;
+}
+
+/**
+ * The creator's own bin.
+ *
+ * Only their tasks, and only for a fortnight — long enough to notice a
+ * mistake, short enough that the list stays a list. Nothing is erased when
+ * the window closes: the rows simply stop appearing here, so a genuine
+ * disaster is still recoverable from the database itself.
+ *
+ * RLS already refuses to return anyone else's deleted tasks, so the
+ * created_by filter below is belt to that braces rather than the rule.
+ */
+export async function listDeletedTasks(
+  supabase: SupabaseClient<Database>,
+  memberId: string
+): Promise<TaskWithRelations[]> {
+  const since = new Date(Date.now() - DELETED_VISIBLE_DAYS * 86_400_000).toISOString();
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .select(TASK_SELECT)
+    .eq("created_by", memberId)
+    .not("deleted_at", "is", null)
+    .gte("deleted_at", since)
+    .order("deleted_at", { ascending: false });
+
+  if (error) throw error;
+  return ((data ?? []) as unknown as RawTask[]).map(mapTask);
 }
 
 export async function listRoster(supabase: SupabaseClient<Database>): Promise<MemberSummary[]> {

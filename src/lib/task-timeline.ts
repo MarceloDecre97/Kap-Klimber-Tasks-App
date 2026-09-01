@@ -51,6 +51,23 @@ export function describeEvent(event: TaskEvent): string | null {
       if (!event.from_value) return `${who} set a reminder for ${to}`;
       return `${who} moved the reminder from ${formatTimestamp(event.from_value)} to ${to}`;
     }
+    /*
+      The deletion story, kept on the task rather than only in the
+      notifications that announced it — a notification gets dismissed, and
+      then nobody can say why something was or was not removed.
+    */
+    case "delete_requested":
+      return event.to_value
+        ? `${who} asked to delete this — ${event.to_value}`
+        : `${who} asked to delete this`;
+    case "delete_denied":
+      return `${who} kept this task`;
+    case "delete_cancelled":
+      return `${who} withdrew the request to delete this`;
+    case "deleted":
+      return `${who} deleted this task`;
+    case "restored":
+      return `${who} brought this task back`;
     default:
       return null;
   }
