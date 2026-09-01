@@ -66,6 +66,39 @@ const NOTIFICATION_SELECT = `
   note:task_notes(id, body, deleted_at)
 `;
 
+/*
+  A deleted task normally takes its notifications with it — there is nothing
+  left to open, and the rows stay in the table so a restore puts them back.
+
+  "This task was deleted" is the exception, and it has to be: it is the only
+  way the people who were working on it ever find out. A deleted task is also
+  invisible to everyone but its creator, so the join comes back empty for
+  exactly the people who need this row — which is why the title travels in the
+  payload rather than being read from the task.
+*/
+function toItem(row: RawNotification): NotificationItem | null {
+  const payload = row.payload ?? {};
+  const gone = !row.task || row.task.deleted_at !== null;
+  if (gone && row.kind !== "deleted") return null;
+
+  const title = row.task?.title ?? (typeof payload.title === "string" ? payload.title : null);
+  if (!title) return null;
+
+  return {
+    id: row.id,
+    kind: row.kind,
+    created_at: row.created_at,
+    read_at: row.read_at,
+    actor: row.actor,
+    task: { id: row.task_id, title },
+    taskGone: gone,
+    note: row.note
+      ? { id: row.note.id, body: row.note.body, deleted: row.note.deleted_at !== null }
+      : null,
+    payload,
+  };
+}
+
 /**
  * RLS already limits this to the caller's own rows — there is no member
  * filter here because there is no way to ask for anyone else's.
@@ -83,39 +116,80 @@ export async function listNotifications(
 
   const items: NotificationItem[] = [];
   for (const row of (data ?? []) as unknown as RawNotification[]) {
-    const payload = row.payload ?? {};
-    /*
-      A deleted task normally takes its notifications out of the inbox with
-      it — there is nothing left to open, and the rows stay in the table so a
-      restore puts them back.
-
-      "This task was deleted" is the exception, and it has to be: it is the
-      only way the people who were working on it ever find out. A deleted task
-      is also invisible to everyone but its creator, so the join comes back
-      empty for exactly the people who need this row — which is why the title
-      travels in the payload rather than being read from the task.
-    */
-    const gone = !row.task || row.task.deleted_at !== null;
-    if (gone && row.kind !== "deleted") continue;
-
-    const title =
-      row.task?.title ?? (typeof payload.title === "string" ? payload.title : null);
-    if (!title) continue;
-
-    items.push({
-      id: row.id,
-      kind: row.kind,
-      created_at: row.created_at,
-      read_at: row.read_at,
-      actor: row.actor,
-      task: { id: row.task_id, title },
-      taskGone: gone,
-      note: row.note
-        ? { id: row.note.id, body: row.note.body, deleted: row.note.deleted_at !== null }
-        : null,
-      payload,
-    });
+    const item = toItem(row);
+    if (item) items.push(item);
   }
 
   return { items, unread: items.filter((item) => item.read_at === null).length };
+}
+
+/* -------------------------------------------------------------------------
+   For the dispatcher
+
+   Read as the service role, so this sees everybody's rows — which is the
+   point, and also why it is the one query here that RLS does not constrain.
+   It returns the same NotificationItem the inbox renders, so the wording
+   that reaches a phone and the wording waiting in the app come from one
+   function and cannot drift apart.
+   ------------------------------------------------------------------------- */
+
+export interface PendingPush {
+  /** Who to send to. */
+  memberId: string;
+  item: NotificationItem;
+}
+
+/**
+ * Anything unsent from the last hour.
+ *
+ * The window matters: if the dispatcher has been down, a phone should not
+ * suddenly buzz forty times about an afternoon that has already happened.
+ * Older rows are left unstamped and simply never pushed — the inbox still
+ * holds them.
+ */
+const PUSH_WINDOW_MINUTES = 60;
+const PUSH_BATCH = 200;
+
+export async function listPendingPushes(
+  admin: SupabaseClient<Database>
+): Promise<PendingPush[]> {
+  const since = new Date(Date.now() - PUSH_WINDOW_MINUTES * 60_000).toISOString();
+
+  const { data, error } = await admin
+    .from("notifications")
+    .select(`member_id, ${NOTIFICATION_SELECT}`)
+    .is("pushed_at", null)
+    .gte("created_at", since)
+    .order("created_at", { ascending: true })
+    .limit(PUSH_BATCH);
+
+  if (error) throw error;
+
+  const pending: PendingPush[] = [];
+  for (const row of (data ?? []) as unknown as (RawNotification & { member_id: string })[]) {
+    const item = toItem(row);
+    // Same rule as the inbox: a notification about a task that is gone has
+    // nowhere to send you, unless being gone is the news.
+    if (item) pending.push({ memberId: row.member_id, item });
+  }
+  return pending;
+}
+
+/**
+ * Marks rows as pushed whether or not a message actually went anywhere.
+ *
+ * Deliberate: a member with no device, or one whose only phone has been
+ * wiped, must not leave rows the dispatcher re-examines every minute forever.
+ * The inbox is what guarantees nothing is lost; push is best-effort on top.
+ */
+export async function markPushed(
+  admin: SupabaseClient<Database>,
+  ids: string[]
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await admin
+    .from("notifications")
+    .update({ pushed_at: new Date().toISOString() })
+    .in("id", ids);
+  if (error) throw error;
 }

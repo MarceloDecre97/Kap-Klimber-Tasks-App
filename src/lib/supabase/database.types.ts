@@ -168,6 +168,27 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      push_subscriptions: {
+        Row: {
+          id: string;
+          member_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          user_agent: string | null;
+          created_at: string;
+          last_success_at: string | null;
+          failure_count: number;
+        };
+        Insert: Partial<Database["public"]["Tables"]["push_subscriptions"]["Row"]> & {
+          member_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["push_subscriptions"]["Row"]>;
+        Relationships: [];
+      };
       notifications: {
         Row: {
           id: string;
@@ -185,8 +206,12 @@ export interface Database {
         };
         /** Rows come from database triggers only — never from the app. */
         Insert: never;
-        /** The one permitted change is read_at; a trigger pins the rest. */
-        Update: { read_at?: string | null };
+        /**
+         * The one change a member may make is read_at — a trigger pins the
+         * rest. The delivery stamps are writable only by the service role,
+         * which RLS does not apply to.
+         */
+        Update: { read_at?: string | null; pushed_at?: string | null; emailed_at?: string | null };
         Relationships: [];
       };
       task_reads: {
@@ -214,6 +239,8 @@ export interface Database {
       cancel_task_deletion: { Args: { p_task_id: string }; Returns: void };
       delete_own_task: { Args: { p_task_id: string }; Returns: void };
       restore_task: { Args: { p_task_id: string }; Returns: void };
+      /** Dispatcher only — not granted to `authenticated`. */
+      increment_push_failure: { Args: { p_id: string }; Returns: void };
     };
   };
 }

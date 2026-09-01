@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, LogOut } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { PushSwitch } from "@/components/settings/push-switch";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { signOut } from "@/app/settings/actions";
 
@@ -36,6 +37,11 @@ export function SettingsView({
             <span className="text-card-title text-fg">{member.display_name}</span>
             <span className="text-[16px] leading-[22px] text-sub">{member.email}</span>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div className="text-field-label">Notifications</div>
+          <PushSwitch />
         </div>
 
         <div className="flex flex-col gap-3">
