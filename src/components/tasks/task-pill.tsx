@@ -17,9 +17,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
+import { MentionTextarea } from "@/components/tasks/mention-textarea";
 import { NoteBody } from "@/components/tasks/note-body";
-import { Textarea } from "@/components/ui/input";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
+import { visibleLength } from "@/lib/mentions";
 import { reminderState } from "@/lib/reminders";
 import { buildTimeline } from "@/lib/task-timeline";
 import { countNotes, daysSince } from "@/lib/tasks-view";
@@ -96,6 +97,13 @@ export function TaskPill({
     task.due_date && task.status !== "complete"
       ? Math.max(0, -daysBetweenKeys(zonedDateKey(new Date()), task.due_date))
       : 0;
+
+  /*
+    Counted as it reads, not as it is stored: a mention is about fifty
+    characters on disk and eight on screen, and charging the writer fifty for
+    typing a teammate's name would make the limit inexplicable.
+  */
+  const noteLength = visibleLength(noteBody);
 
   function submitNote() {
     const body = noteBody.trim();
@@ -338,41 +346,36 @@ export function TaskPill({
               does too, for anyone typing at a keyboard.
             */}
             <div className="flex flex-col gap-2">
-              <Textarea
+              <MentionTextarea
                 value={noteBody}
-                onChange={(event) => setNoteBody(event.target.value)}
-                placeholder="What happened? Enter starts a new line."
+                onValueChange={setNoteBody}
+                roster={roster}
+                onSubmit={submitNote}
+                placeholder="What happened? Type @ to name someone."
                 aria-label="Add a note"
                 rows={3}
-                maxLength={NOTE_MAX}
                 className="min-h-[104px] resize-y"
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                    event.preventDefault();
-                    submitNote();
-                  }
-                }}
               />
               <div className="flex items-center justify-between gap-3">
                 <span
                   aria-live="polite"
                   className={cn(
                     "text-[15px] leading-5 font-bold tabular-nums",
-                    noteBody.length >= NOTE_MAX
+                    noteLength >= NOTE_MAX
                       ? "text-danger"
-                      : noteBody.length > NOTE_LONG
+                      : noteLength > NOTE_LONG
                         ? "text-accent"
                         : "text-sub"
                   )}
                 >
                   {/* Only worth showing once it is close to mattering. */}
-                  {noteBody.length > NOTE_LONG ? `${noteBody.length}/${NOTE_MAX}` : ""}
+                  {noteLength > NOTE_LONG ? `${noteLength}/${NOTE_MAX}` : ""}
                 </span>
                 <Button
                   variant="secondary"
                   size="md"
                   className="w-auto shrink-0 px-5"
-                  disabled={isPending || !noteBody.trim()}
+                  disabled={isPending || !noteBody.trim() || noteLength > NOTE_MAX}
                   onClick={submitNote}
                 >
                   Add note
@@ -539,12 +542,13 @@ function NoteRow({
 
         {editing ? (
           <div className="flex flex-col gap-2">
-            <Textarea
+            <MentionTextarea
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onValueChange={setDraft}
+              roster={roster}
+              onSubmit={saveEdit}
               aria-label="Edit note"
               rows={3}
-              maxLength={NOTE_MAX}
               className="min-h-[96px] resize-y"
             />
             <div className="flex flex-wrap gap-2">
@@ -684,20 +688,15 @@ function NoteRow({
 
       {replying && (
         <div className="ml-4 flex flex-col gap-2 border-l-[1.5px] border-border pl-3">
-          <Textarea
+          <MentionTextarea
             value={replyBody}
-            onChange={(event) => setReplyBody(event.target.value)}
+            onValueChange={setReplyBody}
+            roster={roster}
+            onSubmit={submitReply}
             placeholder={`Reply to ${note.member?.display_name ?? "this note"}…`}
             aria-label="Write a reply"
             rows={2}
-            maxLength={NOTE_MAX}
             className="min-h-[80px] resize-y"
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                event.preventDefault();
-                submitReply();
-              }
-            }}
           />
           <div className="flex flex-wrap gap-2">
             <Button

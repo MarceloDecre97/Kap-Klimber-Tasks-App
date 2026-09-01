@@ -12,11 +12,19 @@ import { createPortal } from "react-dom";
  * panel nested inside that row gets silently cut off. Escaping via a
  * portal + position:fixed sidesteps that entirely.
  */
+export interface PanelAnchor {
+  /** Where the panel goes when it opens downward. */
+  top: number;
+  left: number;
+  /** The trigger's own top edge — what an upward panel is measured from. */
+  triggerTop: number;
+}
+
 export function useFloatingPanel<T extends HTMLElement = HTMLButtonElement>() {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<T>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<{ top: number; left: number } | null>(null);
+  const [style, setStyle] = useState<PanelAnchor | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -24,7 +32,7 @@ export function useFloatingPanel<T extends HTMLElement = HTMLButtonElement>() {
     function place() {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      setStyle({ top: rect.bottom + 8, left: rect.left });
+      setStyle({ top: rect.bottom + 8, left: rect.left, triggerTop: rect.top });
     }
     place();
 
@@ -41,31 +49,49 @@ export function useFloatingPanel<T extends HTMLElement = HTMLButtonElement>() {
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", place);
+    /*
+      The on-screen keyboard does not fire `resize` on iOS — `innerHeight`
+      stays exactly as it was while half the screen disappears. The visual
+      viewport is the only thing that reports it, and a panel anchored to a
+      text field has to know, or it opens underneath the keyboard.
+    */
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", place);
+    vv?.addEventListener("scroll", place);
+
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", place);
+      vv?.removeEventListener("resize", place);
+      vv?.removeEventListener("scroll", place);
     };
   }, [open]);
 
   return { open, setOpen, triggerRef, panelRef, style };
 }
 
+/** Below this, a downward panel is not worth opening — flip it instead. */
+const MIN_ROOM_BELOW = 200;
+
 export function FloatingPanel({
   panelRef,
   style,
   width,
   maxHeight,
+  flip = false,
   role = "listbox",
   className,
   children,
 }: {
   panelRef: RefObject<HTMLDivElement | null>;
-  style: { top: number; left: number } | null;
+  style: PanelAnchor | null;
   /** Preferred width; narrowed to fit when the screen is smaller. */
   width: number;
   /** Optional cap on top of the viewport clamp, for short option lists. */
   maxHeight?: number;
+  /** Allow opening upward when the space below is too tight — see below. */
+  flip?: boolean;
   /** Panels that are not a list of options say what they actually are. */
   role?: string;
   className?: string;
@@ -87,8 +113,19 @@ export function FloatingPanel({
     keeps a panel opened near the bottom of the screen usable rather than
     collapsing it to nothing; `contain` stops that inner scroll from
     chaining out to the task list behind it once it hits an end.
+
+    "Room" is measured against the *visual* viewport, not the layout one, so
+    the space taken by an open keyboard counts as gone rather than as
+    available. Placement still uses layout coordinates, which is what
+    position:fixed resolves against.
   */
-  const room = Math.max(160, window.innerHeight - style.top - margin);
+  const vv = window.visualViewport;
+  const visibleBottom = (vv?.offsetTop ?? 0) + (vv?.height ?? window.innerHeight);
+  const roomBelow = visibleBottom - style.top - margin;
+  const roomAbove = style.triggerTop - (vv?.offsetTop ?? 0) - margin;
+
+  const goUp = flip && roomBelow < MIN_ROOM_BELOW && roomAbove > roomBelow;
+  const room = Math.max(160, goUp ? roomAbove : roomBelow);
 
   return createPortal(
     <div
@@ -96,7 +133,11 @@ export function FloatingPanel({
       role={role}
       style={{
         position: "fixed",
-        top: style.top,
+        // Anchoring by `bottom` when flipped avoids having to know the
+        // panel's height before it has rendered.
+        ...(goUp
+          ? { bottom: window.innerHeight - style.triggerTop + 8 }
+          : { top: style.top }),
         left,
         width: panelWidth,
         maxHeight: Math.min(room, maxHeight ?? Infinity),

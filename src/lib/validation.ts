@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { visibleLength } from "@/lib/mentions";
 
 export const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email address.");
 
@@ -30,16 +31,39 @@ export const taskInputSchema = z.object({
 
 export type TaskInput = z.infer<typeof taskInputSchema>;
 
+/**
+ * A note is limited by what it reads as, not by what it stores.
+ *
+ * A mention costs about fifty characters on disk and eight on screen, so
+ * counting the stored form would charge someone fifty for typing a
+ * teammate's name — a limit they could hit with a note that visibly has room
+ * left. The raw cap above it is a bound on the column, not a rule anyone is
+ * meant to meet: a note at the visible limit made entirely of mentions is
+ * still well inside it.
+ */
+const NOTE_VISIBLE_MAX = 2000;
+const NOTE_RAW_MAX = 12000;
+
+const noteBody = z
+  .string()
+  .trim()
+  .max(NOTE_RAW_MAX)
+  .refine((body) => visibleLength(body) <= NOTE_VISIBLE_MAX, {
+    message: `Keep a note under ${NOTE_VISIBLE_MAX} characters.`,
+  });
+
 export const noteInputSchema = z.object({
   taskId: z.string().uuid(),
-  body: z.string().trim().min(1, "Say what happened.").max(2000),
+  body: noteBody.refine((body) => body.length > 0, { message: "Say what happened." }),
   /** Present when this note is a reply to another. */
   parentNoteId: z.string().uuid().optional(),
 });
 
 export const noteEditSchema = z.object({
   noteId: z.string().uuid(),
-  body: z.string().trim().min(1, "A note can't be emptied — say what happened.").max(2000),
+  body: noteBody.refine((body) => body.length > 0, {
+    message: "A note can't be emptied — say what happened.",
+  }),
 });
 
 export const taskFiltersSchema = z.object({

@@ -1,4 +1,5 @@
 import { STATUSES } from "@/lib/constants";
+import { stripMentions } from "@/lib/mentions";
 import { formatCalendarDate, formatTimestamp } from "@/lib/utils";
 import type { NotificationItem } from "@/lib/data/notifications";
 import type { TaskStatus } from "@/lib/supabase/database.types";
@@ -38,7 +39,11 @@ function dateLabel(value: unknown): string | null {
  * first line rather than the first N characters: "Ordered 4 anchors" followed
  * by a shopping list reads far better cut at the newline than mid-list.
  */
-function excerpt(body: string): string {
+function excerpt(raw: string): string {
+  // Mentions are stored as `@[Keith B](uuid)`. Quoted flat — here, and later
+  // in a push body or an email — they have to read as "@Keith B" or the
+  // notification shows a teammate a uuid.
+  const body = stripMentions(raw);
   const firstLine = body.split("\n").find((line) => line.trim().length > 0)?.trim() ?? "";
   const hasMore = body.trim().includes("\n");
   if (firstLine.length > EXCERPT_LIMIT) return `${firstLine.slice(0, EXCERPT_LIMIT).trimEnd()}…`;

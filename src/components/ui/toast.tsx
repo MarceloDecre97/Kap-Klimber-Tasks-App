@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ToastOptions {
@@ -21,18 +21,35 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+/** Long enough to read and reach the button; short enough to stop nagging. */
+const ACTION_MS = 5000;
+/** Nothing to decide — this only has to be read. */
+const PLAIN_MS = 3500;
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastState | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idRef = useRef(0);
 
+  /*
+    Two lifetimes, because these are two different things.
+
+    A message with a button is asking you to decide — long enough to read it
+    and reach the button on a phone, and no longer, because it is sitting on
+    top of the list you are trying to use. One without a button is only being
+    read. Both used to be eight seconds, which was too long for either.
+
+    The × matters more than the number. Most of the annoyance in a banner is
+    not its duration, it is having no way to get rid of it.
+  */
   const showToast = useCallback((options: ToastOptions) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     const id = ++idRef.current;
     setToast({ ...options, id });
-    timerRef.current = setTimeout(() => {
-      setToast((current) => (current?.id === id ? null : current));
-    }, options.durationMs ?? 8000);
+    timerRef.current = setTimeout(
+      () => setToast((current) => (current?.id === id ? null : current)),
+      options.durationMs ?? (options.actionLabel ? ACTION_MS : PLAIN_MS)
+    );
   }, []);
 
   return (
@@ -54,18 +71,33 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <CheckCircle2 aria-hidden className="size-5 shrink-0" />
             {toast.message}
           </span>
-          {toast.actionLabel && (
+          <span className="flex shrink-0 items-center gap-2">
+            {toast.actionLabel && (
+              <button
+                type="button"
+                onClick={() => {
+                  toast.onAction?.();
+                  setToast(null);
+                }}
+                className="h-14 shrink-0 rounded-full border-[1.5px] border-on-prim px-5 text-chip cursor-pointer"
+              >
+                {toast.actionLabel}
+              </button>
+            )}
+            {/*
+              Deliberately separate from the action, and never merged into it:
+              a dismiss that could undo a delete by accident is worse than no
+              dismiss at all.
+            */}
             <button
               type="button"
-              onClick={() => {
-                toast.onAction?.();
-                setToast(null);
-              }}
-              className="h-14 shrink-0 rounded-full border-[1.5px] border-on-prim px-5 text-chip cursor-pointer"
+              onClick={() => setToast(null)}
+              aria-label="Dismiss"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-on-prim cursor-pointer hover:bg-white/10"
             >
-              {toast.actionLabel}
+              <X aria-hidden className="size-5" />
             </button>
-          )}
+          </span>
         </div>
       )}
     </ToastContext.Provider>

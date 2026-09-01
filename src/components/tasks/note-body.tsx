@@ -1,7 +1,11 @@
+import { Fragment } from "react";
+import { splitMentions } from "@/lib/mentions";
+import { cn } from "@/lib/utils";
+
 /**
  * A note's text as written.
  *
- * Two things happen here that a plain `{body}` would get wrong:
+ * Three things happen here that a plain `{body}` would get wrong:
  *
  * `whitespace-pre-wrap` keeps the line breaks someone actually typed. HTML
  * collapses runs of whitespace by default, so without it a four-line note
@@ -11,6 +15,10 @@
  * URLs become links. Notes are where suppliers, products and documents get
  * shared, and a pasted address that cannot be clicked has to be selected and
  * copied by hand on a phone.
+ *
+ * Mentions become chips. A mention is stored as `@[Keith B](uuid)` so the
+ * database can tell which Keith to notify — that token is never something a
+ * person should have to look at.
  */
 
 /**
@@ -22,14 +30,45 @@
  */
 const URL_PATTERN = /(https?:\/\/[^\s<>[\]()]+[^\s<>[\]().,;:!?'"])/gi;
 
+/**
+ * Mentions are resolved first and links only inside what is left. Doing it
+ * the other way round would let the uuid inside a mention token be scanned
+ * for URLs, and one combined pattern would have to describe both grammars at
+ * once to no benefit.
+ */
 export function NoteBody({ body, className }: { body: string; className?: string }) {
+  return (
+    <div className={className}>
+      {splitMentions(body).map((segment, index) =>
+        segment.kind === "mention" ? (
+          <span
+            key={index}
+            className={cn(
+              "rounded px-1 py-px font-bold text-brand",
+              // A tint rather than a border or a pill: a mention sits inside a
+              // sentence, and anything with edges would break the line it is
+              // part of into pieces.
+              "bg-brand/10"
+            )}
+          >
+            @{segment.name}
+          </span>
+        ) : (
+          <Linkified key={index} text={segment.text} />
+        )
+      )}
+    </div>
+  );
+}
+
+function Linkified({ text }: { text: string }) {
   // `split` with one capture group interleaves text and matches, so every
   // odd index is a URL. No second pass over the string, and no regex state
   // to get wrong — a `g` flag carries `lastIndex` between `.test()` calls.
-  const parts = body.split(URL_PATTERN);
+  const parts = text.split(URL_PATTERN);
 
   return (
-    <div className={className}>
+    <>
       {parts.map((part, index) =>
         index % 2 === 1 ? (
           <a
@@ -42,9 +81,9 @@ export function NoteBody({ body, className }: { body: string; className?: string
             {part}
           </a>
         ) : (
-          part
+          <Fragment key={index}>{part}</Fragment>
         )
       )}
-    </div>
+    </>
   );
 }
