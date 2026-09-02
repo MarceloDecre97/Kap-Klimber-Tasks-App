@@ -196,15 +196,23 @@ export async function listPendingPushes(
  * Deliberate: a member with no device, or one whose only phone has been
  * wiped, must not leave rows the dispatcher re-examines every minute forever.
  * The inbox is what guarantees nothing is lost; push is best-effort on top.
+ *
+ * Through an RPC rather than a plain update, and that is not a style choice.
+ * A direct update here did nothing at all: the service role bypasses row-level
+ * security but not triggers, and guard_notification_update pins pushed_at back
+ * to its old value on every write. Postgres reported success, the route
+ * returned ok, and the same notifications were re-sent every minute for an
+ * hour. See 0017_mark_pushed.sql.
+ *
+ * Returns the number of rows actually stamped, so a repeat of that failure
+ * shows up in the route's own response instead of hiding behind a 200.
  */
 export async function markPushed(
   admin: SupabaseClient<Database>,
   ids: string[]
-): Promise<void> {
-  if (ids.length === 0) return;
-  const { error } = await admin
-    .from("notifications")
-    .update({ pushed_at: new Date().toISOString() })
-    .in("id", ids);
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { data, error } = await admin.rpc("mark_notifications_pushed", { p_ids: ids });
   if (error) throw error;
+  return data ?? 0;
 }

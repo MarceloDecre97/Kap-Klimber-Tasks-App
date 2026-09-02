@@ -242,6 +242,11 @@ export interface Database {
       restore_task: { Args: { p_task_id: string }; Returns: void };
       /** Dispatcher only — not granted to `authenticated`. */
       increment_push_failure: { Args: { p_id: string }; Returns: void };
+      /**
+       * Dispatcher only. Stamps pushed_at past the guard trigger, which pins
+       * it for everybody else — including the service role.
+       */
+      mark_notifications_pushed: { Args: { p_ids: string[] }; Returns: number };
     };
   };
 }

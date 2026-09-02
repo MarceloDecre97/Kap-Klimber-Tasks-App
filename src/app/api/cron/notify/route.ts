@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     re-reads every minute for the rest of the hour. Nothing is lost by this:
     the inbox is the record, push is best-effort on top of it.
   */
-  await markPushed(admin, pending.map((p) => p.item.id));
+  const stamped = await markPushed(admin, pending.map((p) => p.item.id));
 
   if (delivered.size > 0) {
     // A device that just worked has no failure history worth keeping.
@@ -130,6 +130,10 @@ export async function POST(request: Request) {
     ok: true,
     considered: pending.length,
     sent,
+    // Reported because it once silently stayed at zero while everything else
+    // said the run had worked. If `stamped` is ever below `considered`, the
+    // same notifications are about to be sent again next minute.
+    stamped,
     expired: expired.length,
     failed: failed.length,
   });
