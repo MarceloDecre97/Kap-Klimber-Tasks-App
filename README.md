@@ -53,6 +53,35 @@ tapped member's email is resolved server-side.
    ```
    Open [http://localhost:3000](http://localhost:3000).
 
+## Notification environment variables
+
+None of these are needed to run the app. The bell works without any of them;
+each one switches on a further channel, and the code says "not configured"
+rather than failing when one is missing.
+
+| Variable | Type in Vercel | What it does |
+| --- | --- | --- |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Config | Identifies the app to push services. Public by design. |
+| `VAPID_PRIVATE_KEY` | **Secret** | Signs each push. |
+| `VAPID_SUBJECT` | Config | A `mailto:` a push service can reach. Never shown to anyone. |
+| `CRON_SECRET` | **Secret** | Proves a call to `/api/cron/notify` came from the scheduled job. Must match the pg_cron job exactly. |
+| `RESEND_API_KEY` | **Secret** | Sends email. Create it with **Sending access** only, scoped to the verified subdomain — a full-access key could also read the account and manage domains. |
+| `APP_URL` | Config, optional | Where links in emails point. Vercel supplies its own production domain automatically, so this is only needed for a custom domain. |
+
+Adding a variable in Vercel does not affect the running deployment: it is
+picked up on the next build, so redeploy afterwards.
+
+### The two scheduled jobs
+
+Both live in `supabase/scheduling/` and are run by hand in the SQL editor,
+not by a migration.
+
+- `notify-every-minute.sql` wakes the dispatcher, which sends push and email.
+  It carries a URL and the cron secret, which is why it is not committed with
+  real values in it.
+- `scheduled-rules-every-minute.sql` runs the reminder and due-date rules.
+  Nothing to fill in — it never leaves the database.
+
 ## Provisioning team members
 
 There's no admin UI yet (it's planned — see below), so the roster is

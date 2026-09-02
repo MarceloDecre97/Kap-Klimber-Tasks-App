@@ -247,6 +247,10 @@ export interface Database {
        * it for everybody else — including the service role.
        */
       mark_notifications_pushed: { Args: { p_ids: string[] }; Returns: number };
+      /** Dispatcher only. The emailed_at twin of mark_notifications_pushed. */
+      mark_notifications_emailed: { Args: { p_ids: string[] }; Returns: number };
+      /** Scheduler only — writes notification rows, never granted to a member. */
+      run_scheduled_notifications: { Args: Record<string, never>; Returns: unknown };
     };
   };
 }

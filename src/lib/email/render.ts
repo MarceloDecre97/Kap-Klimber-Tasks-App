@@ -1,0 +1,152 @@
+import { describeNotification } from "@/lib/notifications-view";
+import type { NotificationItem } from "@/lib/data/notifications";
+import type { NotificationKind } from "@/lib/supabase/database.types";
+
+/**
+ * Which notifications are worth an email.
+ *
+ * Not all of them, and that is the whole design. Email carries the dated,
+ * scheduled things and the completions — what you would want a record of, and
+ * what you might act on days later. The chatter (comments, mentions,
+ * assignments, deletions) stays on the bell and the phone, where it is
+ * timely and where it belongs.
+ *
+ * Mirroring push into email would guarantee both get filtered within a week,
+ * and then the one that mattered goes to the same folder as the rest.
+ */
+const EMAIL_KINDS = new Set<NotificationKind>([
+  "reminder_upcoming",
+  "reminder_due",
+  "due_soon",
+  "overdue",
+]);
+
+/**
+ * A completed task is worth an email, but "completed" is not a notification
+ * kind — it is a status change that happens to land on Complete. Reading it
+ * that way rather than inventing a second kind keeps the bell and the inbox
+ * incapable of disagreeing about what happened.
+ */
+export function isEmailable(item: NotificationItem): boolean {
+  if (EMAIL_KINDS.has(item.kind)) return true;
+  return item.kind === "status" && item.payload.to === "complete";
+}
+
+export interface RenderedEmail {
+  subject: string;
+  html: string;
+  text: string;
+}
+
+/** Everything user-supplied goes through this before it reaches the HTML. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/*
+  Table-based, inline-styled, no external stylesheet and no web font.
+
+  Every one of those is a concession to email clients rather than a taste:
+  Outlook ignores most modern CSS, Gmail strips <style> blocks in some
+  contexts, and a font that fails to load silently is worse than one that was
+  never asked for. The colours are the app's own so the two read as one thing.
+*/
+const BRAND = "#87252b";
+const FG = "#020617";
+const SUB = "#475569";
+const BORDER = "#e2e8f0";
+const FONT = "Helvetica, Arial, sans-serif";
+
+function row(item: NotificationItem, origin: string | null): string {
+  const { headline, detail } = describeNotification(item);
+  const href = origin && !item.taskGone ? `${origin}/tasks?task=${item.task.id}` : null;
+
+  const title = href
+    ? `<a href="${escapeHtml(href)}" style="color:${BRAND};text-decoration:none;font-weight:bold">${escapeHtml(headline)}</a>`
+    : `<span style="font-weight:bold">${escapeHtml(headline)}</span>`;
+
+  return `
+    <tr>
+      <td style="padding:14px 0;border-bottom:1px solid ${BORDER};font-family:${FONT};font-size:16px;line-height:24px;color:${FG}">
+        ${title}
+        ${detail ? `<div style="margin-top:4px;font-size:15px;line-height:22px;color:${SUB}">${escapeHtml(detail)}</div>` : ""}
+      </td>
+    </tr>`;
+}
+
+/**
+ * One email per person per run, not one per notification.
+ *
+ * Three things happening in the same minute is one email listing three lines.
+ * Three separate emails about one afternoon is how a person decides the app
+ * is not worth having in their inbox.
+ */
+export function renderDigest(
+  name: string,
+  items: NotificationItem[],
+  origin: string | null
+): RenderedEmail {
+  const first = describeNotification(items[0]!);
+  // The subject is the whole notification for anyone reading on a lock
+  // screen, so a single item says exactly what happened rather than a count.
+  const subject =
+    items.length === 1 ? first.headline : `${items.length} updates on your tasks`;
+
+  const rows = items.map((item) => row(item, origin)).join("");
+  const openLink = origin
+    ? `<p style="margin:28px 0 0;font-family:${FONT};font-size:15px;line-height:22px">
+         <a href="${escapeHtml(origin)}/tasks" style="color:${BRAND}">Open Kap Klimber Tasks</a>
+       </p>`
+    : "";
+
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f8fafc">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc">
+    <tr><td align="center" style="padding:24px 12px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="max-width:560px;background:#ffffff;border:1px solid ${BORDER};border-radius:12px;padding:24px">
+        <tr><td style="font-family:${FONT};font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${BRAND};font-weight:bold;padding-bottom:6px">
+          Kap Klimber Tasks
+        </td></tr>
+        <tr><td style="font-family:${FONT};font-size:18px;line-height:26px;color:${FG};padding-bottom:8px">
+          Hello ${escapeHtml(name)},
+        </td></tr>
+        <tr><td>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+          ${openLink}
+        </td></tr>
+        <tr><td style="padding-top:24px;font-family:${FONT};font-size:13px;line-height:20px;color:${SUB}">
+          You get these because you created or were assigned to these tasks.
+          ${origin ? `Change what reaches you in <a href="${escapeHtml(origin)}/settings" style="color:${SUB}">Settings</a>.` : ""}
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  // Not a fallback nobody reads: a plain-text part is one of the things spam
+  // filters look for, and some people genuinely read mail this way.
+  const lines = items.map((item) => {
+    const { headline, detail } = describeNotification(item);
+    const link = origin && !item.taskGone ? `\n  ${origin}/tasks?task=${item.task.id}` : "";
+    return `* ${headline}${detail ? `\n  ${detail}` : ""}${link}`;
+  });
+
+  const text = [
+    `Hello ${name},`,
+    "",
+    ...lines,
+    "",
+    origin ? `Open Kap Klimber Tasks: ${origin}/tasks` : "",
+    "",
+    "You get these because you created or were assigned to these tasks.",
+  ]
+    .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
+    .join("\n");
+
+  return { subject, html, text };
+}

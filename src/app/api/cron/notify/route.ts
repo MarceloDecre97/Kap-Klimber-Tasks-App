@@ -1,10 +1,20 @@
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { listPendingPushes, markPushed } from "@/lib/data/notifications";
+import {
+  listPendingEmails,
+  listPendingPushes,
+  markEmailed,
+  markPushed,
+} from "@/lib/data/notifications";
 import { getCronSecret, getVapidConfig } from "@/lib/push/config";
 import { sendPush, type PushTarget } from "@/lib/push/send";
+import { appOrigin, getEmailConfig } from "@/lib/email/config";
+import { sendEmail } from "@/lib/email/send";
+import { isEmailable, renderDigest } from "@/lib/email/render";
 import { describeNotification } from "@/lib/notifications-view";
 import type { PendingPush } from "@/lib/data/notifications";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
 
 /**
  * Node, not edge: web-push signs each request with the VAPID private key and
@@ -45,16 +55,26 @@ export async function POST(request: Request) {
   if (!authorised(request)) {
     return Response.json({ error: "unauthorised" }, { status: 401 });
   }
+  const admin = createAdminClient();
+
+  /*
+    Two channels, run one after the other, each independently skippable.
+
+    They used to be one, and the route returned early when push was not
+    configured — which would now have meant that setting up email did nothing
+    at all until VAPID keys existed too. Neither channel is a prerequisite for
+    the other, and the route should not invent a dependency between them.
+  */
+  const email = await dispatchEmail(admin);
+
   if (!getVapidConfig()) {
     // Not an error: the app runs perfectly well before anyone has set the
     // keys up. Saying so plainly beats a 500 that looks like a bug.
-    return Response.json({ ok: true, skipped: "push is not configured" });
+    return Response.json({ ok: true, push: "not configured", email });
   }
-
-  const admin = createAdminClient();
   const pending = await listPendingPushes(admin);
   if (pending.length === 0) {
-    return Response.json({ ok: true, considered: 0, sent: 0 });
+    return Response.json({ ok: true, considered: 0, sent: 0, email });
   }
 
   // One query for every device involved, rather than one per notification: a
@@ -136,6 +156,7 @@ export async function POST(request: Request) {
     stamped,
     expired: expired.length,
     failed: failed.length,
+    email,
   });
 }
 
@@ -154,5 +175,83 @@ function renderPush(entry: PendingPush) {
     url: entry.item.taskGone ? "/dashboard" : `/tasks?task=${entry.item.task.id}`,
     tag: `task:${entry.item.task.id}`,
     at: entry.item.created_at,
+  };
+}
+
+/**
+ * The email half.
+ *
+ * Runs on the same tick as push, because a second cron job would mean a
+ * second URL and a second secret for one more thing that can be mistyped —
+ * and the two channels are reading the same table anyway.
+ *
+ * Deliberately narrow. Only the dated, scheduled kinds and completions are
+ * emailed; the chatter stays on the bell and the phone. See isEmailable.
+ */
+async function dispatchEmail(admin: SupabaseClient<Database>) {
+  if (!getEmailConfig()) return { skipped: "not configured" };
+
+  const pending = await listPendingEmails(admin);
+  if (pending.length === 0) return { considered: 0, sent: 0, stamped: 0 };
+
+  /*
+    Everything is stamped, including what was never worth an email. A comment
+    is not emailable and never will be, so leaving its row unstamped would
+    have the emailer re-examine it every minute until it aged out of the
+    window — the same treadmill the push dispatcher was stuck on.
+  */
+  const emailable = pending.filter((entry) => isEmailable(entry.item));
+
+  // One message per person, not one per notification. Three things in one
+  // minute is three lines in one email.
+  const byMember = new Map<string, typeof emailable>();
+  for (const entry of emailable) {
+    const list = byMember.get(entry.memberId) ?? [];
+    list.push(entry);
+    byMember.set(entry.memberId, list);
+  }
+
+  const origin = appOrigin();
+  const delivered: string[] = [];
+  const rejected: string[] = [];
+
+  for (const [, entries] of byMember) {
+    const { email, name } = entries[0]!;
+    const { subject, html, text } = renderDigest(
+      name,
+      entries.map((entry) => entry.item),
+      origin
+    );
+
+    const result = await sendEmail({ to: email, subject, html, text });
+    if (result.ok) {
+      delivered.push(...entries.map((entry) => entry.item.id));
+    } else if (result.permanent) {
+      // A bad address will not become good by being retried every minute.
+      console.error("email rejected permanently", email, result.reason);
+      rejected.push(...entries.map((entry) => entry.item.id));
+    } else {
+      // Left unstamped on purpose: a rate limit or a blip is worth one more
+      // attempt on the next tick, and the hour window bounds how long that
+      // can go on.
+      console.error("email failed, will retry", email, result.reason);
+    }
+  }
+
+  const notEmailable = pending
+    .filter((entry) => !isEmailable(entry.item))
+    .map((entry) => entry.item.id);
+
+  const stamped = await markEmailed(admin, [
+    ...new Set([...delivered, ...rejected, ...notEmailable]),
+  ]);
+
+  return {
+    considered: pending.length,
+    emailable: emailable.length,
+    people: byMember.size,
+    sent: delivered.length,
+    rejected: rejected.length,
+    stamped,
   };
 }

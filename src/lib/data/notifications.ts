@@ -216,3 +216,81 @@ export async function markPushed(
   if (error) throw error;
   return data ?? 0;
 }
+
+/* -------------------------------------------------------------------------
+   For the emailer
+
+   Email is the slow channel and a narrow one: only the dated, scheduled kinds
+   and completions reach it. The filtering happens in TypeScript rather than
+   in the query, because `isEmailable` also has to answer the "status change
+   that landed on Complete" case, and splitting that rule between a SQL
+   `where` and a function is how the two drift apart.
+   ------------------------------------------------------------------------- */
+
+export interface PendingEmail {
+  memberId: string;
+  email: string;
+  name: string;
+  item: NotificationItem;
+}
+
+/**
+ * Anything unsent from the last hour, same window as push and for the same
+ * reason: if the emailer has been down, nobody should wake up to forty
+ * messages about an afternoon that has already happened.
+ */
+const EMAIL_WINDOW_MINUTES = 60;
+const EMAIL_BATCH = 200;
+
+export async function listPendingEmails(
+  admin: SupabaseClient<Database>
+): Promise<PendingEmail[]> {
+  const since = new Date(Date.now() - EMAIL_WINDOW_MINUTES * 60_000).toISOString();
+
+  const { data, error } = await admin
+    .from("notifications")
+    .select(`member_id, recipient:members!notifications_member_id_fkey(email, display_name, is_active), ${NOTIFICATION_SELECT}`)
+    .is("emailed_at", null)
+    .gte("created_at", since)
+    .order("created_at", { ascending: true })
+    .limit(EMAIL_BATCH);
+
+  if (error) throw error;
+
+  type Row = RawNotification & {
+    member_id: string;
+    recipient: { email: string; display_name: string; is_active: boolean } | null;
+  };
+
+  const pending: PendingEmail[] = [];
+  for (const row of (data ?? []) as unknown as Row[]) {
+    // A deactivated member keeps their inbox — being switched off in the app
+    // should not mean still being mailed by it.
+    if (!row.recipient?.is_active || !row.recipient.email) continue;
+    const item = toItem(row);
+    if (!item) continue;
+    pending.push({
+      memberId: row.member_id,
+      email: row.recipient.email,
+      name: row.recipient.display_name,
+      item,
+    });
+  }
+  return pending;
+}
+
+/**
+ * Stamps rows as emailed, through the RPC for the same reason markPushed
+ * uses one: the guard trigger pins emailed_at against a direct update, and a
+ * silent no-op here would email the same thing every minute for an hour.
+ * See 0019_mark_emailed.sql.
+ */
+export async function markEmailed(
+  admin: SupabaseClient<Database>,
+  ids: string[]
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const { data, error } = await admin.rpc("mark_notifications_emailed", { p_ids: ids });
+  if (error) throw error;
+  return data ?? 0;
+}
