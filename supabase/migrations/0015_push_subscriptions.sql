@@ -68,7 +68,11 @@ create policy "push_subscriptions_insert_own"
 -- ever point it at themselves. The worst anyone can do is redirect their own
 -- browser's notifications to their own account, which is what pressing the
 -- switch means.
+-- Both names dropped: the first is what this policy was called before it was
+-- widened, the second is itself — without which the file could only ever be
+-- run once, and a migration you cannot re-run is a migration you cannot trust.
 drop policy if exists "push_subscriptions_update_own" on public.push_subscriptions;
+drop policy if exists "push_subscriptions_claim" on public.push_subscriptions;
 create policy "push_subscriptions_claim"
   on public.push_subscriptions for update
   to authenticated
