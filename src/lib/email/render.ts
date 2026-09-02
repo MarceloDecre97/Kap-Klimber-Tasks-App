@@ -65,15 +65,32 @@ function row(item: NotificationItem, origin: string | null): string {
   const { headline, detail } = describeNotification(item);
   const href = origin && !item.taskGone ? `${origin}/tasks?task=${item.task.id}` : null;
 
+  /*
+    Underlined, deliberately.
+
+    It was styled `text-decoration:none` to look tidy, and that made the one
+    link that matters — the one that opens the actual task — read as a
+    heading. Marcelo got a reminder, clicked the only thing in the message
+    that looked clickable, and landed on the whole Tasklist wondering which
+    card he had been sent to. A link that does not look like a link is not a
+    link, and in an email there is no hover state to discover it with.
+  */
   const title = href
-    ? `<a href="${escapeHtml(href)}" style="color:${BRAND};text-decoration:none;font-weight:bold">${escapeHtml(headline)}</a>`
+    ? `<a href="${escapeHtml(href)}" style="color:${BRAND};text-decoration:underline;font-weight:bold">${escapeHtml(headline)}</a>`
     : `<span style="font-weight:bold">${escapeHtml(headline)}</span>`;
+
+  // A second, unmissable way in. The headline is the natural thing to tap,
+  // but "Open this task" says what will happen, which the headline never can.
+  const open = href
+    ? `<div style="margin-top:6px"><a href="${escapeHtml(href)}" style="color:${BRAND};font-size:14px;line-height:20px">Open this task &rarr;</a></div>`
+    : "";
 
   return `
     <tr>
       <td style="padding:14px 0;border-bottom:1px solid ${BORDER};font-family:${FONT};font-size:16px;line-height:24px;color:${FG}">
         ${title}
         ${detail ? `<div style="margin-top:4px;font-size:15px;line-height:22px;color:${SUB}">${escapeHtml(detail)}</div>` : ""}
+        ${open}
       </td>
     </tr>`;
 }
@@ -99,7 +116,7 @@ export function renderDigest(
   const rows = items.map((item) => row(item, origin)).join("");
   const openLink = origin
     ? `<p style="margin:28px 0 0;font-family:${FONT};font-size:15px;line-height:22px">
-         <a href="${escapeHtml(origin)}/tasks" style="color:${BRAND}">Open Kap Klimber Tasks</a>
+         <a href="${escapeHtml(origin)}/tasks" style="color:${BRAND}">See everything in Kap Klimber Tasks</a>
        </p>`
     : "";
 
@@ -141,7 +158,7 @@ export function renderDigest(
     "",
     ...lines,
     "",
-    origin ? `Open Kap Klimber Tasks: ${origin}/tasks` : "",
+    origin ? `See everything: ${origin}/tasks` : "",
     "",
     "You get these because you created or were assigned to these tasks.",
   ]
