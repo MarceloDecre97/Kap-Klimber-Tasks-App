@@ -1,8 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  isQuietNow,
   listPendingEmails,
   listPendingPushes,
+  loadPrefs,
   markEmailed,
   markPushed,
 } from "@/lib/data/notifications";
@@ -80,6 +82,20 @@ export async function POST(request: Request) {
   // One query for every device involved, rather than one per notification: a
   // busy minute is usually several notifications for the same few people.
   const memberIds = [...new Set(pending.map((p) => p.memberId))];
+
+  /*
+    What each of these people has asked not to be sent, and whether it is the
+    middle of their night. Loaded once for everyone rather than per
+    notification: a busy minute is usually several notifications for the same
+    few people.
+  */
+  const prefs = await loadPrefs(admin, memberIds);
+  const quiet = new Map<string, boolean>();
+  for (const id of memberIds) {
+    const p = prefs.get(id);
+    quiet.set(id, p ? await isQuietNow(admin, p) : false);
+  }
+
   const { data: subscriptionRows, error } = await admin
     .from("push_subscriptions")
     .select("id, member_id, endpoint, p256dh, auth")
@@ -97,11 +113,35 @@ export async function POST(request: Request) {
   const expired: string[] = [];
   const failed: string[] = [];
   let sent = 0;
+  /** Deliberately not delivered: switched off, or inside quiet hours. */
+  let suppressed = 0;
 
   await Promise.all(
     pending.map(async (entry) => {
       const targets = devices.get(entry.memberId);
       if (!targets || targets.length === 0) return;
+
+      /*
+        Two reasons to stay silent, and both leave the row stamped below
+        rather than pending. A push that was deliberately declined is not a
+        push that failed, and re-examining it every minute for an hour would
+        be the same treadmill 0017 fixed.
+      */
+      const p = prefs.get(entry.memberId);
+      if (p && p.pushOff.includes(entry.item.kind)) {
+        suppressed += 1;
+        return;
+      }
+      /*
+        Quiet hours drop the push, they do not queue it. Nine notifications
+        arriving in a burst at 07:00 is worse than the 02:00 buzz they were
+        avoiding, and the bell has been holding them the whole time — nothing
+        is lost, only the noise.
+      */
+      if (quiet.get(entry.memberId)) {
+        suppressed += 1;
+        return;
+      }
 
       const message = renderPush(entry);
       for (const target of targets) {
@@ -154,6 +194,7 @@ export async function POST(request: Request) {
     // said the run had worked. If `stamped` is ever below `considered`, the
     // same notifications are about to be sent again next minute.
     stamped,
+    suppressed,
     expired: expired.length,
     failed: failed.length,
     email,
@@ -200,7 +241,21 @@ async function dispatchEmail(admin: SupabaseClient<Database>) {
     have the emailer re-examine it every minute until it aged out of the
     window — the same treadmill the push dispatcher was stuck on.
   */
-  const emailable = pending.filter((entry) => isEmailable(entry.item));
+  const prefs = await loadPrefs(admin, [...new Set(pending.map((p) => p.memberId))]);
+
+  /*
+    Emailable by kind, and not switched off by the person receiving it.
+    Quiet hours are deliberately not consulted here: they silence push only.
+    A phone buzzing at 2am is what makes people turn notifications off
+    entirely; an email waiting at 2am costs nobody anything, and holding it
+    back would mean the record was incomplete for the sake of a night nobody
+    was disturbed by.
+  */
+  const emailable = pending.filter(
+    (entry) =>
+      isEmailable(entry.item) &&
+      !(prefs.get(entry.memberId)?.emailOff ?? []).includes(entry.item.kind)
+  );
 
   // One message per person, not one per notification. Three things in one
   // minute is three lines in one email.
@@ -238,8 +293,11 @@ async function dispatchEmail(admin: SupabaseClient<Database>) {
     }
   }
 
+  // Everything not sent — wrong kind, or switched off — is stamped as well,
+  // or the emailer re-reads it every minute until it ages out.
+  const emailableIds = new Set(emailable.map((entry) => entry.item.id));
   const notEmailable = pending
-    .filter((entry) => !isEmailable(entry.item))
+    .filter((entry) => !emailableIds.has(entry.item.id))
     .map((entry) => entry.item.id);
 
   const stamped = await markEmailed(admin, [

@@ -190,6 +190,24 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["push_subscriptions"]["Row"]>;
         Relationships: [];
       };
+      notification_prefs: {
+        Row: {
+          member_id: string;
+          /** Kinds NOT pushed. Opt-outs, so a new kind is on by default. */
+          push_off: string[];
+          /** Kinds NOT emailed. */
+          email_off: string[];
+          /** App-clock times; may wrap midnight. Null means no quiet hours. */
+          quiet_from: string | null;
+          quiet_to: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["notification_prefs"]["Row"]> & {
+          member_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["notification_prefs"]["Row"]>;
+        Relationships: [];
+      };
       notifications: {
         Row: {
           id: string;
@@ -251,6 +269,11 @@ export interface Database {
       mark_notifications_emailed: { Args: { p_ids: string[] }; Returns: number };
       /** Scheduler only — writes notification rows, never granted to a member. */
       run_scheduled_notifications: { Args: Record<string, never>; Returns: unknown };
+      /** Handles windows that wrap midnight. See 0020_notification_prefs.sql. */
+      in_quiet_hours: {
+        Args: { p_from: string | null; p_to: string | null; p_at?: string };
+        Returns: boolean;
+      };
     };
   };
 }

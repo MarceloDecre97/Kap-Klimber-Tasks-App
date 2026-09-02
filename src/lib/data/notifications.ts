@@ -294,3 +294,63 @@ export async function markEmailed(
   if (error) throw error;
   return data ?? 0;
 }
+
+/* -------------------------------------------------------------------------
+   Preferences
+
+   Read as the service role, for everyone the dispatcher is about to notify.
+   A member with no row is not an error and not a gap: it is the default, and
+   the default is everything on. That is why this returns a Map rather than
+   throwing on a miss — the absence *is* the answer.
+   ------------------------------------------------------------------------- */
+
+export interface MemberPrefs {
+  pushOff: string[];
+  emailOff: string[];
+  quietFrom: string | null;
+  quietTo: string | null;
+}
+
+export async function loadPrefs(
+  admin: SupabaseClient<Database>,
+  memberIds: string[]
+): Promise<Map<string, MemberPrefs>> {
+  const prefs = new Map<string, MemberPrefs>();
+  if (memberIds.length === 0) return prefs;
+
+  const { data, error } = await admin
+    .from("notification_prefs")
+    .select("member_id, push_off, email_off, quiet_from, quiet_to")
+    .in("member_id", memberIds);
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    prefs.set(row.member_id, {
+      pushOff: row.push_off ?? [],
+      emailOff: row.email_off ?? [],
+      quietFrom: row.quiet_from,
+      quietTo: row.quiet_to,
+    });
+  }
+  return prefs;
+}
+
+/**
+ * Whether we are inside somebody's quiet hours right now.
+ *
+ * Asked of the database rather than worked out here, because the window can
+ * wrap midnight and one implementation of that is one thing to get wrong.
+ * See in_quiet_hours in 0020_notification_prefs.sql.
+ */
+export async function isQuietNow(
+  admin: SupabaseClient<Database>,
+  prefs: MemberPrefs
+): Promise<boolean> {
+  if (!prefs.quietFrom || !prefs.quietTo) return false;
+  const { data, error } = await admin.rpc("in_quiet_hours", {
+    p_from: prefs.quietFrom,
+    p_to: prefs.quietTo,
+  });
+  if (error) throw error;
+  return data === true;
+}

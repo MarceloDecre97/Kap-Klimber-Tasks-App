@@ -7,13 +7,17 @@ import { ChevronLeft, LogOut } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PushSwitch } from "@/components/settings/push-switch";
+import { NotificationPrefsPanel } from "@/components/settings/notification-prefs";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { signOut } from "@/app/settings/actions";
+import type { NotificationPrefs } from "@/lib/notification-prefs";
 
 export function SettingsView({
   member,
+  prefs,
 }: {
   member: { id: string; display_name: string; initials: string; color: string; email: string };
+  prefs: NotificationPrefs;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -42,6 +46,11 @@ export function SettingsView({
         <div className="flex flex-col gap-3">
           <div className="text-field-label">Notifications</div>
           <PushSwitch />
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div className="text-field-label">What reaches you</div>
+          <NotificationPrefsPanel initial={prefs} />
         </div>
 
         <div className="flex flex-col gap-3">
