@@ -74,29 +74,62 @@ export function PushSwitch() {
     Deliberately a resolver rather than a setter: it answers the question and
     hands the answer back, which keeps every state change in one place and
     keeps the effect below from setting state synchronously.
+
+    It used to answer from the browser alone — if getSubscription() returned
+    something, the switch said "on". That is only half the question, and the
+    missing half is the half that matters: a browser can hold a perfectly
+    valid subscription that the server has never been told about, and then
+    the switch reads on, offers a Turn off button, and nothing can ever
+    arrive. It happened: a subscription survived in Chrome from an earlier
+    install while its row was gone from the database, so the page showed
+    "on" and there was no button left to press that would have fixed it.
+
+    So the browser's answer is now confirmed by re-registering it. The upsert
+    is keyed on the endpoint and idempotent, which makes this both the check
+    and the repair — the two states cannot drift apart for longer than one
+    visit to this screen.
   */
-  const resolve = useCallback(async (): Promise<PushState> => {
-    if (!VAPID_PUBLIC_KEY) return "unconfigured";
+  const resolve = useCallback(async (): Promise<{ state: PushState; error?: string }> => {
+    if (!VAPID_PUBLIC_KEY) return { state: "unconfigured" };
 
     const supported = "serviceWorker" in navigator && "PushManager" in window;
     if (!supported) {
       // On iOS the two are missing precisely because the app is in a tab
       // rather than on the Home Screen, which is a different problem with a
       // different answer.
-      return isIos() && !isInstalled() ? "needs-install" : "unsupported";
+      return { state: isIos() && !isInstalled() ? "needs-install" : "unsupported" };
     }
-    if (Notification.permission === "denied") return "denied";
+    if (Notification.permission === "denied") return { state: "denied" };
 
     const registration = await navigator.serviceWorker.getRegistration();
     const existing = await registration?.pushManager.getSubscription();
-    return existing ? "on" : "off";
+    if (!existing) return { state: "off" };
+
+    const json = existing.toJSON();
+    const result = await savePushSubscription({
+      endpoint: existing.endpoint,
+      p256dh: json.keys?.p256dh,
+      auth: json.keys?.auth,
+      userAgent: navigator.userAgent.slice(0, 400),
+    });
+    if (result.ok) return { state: "on" };
+
+    /*
+      The browser is subscribed and the server will not record it. "Off" is
+      the honest word for that — nothing is going to reach this device — and
+      saying so leaves a Turn on button, which is the one action that has any
+      chance of helping.
+    */
+    return { state: "off", error: result.error };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const next = await resolve();
-      if (!cancelled) setState(next);
+      if (cancelled) return;
+      setState(next.state);
+      if (next.error) setError(next.error);
     })();
     return () => {
       cancelled = true;
@@ -145,7 +178,7 @@ export function PushSwitch() {
     } catch (err) {
       console.error("turnOn failed", err);
       setError("Couldn't turn notifications on for this device.");
-      setState(await resolve());
+      setState((await resolve()).state);
     } finally {
       setBusy(false);
     }
@@ -165,7 +198,7 @@ export function PushSwitch() {
     } catch (err) {
       console.error("turnOff failed", err);
       setError("Couldn't turn notifications off. Try again.");
-      setState(await resolve());
+      setState((await resolve()).state);
     } finally {
       setBusy(false);
     }
