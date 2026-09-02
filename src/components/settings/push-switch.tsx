@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, BellOff, Share } from "lucide-react";
+import { Bell, BellOff, Send, Share } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { removePushSubscription, savePushSubscription } from "@/app/settings/push-actions";
+import {
+  removePushSubscription,
+  savePushSubscription,
+  sendTestPush,
+} from "@/app/settings/push-actions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -69,6 +73,8 @@ export function PushSwitch() {
   const [state, setState] = useState<PushState>("checking");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Shown after a successful test, so the tap has a visible answer either way. */
+  const [sent, setSent] = useState(false);
 
   /*
     Deliberately a resolver rather than a setter: it answers the question and
@@ -139,6 +145,7 @@ export function PushSwitch() {
   async function turnOn() {
     setBusy(true);
     setError(null);
+    setSent(false);
     try {
       const registration = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
@@ -187,6 +194,7 @@ export function PushSwitch() {
   async function turnOff() {
     setBusy(true);
     setError(null);
+    setSent(false);
     try {
       const registration = await navigator.serviceWorker.getRegistration();
       const subscription = await registration?.pushManager.getSubscription();
@@ -199,6 +207,25 @@ export function PushSwitch() {
       console.error("turnOff failed", err);
       setError("Couldn't turn notifications off. Try again.");
       setState((await resolve()).state);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /*
+    The whole point of this button is that it proves delivery rather than
+    reporting it. So it deliberately does not say "sent" on its own — it says
+    so only after the server confirms a push service accepted the message, and
+    the real confirmation is the notification arriving a second later.
+  */
+  async function test() {
+    setBusy(true);
+    setError(null);
+    setSent(false);
+    try {
+      const result = await sendTestPush();
+      if (result.ok) setSent(true);
+      else setError(result.error);
     } finally {
       setBusy(false);
     }
@@ -236,6 +263,27 @@ export function PushSwitch() {
           </Button>
         )}
       </div>
+
+      {state === "on" && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="secondary"
+            size="md"
+            className="w-auto px-4"
+            disabled={busy}
+            onClick={test}
+          >
+            <Send aria-hidden className="size-4" />
+            Send a test notification
+          </Button>
+          {sent && (
+            <span className="text-[16px] leading-6 text-sub text-pretty">
+              Sent. It should arrive in a second or two — if it doesn&rsquo;t, this
+              device can&rsquo;t receive them.
+            </span>
+          )}
+        </div>
+      )}
 
       {state === "needs-install" && (
         <p className="flex items-start gap-2 rounded-2xl border-[1.5px] border-border bg-muted px-4 py-3 text-[16px] leading-6 text-sub text-pretty">
