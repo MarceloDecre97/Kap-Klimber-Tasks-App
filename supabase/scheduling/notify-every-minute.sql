@@ -18,6 +18,17 @@
 --   <<APP_URL>>       https://your-production-alias.vercel.app  (no trailing /)
 --   <<CRON_SECRET>>   the exact value saved as CRON_SECRET in Vercel
 --
+-- REPLACE THE ANGLE BRACKETS TOO. `<<APP_URL>>` is the whole placeholder, so
+-- the line should end up reading
+--
+--   url := 'https://your-alias.vercel.app/api/cron/notify',
+--
+-- and not `'<<https://your-alias.vercel.app>>/api/cron/notify'`. A URL with
+-- the markers still in it is not a URL, and the job then fails silently —
+-- there is no request, so there is no response to look at and nothing that
+-- looks like an error. The guard at the bottom of this file catches exactly
+-- that and tells you.
+--
 -- A note on the secret: it is stored in plain text in the cron.job table, so
 -- anyone with database access can read it. On a five-person project whose
 -- database is already the source of truth that is an acceptable trade — the
@@ -46,6 +57,34 @@ select cron.schedule(
     );
   $job$
 );
+
+-- ---------------------------------------------------------------------------
+-- Did the placeholders actually get replaced?
+-- ---------------------------------------------------------------------------
+
+-- Checked here rather than left to be discovered later. A job carrying `<<`
+-- fails in the quietest possible way: pg_cron reports a successful run,
+-- because it successfully ran a statement that could not build a request, and
+-- net._http_response stays empty — which looks identical to "the schedule is
+-- not running yet".
+--
+-- So the job is removed rather than left in place broken, and the error says
+-- what to do.
+do $$
+declare
+  cmd text;
+begin
+  select command into cmd from cron.job where jobname = 'kap-klimber-notify';
+  if cmd is null then
+    raise exception 'The job was not created. Check that pg_cron is enabled.';
+  end if;
+  if cmd like '%<<%' or cmd like '%>>%' then
+    perform cron.unschedule('kap-klimber-notify');
+    raise exception
+      'Placeholders were left in. Delete the << >> markers as well as the words between them, then run this file again. The job has been removed so it cannot sit there failing quietly.';
+  end if;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Checking on it
