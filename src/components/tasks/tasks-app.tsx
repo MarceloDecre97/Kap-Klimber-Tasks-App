@@ -33,6 +33,7 @@ import {
   type SortMode,
   type TaskFilters,
 } from "@/lib/tasks-view";
+import { unreadMentionTaskIds } from "@/lib/notifications-view";
 import { cn, formatDateGroup } from "@/lib/utils";
 import type { NotificationFeed } from "@/lib/data/notifications";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
@@ -73,6 +74,29 @@ export function TasksApp({
   const [showComplete, setShowComplete] = useState(
     () => initialTasks.find((task) => task.id === focusTaskId)?.status === "complete"
   );
+
+  /*
+    Which focused task the two above have already been set for.
+
+    Both were initial values only, which was right exactly once. Tapping a
+    second notification while the Tasklist is already open changes the URL
+    without remounting this component, so the task scrolled into view stayed
+    shut — the notification took you to a card you then had to tap yourself,
+    which reads as the tap not having worked.
+
+    Adjusted during render rather than in an effect: React re-renders with the
+    new values before anything reaches the screen, so the card is never
+    painted collapsed and then opened. An effect would do it a frame later,
+    visibly, and would also trip the rule against setting state in effects.
+  */
+  const [focusApplied, setFocusApplied] = useState(focusTaskId);
+  if (focusTaskId && focusTaskId !== focusApplied) {
+    setFocusApplied(focusTaskId);
+    setExpandedId(focusTaskId);
+    if (initialTasks.find((task) => task.id === focusTaskId)?.status === "complete") {
+      setShowComplete(true);
+    }
+  }
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
   const [, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
@@ -117,6 +141,13 @@ export function TasksApp({
   }, [focusTaskId]);
 
   const activeCount = countActiveFilters(filters);
+
+  /*
+    Tasks where somebody named you and you have not looked yet, marked on the
+    card itself. Derived from the same feed the bell renders, so the two can
+    never disagree about who has been mentioned.
+  */
+  const mentionedTaskIds = useMemo(() => unreadMentionTaskIds(notifications), [notifications]);
 
   const { open, complete } = useMemo(() => {
     const matching = initialTasks.filter((task) => matchesFilters(task, filters, me.id));
@@ -245,7 +276,29 @@ export function TasksApp({
         return;
       }
       router.refresh();
-      showToast({ message: approve ? "Task deleted" : "Request declined — task kept" });
+      if (!approve) {
+        showToast({ message: "Request declined — task kept" });
+        return;
+      }
+      /*
+        The same Undo the creator gets when deleting their own task. Approving
+        somebody else's request is if anything the easier one to get wrong —
+        you are acting on a sentence they wrote, on a phone, often without the
+        conversation behind it — so it must be as recoverable.
+
+        The task is in Recently deleted for a fortnight regardless; this is
+        the fast way back, not the only one.
+      */
+      showToast({
+        message: "Request approved — task deleted",
+        actionLabel: "Undo",
+        onAction: () => {
+          startTransition(async () => {
+            await restoreTask(taskId);
+            router.refresh();
+          });
+        },
+      });
     });
   }
 
@@ -405,6 +458,7 @@ export function TasksApp({
                         onCancelDeletion={() => handleCancelDeletion(task.id)}
                         onToggleReminder={() => handleToggleReminder(task.id)}
                         roster={roster}
+                        mentionsYou={mentionedTaskIds.has(task.id)}
                         lastActivityAt={getLastActivityAt(task)}
                       />
                     </div>
@@ -438,6 +492,7 @@ export function TasksApp({
                         onCancelDeletion={() => handleCancelDeletion(task.id)}
                           onToggleReminder={() => handleToggleReminder(task.id)}
                           roster={roster}
+                          mentionsYou={mentionedTaskIds.has(task.id)}
                         />
                       </div>
                     ))}

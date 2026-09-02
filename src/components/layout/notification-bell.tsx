@@ -8,14 +8,16 @@ import {
   CalendarClock,
   CircleDot,
   MessageSquare,
+  RotateCcw,
   Trash2,
   Undo2,
   UserPlus,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { FloatingPanel, useFloatingPanel } from "@/components/tasks/floating-panel";
-import { markNotificationsRead } from "@/app/notifications/actions";
+import { dismissNotification, markNotificationsRead } from "@/app/notifications/actions";
 import { describeNotification } from "@/lib/notifications-view";
 import { cn, formatTimestamp } from "@/lib/utils";
 import type { NotificationFeed, NotificationItem } from "@/lib/data/notifications";
@@ -38,6 +40,7 @@ const KIND_ICON: Record<NotificationKind, LucideIcon> = {
   delete_requested: Trash2,
   delete_denied: Undo2,
   deleted: Trash2,
+  restored: RotateCcw,
   reminder_upcoming: Bell,
   reminder_due: Bell,
   due_soon: CalendarClock,
@@ -74,6 +77,13 @@ const URGENT_KINDS = new Set<NotificationKind>([
 export function NotificationBell({ feed, className }: { feed: NotificationFeed; className?: string }) {
   const { open, setOpen, triggerRef, panelRef, style } = useFloatingPanel<HTMLButtonElement>();
   const [cleared, setCleared] = useState(false);
+  /*
+    Rows removed here, before the server has answered. A dismiss that waits
+    for a round trip reads as a dead button on a phone, and there is nothing
+    to roll back to if it fails: the row is gone from the table either way on
+    the next render.
+  */
+  const [dismissed, setDismissed] = useState<string[]>([]);
 
   /*
     Fired and forgotten. The badge and the row highlights have already gone
@@ -85,7 +95,15 @@ export function NotificationBell({ feed, className }: { feed: NotificationFeed; 
     void markNotificationsRead();
   }
 
-  const unread = cleared ? 0 : feed.unread;
+  function handleDismiss(item: NotificationItem) {
+    setDismissed((ids) => [...ids, item.id]);
+    void dismissNotification(item.id);
+  }
+
+  const items = feed.items.filter((item) => !dismissed.includes(item.id));
+  const unread = cleared
+    ? 0
+    : items.filter((item) => item.read_at === null).length;
 
   return (
     <>
@@ -137,15 +155,28 @@ export function NotificationBell({ feed, className }: { feed: NotificationFeed; 
             )}
           </div>
 
-          {feed.items.length === 0 ? (
+          {items.length === 0 ? (
             <p className="px-3 pb-3 text-[16px] leading-6 text-sub text-pretty">
               Nothing yet. Comments, assignments and changes to your tasks land here.
             </p>
           ) : (
             <ul className="flex flex-col gap-1">
-              {feed.items.map((item) => (
-                <li key={item.id}>
+              {items.map((item) => (
+                <li key={item.id} className="flex items-stretch gap-1">
                   <NotificationRow item={item} read={cleared} onNavigate={() => setOpen(false)} />
+                  {/*
+                    A sibling of the row rather than a child of it: the row is
+                    a link, and a button inside a link is both invalid and
+                    unpressable on some phones.
+                  */}
+                  <button
+                    type="button"
+                    onClick={() => handleDismiss(item)}
+                    aria-label="Remove this notification"
+                    className="flex w-9 shrink-0 items-center justify-center rounded-xl text-muted-fg hover:bg-muted hover:text-fg cursor-pointer"
+                  >
+                    <X aria-hidden className="size-4" />
+                  </button>
                 </li>
               ))}
             </ul>
@@ -171,7 +202,7 @@ function NotificationRow({
   const unread = !read && item.read_at === null;
 
   const className = cn(
-    "flex w-full gap-3 rounded-xl border-[1.5px] px-3 py-2.5 text-left",
+    "flex min-w-0 grow gap-3 rounded-xl border-[1.5px] px-3 py-2.5 text-left",
     // Same language as the unread marker on a note: a border, not a
     // badge, so it reads at a glance without adding another symbol.
     unread ? "border-brand bg-card" : "border-transparent bg-bg",

@@ -82,9 +82,29 @@ export function describeNotification(item: NotificationItem): NotificationCopy {
         detail: reasonOf(item) ?? "No reason given",
       };
     case "delete_denied":
-      return { headline: `${who} kept ${task}`, detail: reasonOf(item) };
+      /*
+        "Keith kept the task" was too soft for what this is. You asked for
+        something and were told no, and the notification has to say that
+        plainly or you are left wondering whether it was ever seen. The
+        reason echoed back is your own — the only text either side has.
+      */
+      return {
+        headline: `${who} declined your request to delete ${task}`,
+        detail: reasonOf(item),
+      };
     case "deleted":
-      return { headline: `${who} deleted ${task}`, detail: null };
+      /*
+        The same deletion, worded from two sides. To the person who asked for
+        it this is an answer; to everyone else it is news. Without the split,
+        approving a request produced the identical "Keith deleted X" the
+        requester would have got if Keith had simply deleted it himself, and
+        their request appeared to have gone unanswered.
+      */
+      return item.payload.approved === true
+        ? { headline: `${who} approved your request to delete ${task}`, detail: "It's gone now." }
+        : { headline: `${who} deleted ${task}`, detail: null };
+    case "restored":
+      return { headline: `${who} brought back ${task}`, detail: null };
     case "status": {
       const from = statusLabel(item.payload.from);
       return {
@@ -124,4 +144,23 @@ export function describeNotification(item: NotificationItem): NotificationCopy {
     default:
       return { headline: task, detail: null };
   }
+}
+
+/**
+ * Tasks where somebody has named you and you have not looked yet.
+ *
+ * Used to mark the card itself, not just the bell. Being mentioned is the one
+ * kind of note addressed to a specific person, and the panel is the wrong
+ * place to keep that: it is somewhere else, and it empties. Read rows are
+ * excluded, so opening the task clears the marker — no extra control, and
+ * nothing to dismiss.
+ */
+export function unreadMentionTaskIds(feed: { items: NotificationItem[] }): Set<string> {
+  const ids = new Set<string>();
+  for (const item of feed.items) {
+    if (item.kind === "mention" && item.read_at === null && !item.taskGone) {
+      ids.add(item.task.id);
+    }
+  }
+  return ids;
 }

@@ -61,11 +61,25 @@ export function describeEvent(event: TaskEvent): string | null {
         ? `${who} asked to delete this — ${event.to_value}`
         : `${who} asked to delete this`;
     case "delete_denied":
-      return `${who} kept this task`;
+      // "Kept this task" was too soft: somebody asked for something and was
+      // told no, and the log is where that answer has to survive.
+      return event.to_value
+        ? `${who} declined the request to delete this — ${event.to_value}`
+        : `${who} declined the request to delete this`;
     case "delete_cancelled":
       return `${who} withdrew the request to delete this`;
+    /*
+      Deleting your own task and approving somebody else's request are the
+      same row with one difference: the request carried a reason, and
+      delete_own_task has nothing to put there. So a to_value here means this
+      was an answer to an ask, and saying so is the whole point — otherwise
+      the requester reads "Keith deleted this task" and never learns their
+      request was why.
+    */
     case "deleted":
-      return `${who} deleted this task`;
+      return event.to_value
+        ? `${who} approved the request and deleted this — ${event.to_value}`
+        : `${who} deleted this task`;
     case "restored":
       return `${who} brought this task back`;
     default:

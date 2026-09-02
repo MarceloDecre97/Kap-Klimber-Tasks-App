@@ -47,6 +47,17 @@ export interface NotificationFeed {
 */
 const FEED_LIMIT = 100;
 
+/*
+  How long a notification you have already dealt with stays in the list.
+
+  Unread rows are never dropped by age — an ask that has been sitting for
+  three weeks is exactly the one that must not quietly disappear. Read ones
+  are history, and history belongs in the task's Activity log, which keeps it
+  properly. Without this the panel becomes a scroll of things you handled a
+  month ago, and the one row that matters is somewhere below them.
+*/
+const READ_VISIBLE_DAYS = 14;
+
 type RawNotification = {
   id: string;
   task_id: string;
@@ -106,9 +117,13 @@ function toItem(row: RawNotification): NotificationItem | null {
 export async function listNotifications(
   supabase: SupabaseClient<Database>
 ): Promise<NotificationFeed> {
+  const cutoff = new Date(Date.now() - READ_VISIBLE_DAYS * 86_400_000).toISOString();
+
   const { data, error } = await supabase
     .from("notifications")
     .select(NOTIFICATION_SELECT)
+    // Everything unread, plus anything recent whether read or not.
+    .or(`read_at.is.null,created_at.gte.${cutoff}`)
     .order("created_at", { ascending: false })
     .limit(FEED_LIMIT);
 

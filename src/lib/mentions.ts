@@ -124,13 +124,19 @@ export function matchRoster(roster: MemberSummary[], query: string): MemberSumma
   return scored.sort((a, b) => a.rank - b.rank).map((entry) => entry.member);
 }
 
+/** A name safe to sit inside a token, and to match on the way back out. */
+function safeName(member: MemberSummary): string {
+  return member.display_name.replace(/[[\]\n]/g, "").trim() || "Someone";
+}
+
 /**
- * Replaces the half-typed `@que` at `start`..`caret` with a real mention.
+ * Replaces the half-typed `@que` at `start`..`caret` with the person's name.
  *
- * The name is sanitised on the way in. A display name containing `]` or a
- * newline would close the token early and leave the rest of it on screen as
- * literal text — no real name does that, and one that did should not be able
- * to break every note it appears in.
+ * Plainly `@Keith Maslowski`, not the storage token. The token is forty-odd
+ * characters of uuid, and putting it in the box meant you could see it while
+ * typing and had to backspace through it a character at a time. The id is
+ * attached at the moment the note is sent, by `toStorageBody`, from the
+ * person you actually picked.
  */
 export function insertMention(
   body: string,
@@ -138,8 +144,7 @@ export function insertMention(
   caret: number,
   member: MemberSummary
 ): { body: string; caret: number } {
-  const safeName = member.display_name.replace(/[[\]\n]/g, "").trim() || "Someone";
-  const token = `@[${safeName}](${member.id})`;
+  const token = `@${safeName(member)}`;
   const rest = body.slice(caret);
   /*
     A space after the token is what lets you carry on typing without the
@@ -150,6 +155,59 @@ export function insertMention(
   const gap = /^\s/.test(rest) ? "" : " ";
   const next = `${body.slice(0, start)}${token}${gap}${rest}`;
   return { body: next, caret: start + token.length + gap.length };
+}
+
+/**
+ * Turns what was typed into what is stored: `@Keith Maslowski` becomes
+ * `@[Keith Maslowski](uuid)`.
+ *
+ * Only exact matches against an active member's name are linked, so the rule
+ * is "names we recognise become mentions" — which is predictable, forgiving
+ * of somebody typing a name out by hand, and visible when it does not happen,
+ * because the chip simply is not there on the posted note.
+ *
+ * Longest names first, so a team containing both "Keith" and "Keith
+ * Maslowski" links the longer one rather than leaving " Maslowski" stranded
+ * outside the mention. And an `@` mid-word is skipped, which is what keeps
+ * bob@acme.com from turning into a mention of a member called "acme.com".
+ */
+export function toStorageBody(display: string, roster: MemberSummary[]): string {
+  const byLength = [...roster].sort((a, b) => b.display_name.length - a.display_name.length);
+  let out = "";
+  let i = 0;
+
+  while (i < display.length) {
+    const char = display[i]!;
+    const startsWord = i === 0 || /\s/.test(display[i - 1]!);
+
+    if (char === "@" && startsWord) {
+      const rest = display.slice(i + 1);
+      const hit = byLength.find((member) =>
+        rest.toLowerCase().startsWith(safeName(member).toLowerCase())
+      );
+      if (hit) {
+        const name = safeName(hit);
+        out += `@[${name}](${hit.id})`;
+        i += 1 + name.length;
+        continue;
+      }
+    }
+
+    out += char;
+    i += 1;
+  }
+
+  return out;
+}
+
+/**
+ * The reverse, for putting a stored note back into an edit box. Identical to
+ * stripMentions today; named separately because the two are different jobs —
+ * one prepares text for a person to edit, the other for a person to read in
+ * a notification — and they will not always stay the same.
+ */
+export function toDisplayBody(stored: string): string {
+  return stripMentions(stored);
 }
 
 /**

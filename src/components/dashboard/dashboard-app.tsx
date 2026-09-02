@@ -23,6 +23,7 @@ import {
   type BucketSpec,
   type PersonalScope,
 } from "@/lib/dashboard-stats";
+import { unreadMentionTaskIds } from "@/lib/notifications-view";
 import { cn } from "@/lib/utils";
 import type { CountTone } from "@/lib/dashboard-stats";
 import type { NotificationFeed } from "@/lib/data/notifications";
@@ -60,6 +61,9 @@ export function DashboardApp({
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
   const [, startTransition] = useTransition();
 
+
+  /* Same marker as the Tasklist, from the same feed — see tasks-app.tsx. */
+  const mentionedTaskIds = useMemo(() => unreadMentionTaskIds(notifications), [notifications]);
 
   const stats = useMemo(
     () => computeDashboardStats({ tasks: initialTasks, roster, meId: me.id, scope }),
@@ -152,7 +156,29 @@ export function DashboardApp({
         return;
       }
       router.refresh();
-      showToast({ message: approve ? "Task deleted" : "Request declined — task kept" });
+      if (!approve) {
+        showToast({ message: "Request declined — task kept" });
+        return;
+      }
+      /*
+        The same Undo the creator gets when deleting their own task. Approving
+        somebody else's request is if anything the easier one to get wrong —
+        you are acting on a sentence they wrote, on a phone, often without the
+        conversation behind it — so it must be as recoverable.
+
+        The task is in Recently deleted for a fortnight regardless; this is
+        the fast way back, not the only one.
+      */
+      showToast({
+        message: "Request approved — task deleted",
+        actionLabel: "Undo",
+        onAction: () => {
+          startTransition(async () => {
+            await restoreTask(taskId);
+            router.refresh();
+          });
+        },
+      });
     });
   }
 
@@ -320,6 +346,7 @@ export function DashboardApp({
                             onCancelDeletion={() => handleCancelDeletion(entry.task.id)}
                             onToggleReminder={() => handleToggleReminder(entry.task.id)}
                             roster={roster}
+                            mentionsYou={mentionedTaskIds.has(entry.task.id)}
                           />
                           {/*
                             Reminder only, and the whole line takes one

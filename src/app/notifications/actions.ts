@@ -46,3 +46,22 @@ export async function markTaskNotificationsRead(taskId: string): Promise<void> {
     console.error("markTaskNotificationsRead failed", error);
   }
 }
+
+/**
+ * Removes one row from the inbox.
+ *
+ * "Mark all read" clears the count but leaves the list, and a list nobody can
+ * prune stops being read at all. This is the tidy-up: own rows only, enforced
+ * by the RLS delete policy added in 0016 rather than by this function.
+ *
+ * Deleted rather than hidden. The record that matters is the task's Activity
+ * log, which is untouched by this; the notification is only ever the nudge.
+ */
+export async function dismissNotification(id: string): Promise<void> {
+  try {
+    const { supabase } = await getCurrentMember();
+    await supabase.from("notifications").delete().eq("id", id);
+  } catch (error) {
+    console.error("dismissNotification failed", error);
+  }
+}

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  AtSign,
   Bell,
   BellOff,
   ChevronDown,
@@ -20,7 +21,7 @@ import { Chip } from "@/components/ui/chip";
 import { MentionTextarea } from "@/components/tasks/mention-textarea";
 import { NoteBody } from "@/components/tasks/note-body";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
-import { visibleLength } from "@/lib/mentions";
+import { toDisplayBody, toStorageBody, visibleLength } from "@/lib/mentions";
 import { reminderState } from "@/lib/reminders";
 import { buildTimeline } from "@/lib/task-timeline";
 import { countNotes, daysSince } from "@/lib/tasks-view";
@@ -60,6 +61,7 @@ export function TaskPill({
   onToggleReminder,
   roster,
   lastActivityAt,
+  mentionsYou = false,
 }: {
   task: TaskWithRelations;
   meId: string;
@@ -82,6 +84,15 @@ export function TaskPill({
    * date twice.
    */
   lastActivityAt?: string;
+  /**
+   * Somebody named you in a note here and you have not opened it yet.
+   *
+   * The bell already says so, but the bell is somewhere else. Being named is
+   * the one kind of note that is addressed to you specifically, and finding
+   * out about it required either the panel or opening the card — so the card
+   * says it too, where you are already looking.
+   */
+  mentionsYou?: boolean;
 }) {
   const priority = PRIORITIES[task.priority];
   const status = STATUSES[task.status];
@@ -125,9 +136,17 @@ export function TaskPill({
   const noteLength = visibleLength(noteBody);
 
   function submitNote() {
-    const body = noteBody.trim();
-    if (!body) return;
+    const typed = noteBody.trim();
+    if (!typed) return;
     setNoteError(null);
+    /*
+      The names become ids here, at the moment of sending, rather than while
+      somebody types. The box holds "@Keith Maslowski"; the database holds
+      "@[Keith Maslowski](uuid)". Doing it in the box meant forty characters
+      of uuid sat visible in the note you were writing, and backspacing over
+      a name took forty presses.
+    */
+    const body = toStorageBody(typed, roster);
     startTransition(async () => {
       const result = await addNote({ taskId: task.id, body });
       if (!result.ok) {
@@ -214,6 +233,21 @@ export function TaskPill({
           >
             <MessageSquare aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
             {noteCount}
+          </span>
+        )}
+        {/*
+          Brand-coloured rather than grey: unlike the counter beside it, this
+          is not a fact about the task, it is a message for one person. It
+          goes as soon as the card is opened, because opening it marks the
+          notification read.
+        */}
+        {mentionsYou && (
+          <span
+            className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-brand px-2.5 text-[15px] leading-5 font-bold text-brand"
+            title="You were mentioned in a note here"
+          >
+            <AtSign aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+            You
           </span>
         )}
         {/*
@@ -541,7 +575,7 @@ function NoteRow({
 }) {
   const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(note.body);
+  const [draft, setDraft] = useState(() => toDisplayBody(note.body));
   const [replying, setReplying] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -556,10 +590,13 @@ function NoteRow({
     .filter((m): m is MemberSummary => !!m);
 
   function saveEdit() {
-    const body = draft.trim();
-    if (!body || body === note.body) {
+    const typed = draft.trim();
+    const body = toStorageBody(typed, roster);
+    // Compared in storage form: the two differ by exactly the ids, so a note
+    // reopened and closed untouched must not count as an edit.
+    if (!typed || body === note.body) {
       setEditing(false);
-      setDraft(note.body);
+      setDraft(toDisplayBody(note.body));
       return;
     }
     setError(null);
@@ -585,9 +622,10 @@ function NoteRow({
   }
 
   function submitReply() {
-    const body = replyBody.trim();
-    if (!body) return;
+    const typed = replyBody.trim();
+    if (!typed) return;
     setError(null);
+    const body = toStorageBody(typed, roster);
     startTransition(async () => {
       const result = await addNote({ taskId, body, parentNoteId: note.id });
       if (!result.ok) {
@@ -668,7 +706,7 @@ function NoteRow({
                 disabled={isPending}
                 onClick={() => {
                   setEditing(false);
-                  setDraft(note.body);
+                  setDraft(toDisplayBody(note.body));
                   setError(null);
                 }}
               >

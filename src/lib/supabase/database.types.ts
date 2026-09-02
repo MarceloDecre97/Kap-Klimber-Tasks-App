@@ -16,6 +16,7 @@ export type NotificationKind =
   | "delete_requested"
   | "delete_denied"
   | "deleted"
+  | "restored"
   | "reminder_upcoming"
   | "reminder_due"
   | "due_soon"
