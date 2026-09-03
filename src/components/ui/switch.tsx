@@ -22,14 +22,19 @@ export function Switch({
       onClick={() => onCheckedChange(!checked)}
       className={cn(
         "relative inline-flex items-center w-[76px] h-11 rounded-full shrink-0 transition-colors duration-150",
-        checked ? "bg-prim" : "bg-muted",
+        /*
+          The knob changes colour with the track, not just position. On a
+          pale track a white knob is invisible, which is how the dark theme
+          ended up with an "on" switch that looked identical to an "off" one.
+        */
+        checked ? "bg-switch-on" : "bg-muted",
         className
       )}
     >
       <span
         className={cn(
-          "absolute w-[34px] h-[34px] rounded-full bg-white shadow-sm transition-[left] duration-150 ease-out",
-          checked ? "left-[37px]" : "left-[5px]"
+          "absolute w-[34px] h-[34px] rounded-full shadow-sm transition-[left,background-color] duration-150 ease-out",
+          checked ? "bg-switch-knob left-[37px]" : "bg-card left-[5px]"
         )}
       />
     </button>

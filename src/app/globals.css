@@ -37,6 +37,15 @@
   --color-on-btn: #ffffff;
   /* Light hovers by darkening the fill, so it needs no edge. */
   --color-btn-edge: transparent;
+
+  /*
+    A switch that is on, and the knob that rides on it. Light is unchanged —
+    Marcelo confirmed it reads fine — so these exist for the dark theme, where
+    the old pale `prim` pill left a white knob on a nearly-white track and
+    "on" and "off" looked the same at a glance.
+  */
+  --color-switch-on: #0f172a;
+  --color-switch-knob: #ffffff;
 }
 
 .dark {
@@ -87,7 +96,16 @@
   --color-btn-hover: #ffffff;
   --color-btn-active: #f1f5f9;
   --color-on-btn: #87252b;
-  --color-btn-edge: #94a3b8;
+  /*
+    Silver was too polite against white — Marcelo could barely see it. Slate
+    600 is the darkest grey that still reads as an edge rather than as a
+    second button.
+  */
+  --color-btn-edge: #475569;
+
+  /* Brand pink track, dark knob: the two are unmistakable side by side. */
+  --color-switch-on: #e8969c;
+  --color-switch-knob: #0b1220;
 }
 
 @theme inline {
@@ -108,6 +126,8 @@
   --color-btn-active: var(--color-btn-active);
   --color-on-btn: var(--color-on-btn);
   --color-btn-edge: var(--color-btn-edge);
+  --color-switch-on: var(--color-switch-on);
+  --color-switch-knob: var(--color-switch-knob);
   --color-brand: var(--color-brand);
   --color-on-brand: var(--color-on-brand);
   --color-accent: var(--color-accent);

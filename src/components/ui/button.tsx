@@ -45,7 +45,7 @@ const base =
 */
 const variants: Record<Variant, string> = {
   primary:
-    "bg-btn text-on-btn border border-transparent " +
+    "bg-btn text-on-btn border-[1.5px] border-transparent " +
     "hover:bg-btn-hover hover:border-btn-edge active:bg-btn-active " +
     "disabled:bg-muted disabled:text-muted-fg disabled:border-border disabled:border",
   secondary:

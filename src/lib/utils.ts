@@ -24,6 +24,7 @@ const COLORS = [
   "canvas", "card", "danger", "danger-active-bg", "danger-hover-bg", "fg",
   "line", "muted", "muted-fg", "on-accent", "on-brand", "on-btn", "on-danger",
   "on-prim", "prim", "prim-active", "prim-hover", "skeleton", "sub",
+  "btn-edge", "switch-on", "switch-knob",
 ];
 
 /** The `text-*` utilities that really are type scales, not colours. */
