@@ -35,6 +35,8 @@
   --color-btn-hover: #6f1e23;
   --color-btn-active: #5a181c;
   --color-on-btn: #ffffff;
+  /* Light hovers by darkening the fill, so it needs no edge. */
+  --color-btn-edge: transparent;
 }
 
 .dark {
@@ -77,10 +79,15 @@
     lighter --color-brand: that pink is for text on a dark ground, and on
     white it drops to about 2:1. On white, the real brand red is 8.6:1.
   */
+  /*
+    White stays white on hover — a white button that greys out reads as
+    disabled rather than as hovered. The edge does the work instead.
+  */
   --color-btn: #ffffff;
-  --color-btn-hover: #e2e8f0;
-  --color-btn-active: #cbd5e1;
+  --color-btn-hover: #ffffff;
+  --color-btn-active: #f1f5f9;
   --color-on-btn: #87252b;
+  --color-btn-edge: #94a3b8;
 }
 
 @theme inline {
@@ -100,6 +107,7 @@
   --color-btn-hover: var(--color-btn-hover);
   --color-btn-active: var(--color-btn-active);
   --color-on-btn: var(--color-on-btn);
+  --color-btn-edge: var(--color-btn-edge);
   --color-brand: var(--color-brand);
   --color-on-brand: var(--color-on-brand);
   --color-accent: var(--color-accent);

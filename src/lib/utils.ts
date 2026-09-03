@@ -1,5 +1,46 @@
 import clsx, { type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+/**
+ * Every colour this app defines, and every text style that is a *size*.
+ *
+ * twMerge has to be told both, because out of the box it knows Tailwind's
+ * own palette and nothing else. Given `text-on-prim` it cannot tell a colour
+ * from a font size, guesses font size, and then — seeing `text-[20px]` later
+ * in the same string — drops the colour class from the output completely.
+ *
+ * That is not hypothetical. It is what made every primary button in the app
+ * render its label in the inherited foreground colour instead of its own:
+ * near-black on brand red in light mode, near-white on white in dark. The
+ * background was always right, because `bg-*` had nothing to collide with,
+ * which is exactly why it read as a colour problem rather than a class one.
+ *
+ * Both lists must stay in step with the `@theme inline` block in globals.css.
+ * A colour missing here is not a visual glitch — it is a class silently
+ * deleted, and it shows up as text that is invisible against its own button.
+ */
+const COLORS = [
+  "accent", "bg", "border", "brand", "btn", "btn-active", "btn-hover",
+  "canvas", "card", "danger", "danger-active-bg", "danger-hover-bg", "fg",
+  "line", "muted", "muted-fg", "on-accent", "on-brand", "on-btn", "on-danger",
+  "on-prim", "prim", "prim-active", "prim-hover", "skeleton", "sub",
+];
+
+/** The `text-*` utilities that really are type scales, not colours. */
+const TEXT_SIZES = [
+  "card-title", "card-title-compact", "chip", "field-label", "section-heading",
+];
+
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "text-color": [{ text: COLORS }],
+      "font-size": [{ text: TEXT_SIZES }],
+      "bg-color": [{ bg: COLORS }],
+      "border-color": [{ border: COLORS }],
+    },
+  },
+});
 
 /**
  * clsx alone only concatenates — when a caller passes a conflicting

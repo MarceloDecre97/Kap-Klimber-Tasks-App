@@ -18,10 +18,17 @@ const base =
 
 /*
   Primary is brand red with a white label in light mode, and the inverse —
-  white with a brand red label — in dark. Marcelo's call, after both themes
-  rendered the label in the *other* theme's colour: near-black on near-navy,
-  then white on pale grey. It uses its own `btn` tokens rather than the
-  shared `prim` pair so that whatever is doing that cannot reach it.
+  white with a brand red label — in dark. Marcelo's call.
+
+  Hover differs by theme because the same gesture does not read the same way
+  on both: light darkens the fill, dark keeps the white and draws a silver
+  edge. A white button that greys on hover looks disabled rather than
+  hovered, which is the opposite of what a hover state is for.
+
+  The reason the label was unreadable in *both* themes was never the colours
+  — it was `cn()` deleting the `text-on-*` class as a font-size conflict. See
+  the note in utils.ts. These tokens are kept regardless: they are what makes
+  the pair explicit rather than inherited.
 
   A disabled button still has to be readable.
 
@@ -38,7 +45,8 @@ const base =
 */
 const variants: Record<Variant, string> = {
   primary:
-    "bg-btn text-on-btn border border-transparent hover:bg-btn-hover active:bg-btn-active " +
+    "bg-btn text-on-btn border border-transparent " +
+    "hover:bg-btn-hover hover:border-btn-edge active:bg-btn-active " +
     "disabled:bg-muted disabled:text-muted-fg disabled:border-border disabled:border",
   secondary:
     "bg-card text-fg border-[1.5px] border-fg hover:bg-muted active:bg-muted " +
