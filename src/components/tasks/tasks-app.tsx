@@ -547,7 +547,7 @@ export function TasksApp({
                     {deletedTasks.map((task) => (
                       <div
                         key={task.id}
-                        className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border-[1.5px] border-border bg-card px-4 py-3"
+                        className="flex min-h-14 items-center gap-3 rounded-2xl border-[1.5px] border-border bg-card px-4 py-3"
                       >
                         <span className="min-w-0 grow text-[17px] leading-6 text-fg text-pretty">
                           {task.title}
@@ -558,36 +558,46 @@ export function TasksApp({
                             </span>
                           )}
                         </span>
-                        <Button
-                          variant="secondary"
-                          size="md"
-                          className="w-auto shrink-0 px-4"
-                          onClick={() => handleRestore(task.id)}
-                        >
-                          Restore
-                        </Button>
                         {/*
-                          Set apart from Restore by a divider and a gap, and
-                          left grey rather than red. It is the irreversible
-                          control on the row, so it should take a deliberate
-                          reach — not sit flush against the safe one where a
-                          thumb aiming for Restore can find it.
+                          The two controls are one unit that never breaks
+                          apart. Left to wrap on its own, the erase button
+                          dropped to a second line on a phone and read as
+                          belonging to the row below it — the last thing an
+                          irreversible control should do. The title takes the
+                          squeeze instead, wrapping onto two lines.
                         */}
-                        <span aria-hidden className="h-8 w-px shrink-0 bg-line" />
-                        <button
-                          type="button"
-                          aria-label={`Erase ${task.title} for good`}
-                          title="Erase for good"
-                          onClick={() => setPurgeTarget(task)}
-                          className={cn(
-                            "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
-                            "text-muted-fg cursor-pointer transition-colors duration-150",
-                            "hover:bg-danger-hover-bg hover:text-danger",
-                            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
-                          )}
-                        >
-                          <Trash2 size={20} strokeWidth={1.75} />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="md"
+                            className="w-auto shrink-0 px-4"
+                            onClick={() => handleRestore(task.id)}
+                          >
+                            Restore
+                          </Button>
+                          {/*
+                            Set apart from Restore by a divider, and left grey
+                            rather than red. It is the irreversible control on
+                            the row, so it should take a deliberate reach —
+                            not sit flush against the safe one where a thumb
+                            aiming for Restore can find it.
+                          */}
+                          <span aria-hidden className="h-8 w-px shrink-0 bg-line" />
+                          <button
+                            type="button"
+                            aria-label={`Erase ${task.title} for good`}
+                            title="Erase for good"
+                            onClick={() => setPurgeTarget(task)}
+                            className={cn(
+                              "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                              "text-muted-fg cursor-pointer transition-colors duration-150",
+                              "hover:bg-danger-hover-bg hover:text-danger",
+                              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
+                            )}
+                          >
+                            <Trash2 size={20} strokeWidth={1.75} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
