@@ -258,6 +258,15 @@ export interface Database {
       cancel_task_deletion: { Args: { p_task_id: string }; Returns: void };
       delete_own_task: { Args: { p_task_id: string }; Returns: void };
       restore_task: { Args: { p_task_id: string }; Returns: void };
+      /**
+       * Erases a deleted task and everything cascading off it. Creator
+       * only, and only on a task already in the bin. Returns what it
+       * destroyed: { title, notes, events }. See 0021_purge_task.sql.
+       */
+      purge_task: {
+        Args: { p_task_id: string };
+        Returns: { title: string; notes: number; events: number };
+      };
       /** Dispatcher only — not granted to `authenticated`. */
       increment_push_failure: { Args: { p_id: string }; Returns: void };
       /**

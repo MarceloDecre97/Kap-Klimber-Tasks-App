@@ -359,6 +359,29 @@ export async function restoreTask(taskIdInput: string): Promise<ActionResult> {
   return { ok: true, taskId: taskId.data };
 }
 
+/**
+ * Erasing one of your own for good, from the Recently deleted list.
+ *
+ * The only irreversible thing in this app. Every rule that makes it safe
+ * lives in the database — creator only, and only on a task already deleted —
+ * because this action is not the only way to reach the RPC and a check here
+ * would be a check anyone bypassing the UI never runs. See 0021_purge_task.sql.
+ */
+export async function purgeTask(taskIdInput: string): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+
+  const { supabase } = await getCurrentMember();
+  const { error } = await supabase.rpc("purge_task", { p_task_id: taskId.data });
+  if (error) {
+    console.error("purgeTask failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't erase that.") };
+  }
+
+  revalidateTaskViews();
+  return { ok: true, taskId: taskId.data };
+}
+
 export async function addNote(input: unknown): Promise<ActionResult<{ noteId: string }>> {
   const parsed = noteInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Say what happened." };

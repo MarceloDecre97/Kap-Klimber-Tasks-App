@@ -125,3 +125,62 @@ export function groupTasks(tasks: TaskWithRelations[], sort: SortMode): TaskGrou
  * typecheck does not catch.
  */
 export const DELETED_VISIBLE_DAYS = 15;
+
+/* -------------------------------------------------------------------------
+   Erasing a deleted task for good
+
+   Lives here, next to DELETED_VISIBLE_DAYS and for the same reason: the
+   dialog that quotes these numbers is a client component, and the notes it
+   counts arrive from server-only code it cannot import.
+   ------------------------------------------------------------------------- */
+
+/** What a purge is about to destroy, in the terms the warning uses. */
+export interface PurgeDamage {
+  /** Notes and replies that still say something, the caller's own included. */
+  noteCount: number;
+  /**
+   * Everyone but the caller who wrote one, in the order they first appear.
+   * Naming yourself to yourself reads as though a stranger wrote your notes;
+   * what gives this warning weight is that somebody else loses work.
+   */
+  authors: string[];
+}
+
+function collectAuthors(
+  notes: TaskNote[],
+  meId: string,
+  seen: Set<string>,
+  into: string[]
+): void {
+  for (const note of notes) {
+    // Skip the markers countNotes skips. A removed note has no text left to
+    // lose, so crediting its author here would name somebody whose work is
+    // already gone.
+    if (!note.deleted && note.member && note.member.id !== meId && !seen.has(note.member.id)) {
+      seen.add(note.member.id);
+      into.push(note.member.display_name);
+    }
+    collectAuthors(note.replies, meId, seen, into);
+  }
+}
+
+/**
+ * Counts what erasing a task takes with it.
+ *
+ * The count comes from countNotes rather than its own walk, deliberately:
+ * the task card shows that number too, and a card reading "3 notes" above a
+ * dialog warning about 4 is the kind of drift that makes people stop
+ * believing either.
+ */
+export function describePurgeDamage(task: TaskWithRelations, meId: string): PurgeDamage {
+  const authors: string[] = [];
+  collectAuthors(task.notes, meId, new Set(), authors);
+  return { noteCount: countNotes(task.notes), authors };
+}
+
+/** "Keith", "Keith and Dee", "Keith, Dee and Fred". */
+export function listNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}

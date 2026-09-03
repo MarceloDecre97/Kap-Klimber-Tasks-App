@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Search, Users, X } from "lucide-react";
+import { ChevronDown, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -13,6 +13,7 @@ import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dro
 import { FiltersPanel } from "@/components/tasks/filters-panel";
 import { SortMenu } from "@/components/tasks/sort-menu";
 import { DeleteTaskDialog } from "@/components/tasks/delete-task-dialog";
+import { PurgeTaskDialog } from "@/components/tasks/purge-task-dialog";
 import { TaskPill } from "@/components/tasks/task-pill";
 import {
   cancelTaskDeletion,
@@ -98,6 +99,7 @@ export function TasksApp({
     }
   }
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
+  const [purgeTarget, setPurgeTarget] = useState<TaskWithRelations | null>(null);
   const [, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -266,6 +268,17 @@ export function TasksApp({
       router.refresh();
       showToast({ message: "Task restored" });
     });
+  }
+
+  /*
+    No Undo on this one, and that is the point. Every other toast in this app
+    offers a way back; here there is nothing left to bring back, so offering
+    the button would be a lie.
+  */
+  function handlePurged(task: TaskWithRelations) {
+    setPurgeTarget(null);
+    router.refresh();
+    showToast({ message: `“${task.title}” erased` });
   }
 
   function handleResolveDeletion(taskId: string, approve: boolean) {
@@ -553,6 +566,28 @@ export function TasksApp({
                         >
                           Restore
                         </Button>
+                        {/*
+                          Set apart from Restore by a divider and a gap, and
+                          left grey rather than red. It is the irreversible
+                          control on the row, so it should take a deliberate
+                          reach — not sit flush against the safe one where a
+                          thumb aiming for Restore can find it.
+                        */}
+                        <span aria-hidden className="h-8 w-px shrink-0 bg-line" />
+                        <button
+                          type="button"
+                          aria-label={`Erase ${task.title} for good`}
+                          title="Erase for good"
+                          onClick={() => setPurgeTarget(task)}
+                          className={cn(
+                            "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                            "text-muted-fg cursor-pointer transition-colors duration-150",
+                            "hover:bg-danger-hover-bg hover:text-danger",
+                            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
+                          )}
+                        >
+                          <Trash2 size={20} strokeWidth={1.75} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -569,6 +604,14 @@ export function TasksApp({
         onClose={() => setDeleteTarget(null)}
         onDeleted={handleDeleted}
         onRequested={handleRequested}
+        onError={(message) => showToast({ message })}
+      />
+
+      <PurgeTaskDialog
+        task={purgeTarget}
+        meId={me.id}
+        onClose={() => setPurgeTarget(null)}
+        onPurged={handlePurged}
         onError={(message) => showToast({ message })}
       />
     </div>
