@@ -103,9 +103,10 @@
   */
   --color-btn-edge: #475569;
 
-  /* Brand pink track, dark knob: the two are unmistakable side by side. */
+  /* Brand pink track, white knob — same knob colour as light mode, so
+     the switch reads identically in both themes. */
   --color-switch-on: #e8969c;
-  --color-switch-knob: #0b1220;
+  --color-switch-knob: #ffffff;
 }
 
 @theme inline {
