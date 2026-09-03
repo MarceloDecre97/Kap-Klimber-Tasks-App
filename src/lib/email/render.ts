@@ -3,33 +3,26 @@ import type { NotificationItem } from "@/lib/data/notifications";
 import type { NotificationKind } from "@/lib/supabase/database.types";
 
 /**
- * Which notifications are worth an email.
+ * Which notifications email can carry.
  *
- * Not all of them, and that is the whole design. Email carries the dated,
- * scheduled things and the completions — what you would want a record of, and
- * what you might act on days later. The chatter (comments, mentions,
- * assignments, deletions) stays on the bell and the phone, where it is
- * timely and where it belongs.
+ * Everything a person is able to switch. Marcelo's call, and the right one:
+ * the app should not decide on somebody's behalf that a comment is not worth
+ * an email — it should let them decide, and default to telling them.
  *
- * Mirroring push into email would guarantee both get filtered within a week,
- * and then the one that mattered goes to the same folder as the rest.
+ * The three exceptions are the two locked groups: being @mentioned, and being
+ * asked to approve or refused a deletion. Those are urgent and addressed to
+ * one person, they cannot be switched off, and email is the slow channel —
+ * so they stay on the bell and the phone where they are read in minutes
+ * rather than hours.
  */
-const EMAIL_KINDS = new Set<NotificationKind>([
-  "reminder_upcoming",
-  "reminder_due",
-  "due_soon",
-  "overdue",
+const NEVER_EMAILED = new Set<NotificationKind>([
+  "mention",
+  "delete_requested",
+  "delete_denied",
 ]);
 
-/**
- * A completed task is worth an email, but "completed" is not a notification
- * kind — it is a status change that happens to land on Complete. Reading it
- * that way rather than inventing a second kind keeps the bell and the inbox
- * incapable of disagreeing about what happened.
- */
 export function isEmailable(item: NotificationItem): boolean {
-  if (EMAIL_KINDS.has(item.kind)) return true;
-  return item.kind === "status" && item.payload.to === "complete";
+  return !NEVER_EMAILED.has(item.kind);
 }
 
 export interface RenderedEmail {

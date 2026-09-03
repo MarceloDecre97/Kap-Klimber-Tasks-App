@@ -16,15 +16,30 @@ const base =
   "transition-[transform,background-color,color,opacity] duration-150 ease-out " +
   "active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-100";
 
+/*
+  A disabled button still has to be readable.
+
+  `disabled:opacity-100` in the base means the disabled look comes entirely
+  from these colours rather than from fading, which is right — a faded button
+  on a phone in daylight is unreadable — but it also means the pair has to
+  carry the contrast on its own. `text-sub` on `bg-muted` is 6.9:1 in light
+  and thinner than it looks at button weight, so both disabled states use
+  `muted-fg` instead: 9.5:1 in light, 11:1 in dark.
+
+  The enabled colours are stated explicitly rather than inherited. A button
+  whose label falls back to `text-fg` over `bg-prim` is near-black on
+  near-black, which is exactly the failure this is guarding against.
+*/
 const variants: Record<Variant, string> = {
   primary:
     "bg-prim text-on-prim border border-transparent hover:bg-prim-hover active:bg-prim-active " +
-    "disabled:bg-muted disabled:text-sub disabled:border-border disabled:border",
+    "disabled:bg-muted disabled:text-muted-fg disabled:border-border disabled:border",
   secondary:
     "bg-card text-fg border-[1.5px] border-fg hover:bg-muted active:bg-muted " +
-    "disabled:text-sub disabled:border-border",
+    "disabled:bg-muted disabled:text-muted-fg disabled:border-border",
   destructive:
-    "bg-card text-danger border-[1.5px] border-danger hover:bg-[var(--color-danger-hover-bg)] active:bg-[var(--color-danger-active-bg)]",
+    "bg-card text-danger border-[1.5px] border-danger hover:bg-[var(--color-danger-hover-bg)] active:bg-[var(--color-danger-active-bg)] " +
+    "disabled:bg-muted disabled:text-muted-fg disabled:border-border",
   ghost: "bg-transparent text-fg border border-transparent hover:bg-muted",
   link: "bg-transparent text-brand underline underline-offset-[3px] p-0 h-auto",
 };

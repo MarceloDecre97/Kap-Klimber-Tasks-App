@@ -66,12 +66,18 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
 
               {!group.locked && (
                 <div className="flex shrink-0 flex-col items-center gap-1">
+                  {/*
+                    "Phone" rather than "Push". Push is what the technology is
+                    called, not what it does — and the only people reading this
+                    screen are four builders who want to know whether their
+                    phone will buzz.
+                  */}
                   <span className="text-[12px] leading-none font-bold tracking-wide text-sub uppercase">
-                    Push
+                    Phone
                   </span>
                   <Switch
                     checked={groupIsOn(group, prefs, "push")}
-                    label={`Push notifications for ${group.label}`}
+                    label={`Notifications on your phone for ${group.label}`}
                     className="w-[56px] h-8"
                     onCheckedChange={(next) =>
                       commit({ ...prefs, pushOff: toggleGroup(group, prefs.pushOff, next) })
@@ -81,10 +87,10 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
               )}
 
               {/*
-                Only where email actually carries this. Offering an email
-                switch for comments would imply comments are emailed, and
-                they are not — a control that does nothing is worse than no
-                control, because it teaches people the screen lies.
+                Every switchable group carries both now. The two locked ones
+                are the exception, and they have no switches at all — so a
+                control on this screen still never claims something the
+                dispatcher will not honour.
               */}
               {!group.locked && group.email && (
                 <div className="flex shrink-0 flex-col items-center gap-1">

@@ -14,7 +14,12 @@ export interface PrefGroup {
   /** What it covers, in the words of somebody using the app. */
   detail: string;
   kinds: NotificationKind[];
-  /** False where email never carries these, so no switch is offered. */
+  /**
+   * Whether email can carry this group at all. True for everything a member
+   * can switch, so the choice is theirs rather than mine — the only groups
+   * email never carries are the locked ones, which are urgent and personal
+   * and belong on the bell and the phone.
+   */
   email: boolean;
   /**
    * Some things are not optional. Being named personally, and being asked to
@@ -47,19 +52,19 @@ export const PREF_GROUPS: PrefGroup[] = [
     label: "Comments and replies",
     detail: "On tasks you created, are assigned to, or have commented on.",
     kinds: ["note", "reply"],
-    email: false,
+    email: true,
   },
   {
     id: "assignment",
     label: "Being put on a task",
     detail: "When somebody assigns a task to you.",
     kinds: ["assigned"],
-    email: false,
+    email: true,
   },
   {
     id: "changes",
     label: "Status and due date changes",
-    detail: "On tasks you created or are assigned to. Completions are also emailed.",
+    detail: "On tasks you created or are assigned to.",
     kinds: ["status", "due_date"],
     email: true,
   },
@@ -82,7 +87,7 @@ export const PREF_GROUPS: PrefGroup[] = [
     label: "Tasks deleted or brought back",
     detail: "When a task you were working on disappears, or returns.",
     kinds: ["deleted", "restored"],
-    email: false,
+    email: true,
   },
 ];
 
