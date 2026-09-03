@@ -13,7 +13,7 @@ import { sendPush, type PushTarget } from "@/lib/push/send";
 import { appOrigin, getEmailConfig } from "@/lib/email/config";
 import { sendEmail } from "@/lib/email/send";
 import { isEmailable, renderDigest } from "@/lib/email/render";
-import { describeNotification } from "@/lib/notifications-view";
+import { describeNotification, pushBody } from "@/lib/notifications-view";
 import type { PendingPush } from "@/lib/data/notifications";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
@@ -116,34 +116,64 @@ export async function POST(request: Request) {
   /** Deliberately not delivered: switched off, or inside quiet hours. */
   let suppressed = 0;
 
+  /*
+    Sorted before anything is sent, into one bundle per person per task.
+
+    Three changes to one task inside a minute used to be three pushes — and
+    because every push carries the task as its tag, each one replaced the one
+    before it. The phone showed the last change and silently swallowed the
+    other two: you saw "moved to Waiting" and never learned there had been a
+    comment and a mention as well.
+
+    So they are counted here instead. The newest change still supplies the
+    headline, because "Keith moved X to Waiting" tells you something that
+    "3 updates" does not, and the count rides along in the second line. One
+    notification, nothing hidden.
+
+    Only what lands in the same run can be grouped; changes a few minutes
+    apart are still separate pushes that replace each other. The bell is the
+    complete record either way.
+  */
+  const bundles = new Map<string, PendingPush[]>();
+  for (const entry of pending) {
+    const targets = devices.get(entry.memberId);
+    if (!targets || targets.length === 0) continue;
+
+    /*
+      Two reasons to stay silent, and both leave the row stamped below rather
+      than pending. A push that was deliberately declined is not a push that
+      failed, and re-examining it every minute for an hour would be the same
+      treadmill 0017 fixed.
+    */
+    const p = prefs.get(entry.memberId);
+    if (p && p.pushOff.includes(entry.item.kind)) {
+      suppressed += 1;
+      continue;
+    }
+    /*
+      Quiet hours drop the push, they do not queue it. Nine notifications
+      arriving in a burst at 07:00 is worse than the 02:00 buzz they were
+      avoiding, and the bell has been holding them the whole time — nothing
+      is lost, only the noise.
+    */
+    if (quiet.get(entry.memberId)) {
+      suppressed += 1;
+      continue;
+    }
+
+    const key = `${entry.memberId}:${entry.item.task.id}`;
+    const bundle = bundles.get(key) ?? [];
+    bundle.push(entry);
+    bundles.set(key, bundle);
+  }
+
   await Promise.all(
-    pending.map(async (entry) => {
-      const targets = devices.get(entry.memberId);
-      if (!targets || targets.length === 0) return;
+    [...bundles.values()].map(async (bundle) => {
+      // listPendingPushes orders oldest first, so the last is the newest.
+      const newest = bundle[bundle.length - 1]!;
+      const targets = devices.get(newest.memberId)!;
 
-      /*
-        Two reasons to stay silent, and both leave the row stamped below
-        rather than pending. A push that was deliberately declined is not a
-        push that failed, and re-examining it every minute for an hour would
-        be the same treadmill 0017 fixed.
-      */
-      const p = prefs.get(entry.memberId);
-      if (p && p.pushOff.includes(entry.item.kind)) {
-        suppressed += 1;
-        return;
-      }
-      /*
-        Quiet hours drop the push, they do not queue it. Nine notifications
-        arriving in a burst at 07:00 is worse than the 02:00 buzz they were
-        avoiding, and the bell has been holding them the whole time — nothing
-        is lost, only the noise.
-      */
-      if (quiet.get(entry.memberId)) {
-        suppressed += 1;
-        return;
-      }
-
-      const message = renderPush(entry);
+      const message = renderPush(newest, bundle.length - 1);
       for (const target of targets) {
         const result = await sendPush(target, message);
         if (result.ok) {
@@ -208,11 +238,11 @@ export async function POST(request: Request) {
  * other on the phone instead of stacking into a wall somebody swipes away
  * without reading.
  */
-function renderPush(entry: PendingPush) {
+function renderPush(entry: PendingPush, more = 0) {
   const { headline, detail } = describeNotification(entry.item);
   return {
     title: headline,
-    body: detail ?? "",
+    body: pushBody(detail, more),
     url: entry.item.taskGone ? "/dashboard" : `/tasks?task=${entry.item.task.id}`,
     tag: `task:${entry.item.task.id}`,
     at: entry.item.created_at,

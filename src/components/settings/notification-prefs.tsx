@@ -22,7 +22,21 @@ const QUIET_DEFAULT = { from: "22:00", to: "07:00" };
  * changed something, and this one has no destructive option — the worst case
  * of a mis-tap is one extra notification, which the switch beside it undoes.
  */
-export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs }) {
+export function NotificationPrefsPanel({
+  initial,
+  deviceOn,
+}: {
+  initial: NotificationPrefs;
+  /**
+   * Whether the device being used right now can receive notifications at all.
+   *
+   * Only ever dims the Device column — it never changes what is stored. These
+   * switches belong to the account, not to one phone, so writing them off
+   * here would silence a different device that is working perfectly, and the
+   * person would have no way to see why.
+   */
+  deviceOn: boolean;
+}) {
   const [prefs, setPrefs] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -46,10 +60,26 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[16px] leading-6 text-sub text-pretty">
-        Everything is on until you turn it off. The bell inside the app always keeps
-        a full record: these only change what reaches your phone and your inbox.
-      </p>
+      {/*
+        A line per column, because each switch has a different reach and the
+        difference is the thing people get wrong: email arrives regardless of
+        any device, and the device column only touches machines that have been
+        switched on in the section above.
+      */}
+      <div className="flex flex-col gap-1.5 text-[16px] leading-6 text-sub text-pretty">
+        <p>
+          <b className="text-fg">Email:</b> Goes to your inbox, whether or not any or
+          some of your devices have notifications turned on.
+        </p>
+        <p>
+          <b className="text-fg">Device:</b> Only reaches the devices where you turned
+          notifications on in the section above.
+        </p>
+        <p>
+          Everything is on until you turn it off. The bell inside the app always keeps
+          a full record.
+        </p>
+      </div>
 
       <ul className="flex flex-col divide-y-[1.5px] divide-border rounded-2xl border-[1.5px] border-border bg-card">
         {PREF_GROUPS.map((group) => (
@@ -72,34 +102,47 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
               */}
               <div className="flex shrink-0 items-start gap-5">
               {!group.locked && (
-                <div className="flex w-14 shrink-0 flex-col items-center gap-1.5">
+                <div
+                  className={cn(
+                    "flex w-14 shrink-0 flex-col items-center gap-1.5",
+                    // Dimmed, not disabled: the switch still works, because it
+                    // governs the member's other devices too. What is being
+                    // said here is "not this one", and saying it in colour is
+                    // honest where switching it off would not be.
+                    !deviceOn && "opacity-45"
+                  )}
+                >
                   {/*
-                    "Phone" rather than "Push". Push is what the technology is
-                    called, not what it does — and the only people reading this
-                    screen are four builders who want to know whether their
-                    phone will buzz.
+                    "Device" rather than "Phone", and neither of them "Push".
+                    It reaches laptops as well, so Phone was never the whole
+                    truth — and Push is what the technology is called, not
+                    what it does.
                   */}
                   <span className="text-[12px] leading-none font-bold tracking-wide text-sub uppercase">
-                    Phone
+                    Device
                   </span>
                   <Switch
                     checked={groupIsOn(group, prefs, "push")}
-                    label={`Notifications on your phone for ${group.label}`}
+                    label={`Notifications on your devices for ${group.label}`}
                     size="sm"
                     onCheckedChange={(next) =>
-                      commit({ ...prefs, pushOff: toggleGroup(group, prefs.pushOff, next) })
+                      commit({
+                        ...prefs,
+                        pushOff: toggleGroup(group, prefs.pushOff, next, "push"),
+                      })
                     }
                   />
                 </div>
               )}
 
               {/*
-                Every switchable group carries both now. The two locked ones
-                are the exception, and they have no switches at all — so a
-                control on this screen still never claims something the
-                dispatcher will not honour.
+                Email is offered wherever the kind can carry it, locked groups
+                included. Locked means the device channel cannot be silenced —
+                it was never a reason to withhold the inbox, which is the one
+                place a delete request reaches somebody who is away from the
+                app.
               */}
-              {!group.locked && group.email && (
+              {group.email && (
                 <div className="flex w-14 shrink-0 flex-col items-center gap-1.5">
                   <span className="text-[12px] leading-none font-bold tracking-wide text-sub uppercase">
                     Email
@@ -109,7 +152,10 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
                     label={`Emails for ${group.label}`}
                     size="sm"
                     onCheckedChange={(next) =>
-                      commit({ ...prefs, emailOff: toggleGroup(group, prefs.emailOff, next) })
+                      commit({
+                        ...prefs,
+                        emailOff: toggleGroup(group, prefs.emailOff, next, "email"),
+                      })
                     }
                   />
                 </div>

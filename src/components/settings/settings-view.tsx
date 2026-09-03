@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, LogOut } from "lucide-react";
@@ -21,6 +21,14 @@ export function SettingsView({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  /*
+    Whether the device in front of the person can receive notifications, owned
+    here because both children need it: the switch decides it, and the panel
+    below dims its Device column when the answer is no. Starts true so nothing
+    flickers grey while the browser is still being asked.
+  */
+  const [deviceOn, setDeviceOn] = useState(true);
+  const handleDeviceState = useCallback((on: boolean) => setDeviceOn(on), []);
 
   return (
     <div className="flex h-full flex-col bg-bg">
@@ -45,12 +53,12 @@ export function SettingsView({
 
         <div className="flex flex-col gap-3">
           <div className="text-field-label">Notifications</div>
-          <PushSwitch />
+          <PushSwitch onStateChange={handleDeviceState} />
         </div>
 
         <div className="flex flex-col gap-3">
           <div className="text-field-label">What reaches you</div>
-          <NotificationPrefsPanel initial={prefs} />
+          <NotificationPrefsPanel initial={prefs} deviceOn={deviceOn} />
         </div>
 
         <div className="flex flex-col gap-3">

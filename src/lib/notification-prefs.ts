@@ -14,18 +14,19 @@ export interface PrefGroup {
   /** What it covers, in the words of somebody using the app. */
   detail: string;
   kinds: NotificationKind[];
-  /**
-   * Whether email can carry this group at all. True for everything a member
-   * can switch, so the choice is theirs rather than mine — the only groups
-   * email never carries are the locked ones, which are urgent and personal
-   * and belong on the bell and the phone.
-   */
+  /** Whether email can carry this group at all. */
   email: boolean;
   /**
-   * Some things are not optional. Being named personally, and being asked to
-   * approve a deletion, are both addressed to one person and stall until they
-   * answer — a switch that hides them would produce a task nobody can delete
-   * and nobody remembers asking about.
+   * Set when this group's *device* notifications cannot be switched off.
+   * Being named personally, and being asked to approve a deletion, are both
+   * addressed to one person and stall until they answer — a switch that hid
+   * them would produce a task nobody can delete and nobody remembers asking
+   * about.
+   *
+   * Deliberately about one channel only. A delete request now carries an
+   * email switch, because the request sits waiting whether or not you are
+   * near the app, and email is the one channel that reaches you there. What
+   * you cannot do is silence it everywhere.
    */
   locked?: string;
 }
@@ -44,7 +45,7 @@ export const PREF_GROUPS: PrefGroup[] = [
     label: "When someone needs an answer",
     detail: "A request to delete a task you created, and the reply to a request you made.",
     kinds: ["delete_requested", "delete_denied"],
-    email: false,
+    email: true,
     locked: "Always on: When a task stays on a limbo until you decide.",
   },
   {
@@ -113,7 +114,8 @@ export function groupIsOn(
   prefs: NotificationPrefs,
   channel: "push" | "email"
 ): boolean {
-  if (group.locked) return true;
+  // Locked pins the device channel on, and only that one.
+  if (group.locked && channel === "push") return true;
   const off = channel === "push" ? prefs.pushOff : prefs.emailOff;
   // A group is off only when every kind in it is off. A half-off group can
   // only come from hand-edited data, and reading it as "on" is the safer of
@@ -131,9 +133,10 @@ export function groupIsOn(
 export function toggleGroup(
   group: PrefGroup,
   off: string[],
-  next: boolean
+  next: boolean,
+  channel: "push" | "email"
 ): string[] {
-  if (group.locked) return off;
+  if (group.locked && channel === "push") return off;
   const without = off.filter((kind) => !group.kinds.includes(kind as NotificationKind));
   return next ? without : [...without, ...group.kinds];
 }

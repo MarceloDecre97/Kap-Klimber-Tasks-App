@@ -164,3 +164,18 @@ export function unreadMentionTaskIds(feed: { items: NotificationItem[] }): Set<s
   }
   return ids;
 }
+
+/**
+ * The second line of a push, once several changes to one task have been
+ * bundled into a single notification.
+ *
+ * The count is appended rather than substituted. "Was For review" is the
+ * news; "and 2 more updates" is the reason to open the app — dropping either
+ * loses something the other cannot say. Lives here beside describeNotification
+ * because the two together are what a phone actually shows.
+ */
+export function pushBody(detail: string | null, more: number): string {
+  const extra = more > 0 ? `and ${more} more update${more === 1 ? "" : "s"}` : "";
+  if (detail && extra) return `${detail} · ${extra}`;
+  return detail || extra;
+}

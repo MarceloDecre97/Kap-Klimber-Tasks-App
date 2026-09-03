@@ -15,11 +15,17 @@ import type { NotificationKind } from "@/lib/supabase/database.types";
  * so they stay on the bell and the phone where they are read in minutes
  * rather than hours.
  */
-const NEVER_EMAILED = new Set<NotificationKind>([
-  "mention",
-  "delete_requested",
-  "delete_denied",
-]);
+/*
+  Only mentions. Delete requests used to be here too, on the reasoning that
+  they were urgent enough for the bell and the phone — but that is backwards:
+  a request sits waiting until the creator answers, and email is the one
+  channel that reaches somebody who is not near the app. It is switchable
+  like any other, and quiet hours hold it like any other.
+
+  Mentions stay out. They are conversation, and a note naming you is already
+  on the bell and the phone the moment it is written.
+*/
+const NEVER_EMAILED = new Set<NotificationKind>(["mention"]);
 
 export function isEmailable(item: NotificationItem): boolean {
   return !NEVER_EMAILED.has(item.kind);

@@ -69,7 +69,7 @@ function isInstalled(): boolean {
  * which most never will. So the switch exists, off, and asks nothing until
  * somebody presses it.
  */
-export function PushSwitch() {
+export function PushSwitch({ onStateChange }: { onStateChange?: (on: boolean) => void }) {
   const [state, setState] = useState<PushState>("checking");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +141,16 @@ export function PushSwitch() {
       cancelled = true;
     };
   }, [resolve]);
+
+  /*
+    Told to the panel below rather than worked out there a second time. Two
+    copies of "can this device receive anything?" is two answers waiting to
+    disagree, and the one on the settings screen has to match the button
+    beside it or the screen contradicts itself.
+  */
+  useEffect(() => {
+    if (state !== "checking") onStateChange?.(state === "on");
+  }, [state, onStateChange]);
 
   async function turnOn() {
     setBusy(true);
@@ -249,6 +259,18 @@ export function PushSwitch() {
             Notifications on this device
           </span>
           <span className="text-[16px] leading-6 text-sub text-pretty">{describe(state)}</span>
+          {/*
+            The iPhone case is deliberately not mentioned here. Somebody on
+            an iPhone without the app installed gets the Add to Home Screen
+            panel below instead of a button, so the instruction already
+            reaches exactly the people it applies to — putting it in this
+            line would have everyone else read about a problem they do not
+            have.
+          */}
+          <span className="mt-1 text-[16px] leading-6 text-sub text-pretty">
+            Only for this phone or computer (Device). If you also use another one, you
+            can turn it on there too.
+          </span>
         </div>
 
         {(state === "on" || state === "off") && (
