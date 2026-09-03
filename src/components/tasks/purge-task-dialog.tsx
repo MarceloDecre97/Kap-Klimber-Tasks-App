@@ -55,7 +55,9 @@ export function PurgeTaskDialog({
     <Dialog open={!!task} onClose={onClose}>
       {task && damage && (
         <>
-          <div className="text-section-heading text-pretty">
+          {/* Same clamp as the delete dialog, and for the same reason: the
+              buttons must stay reachable however long the title is. */}
+          <div className="text-section-heading text-pretty wrap-anywhere line-clamp-3">
             Erase “{task.title}” for good?
           </div>
 

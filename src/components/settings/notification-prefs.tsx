@@ -48,7 +48,7 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
     <div className="flex flex-col gap-4">
       <p className="text-[16px] leading-6 text-sub text-pretty">
         Everything is on until you turn it off. The bell inside the app always keeps
-        a full record — these only change what reaches your phone and your inbox.
+        a full record: these only change what reaches your phone and your inbox.
       </p>
 
       <ul className="flex flex-col divide-y-[1.5px] divide-border rounded-2xl border-[1.5px] border-border bg-card">
@@ -64,8 +64,15 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
                 </span>
               </div>
 
+              {/*
+                The two channels are one block with a gap of its own. As
+                siblings of the label they inherited its spacing, which on a
+                narrow row put "Phone" and "Email" close enough to read as
+                one control.
+              */}
+              <div className="flex shrink-0 items-start gap-5">
               {!group.locked && (
-                <div className="flex shrink-0 flex-col items-center gap-1">
+                <div className="flex w-14 shrink-0 flex-col items-center gap-1.5">
                   {/*
                     "Phone" rather than "Push". Push is what the technology is
                     called, not what it does — and the only people reading this
@@ -78,7 +85,7 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
                   <Switch
                     checked={groupIsOn(group, prefs, "push")}
                     label={`Notifications on your phone for ${group.label}`}
-                    className="w-[56px] h-8"
+                    size="sm"
                     onCheckedChange={(next) =>
                       commit({ ...prefs, pushOff: toggleGroup(group, prefs.pushOff, next) })
                     }
@@ -93,20 +100,21 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
                 dispatcher will not honour.
               */}
               {!group.locked && group.email && (
-                <div className="flex shrink-0 flex-col items-center gap-1">
+                <div className="flex w-14 shrink-0 flex-col items-center gap-1.5">
                   <span className="text-[12px] leading-none font-bold tracking-wide text-sub uppercase">
                     Email
                   </span>
                   <Switch
                     checked={groupIsOn(group, prefs, "email")}
                     label={`Emails for ${group.label}`}
-                    className="w-[56px] h-8"
+                    size="sm"
                     onCheckedChange={(next) =>
                       commit({ ...prefs, emailOff: toggleGroup(group, prefs.emailOff, next) })
                     }
                   />
                 </div>
               )}
+              </div>
             </div>
           </li>
         ))}
@@ -118,14 +126,15 @@ export function NotificationPrefsPanel({ initial }: { initial: NotificationPrefs
           <div className="flex min-w-0 grow flex-col">
             <span className="text-[17px] leading-6 font-bold text-fg">Quiet hours</span>
             <span className="text-[15px] leading-[21px] text-sub text-pretty">
-              No buzzing overnight. Emails and the bell still arrive — it is the phone
-              that stays quiet. {APP_TIMEZONE_LABEL} time, like the rest of the app.
+              No buzzing overnight. Notifications still arrive within the App; emails
+              wait until quiet hours end, and your phone stays quiet. (
+              {APP_TIMEZONE_LABEL} Time Zone)
             </span>
           </div>
           <Switch
             checked={quietOn}
             label="Quiet hours"
-            className="w-[56px] h-8 shrink-0"
+            size="sm"
             onCheckedChange={(next) =>
               commit({
                 ...prefs,

@@ -235,11 +235,17 @@ export interface PendingEmail {
 }
 
 /**
- * Anything unsent from the last hour, same window as push and for the same
- * reason: if the emailer has been down, nobody should wake up to forty
- * messages about an afternoon that has already happened.
+ * How far back the emailer will still reach.
+ *
+ * Much wider than push's hour, and for two reasons. Email is batched into one
+ * digest per person, so a backlog of forty notifications is forty lines in one
+ * message rather than forty messages — the flood this window guards against
+ * on the push side cannot happen here. And quiet hours now hold emails back
+ * rather than dropping them, so a night's worth has to still be reachable in
+ * the morning; an hour would silently discard everything that happened before
+ * about 06:00.
  */
-const EMAIL_WINDOW_MINUTES = 60;
+const EMAIL_WINDOW_MINUTES = 24 * 60;
 const EMAIL_BATCH = 200;
 
 export async function listPendingEmails(

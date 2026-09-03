@@ -549,15 +549,27 @@ export function TasksApp({
                         key={task.id}
                         className="flex min-h-14 items-center gap-3 rounded-2xl border-[1.5px] border-border bg-card px-4 py-3"
                       >
-                        <span className="min-w-0 grow text-[17px] leading-6 text-fg text-pretty">
-                          {task.title}
+                        {/*
+                          Title and date on their own lines, and the title
+                          clamped. Run together in one span, a long title
+                          wrapped to nine lines and pushed the date out of
+                          sight while the buttons — vertically centred against
+                          all of it — sat on top of the text. Two lines names
+                          the task; the date is what you actually read here.
+                        */}
+                        <div className="flex min-w-0 grow flex-col">
+                          <span
+                            title={task.title}
+                            className="line-clamp-2 text-[17px] leading-6 text-fg text-pretty wrap-anywhere"
+                          >
+                            {task.title}
+                          </span>
                           {task.deleted_at && (
                             <span className="text-timestamp">
-                              {" "}
-                              · deleted {formatDateGroup(task.deleted_at)}
+                              deleted {formatDateGroup(task.deleted_at)}
                             </span>
                           )}
-                        </span>
+                        </div>
                         {/*
                           The two controls are one unit that never breaks
                           apart. Left to wrap on its own, the erase button

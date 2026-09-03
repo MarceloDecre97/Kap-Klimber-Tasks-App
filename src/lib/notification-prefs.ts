@@ -37,7 +37,7 @@ export const PREF_GROUPS: PrefGroup[] = [
     detail: "@mentions, wherever they happen.",
     kinds: ["mention"],
     email: false,
-    locked: "Always on — a mention is addressed to you personally.",
+    locked: "Always on: When you are @mentioned in a note personally.",
   },
   {
     id: "asks",
@@ -45,7 +45,7 @@ export const PREF_GROUPS: PrefGroup[] = [
     detail: "A request to delete a task you created, and the reply to a request you made.",
     kinds: ["delete_requested", "delete_denied"],
     email: false,
-    locked: "Always on — the task stays in limbo until you decide.",
+    locked: "Always on: When a task stays on a limbo until you decide.",
   },
   {
     id: "conversation",
@@ -78,14 +78,15 @@ export const PREF_GROUPS: PrefGroup[] = [
   {
     id: "deadlines",
     label: "Due soon and overdue",
-    detail: "The morning before a task is due, and the morning after it slips.",
+    detail: "The morning of the due date, and the morning after the due date.",
     kinds: ["due_soon", "overdue"],
     email: true,
   },
   {
     id: "removals",
     label: "Tasks deleted or brought back",
-    detail: "When a task you were working on disappears, or returns.",
+    detail:
+      "When a task you were working on (assigned, created, @mentioned or commented) disappears, or returns.",
     kinds: ["deleted", "restored"],
     email: true,
   },

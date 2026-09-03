@@ -72,7 +72,14 @@ export function DeleteTaskDialog({
     <Dialog open={!!task} onClose={close}>
       {task && (
         <>
-          <div className="text-section-heading text-pretty">
+          {/*
+            Clamped and set to break anywhere. A long title — or one long
+            unbroken string — ran off the side of the card and pushed the
+            buttons off the bottom of the screen, so the confirmation could
+            not be answered at all. Three lines is far more than anyone needs
+            to recognise which task this is.
+          */}
+          <div className="text-section-heading text-pretty wrap-anywhere line-clamp-3">
             {canDecide ? `Delete “${task.title}”?` : `Ask to delete “${task.title}”?`}
           </div>
 

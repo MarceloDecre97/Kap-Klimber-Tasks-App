@@ -177,7 +177,10 @@ export function TaskPill({
           <span
             title={task.title}
             className={cn(
-              "flex-1 text-fg text-pretty",
+              // wrap-anywhere, because line-clamp does not break words: one
+              // unbroken 60-character string ran straight out of the card
+              // and under the chevron.
+              "flex-1 text-fg text-pretty wrap-anywhere",
               task.title.length > COMPACT_TITLE_CHARS ? "text-card-title-compact" : "text-card-title",
               !expanded && "line-clamp-2"
             )}

@@ -243,19 +243,38 @@ async function dispatchEmail(admin: SupabaseClient<Database>) {
   */
   const prefs = await loadPrefs(admin, [...new Set(pending.map((p) => p.memberId))]);
 
+  const quiet = new Map<string, boolean>();
+  for (const [id, p] of prefs) quiet.set(id, await isQuietNow(admin, p));
+
   /*
     Emailable by kind, and not switched off by the person receiving it.
-    Quiet hours are deliberately not consulted here: they silence push only.
-    A phone buzzing at 2am is what makes people turn notifications off
-    entirely; an email waiting at 2am costs nobody anything, and holding it
-    back would mean the record was incomplete for the sake of a night nobody
-    was disturbed by.
+
+    Quiet hours count here too, which they did not at first. The old
+    reasoning was that an email waiting at 2am costs nobody anything — but
+    an email does not wait quietly on a phone. Outlook announces it, so a
+    correctly silenced push was followed by a buzz from the mail app, and
+    quiet hours delivered exactly the thing they exist to prevent.
+
+    So they are held, not dropped. Push is discarded during quiet hours
+    because nine buzzes at 07:00 are worse than the one at 02:00 they
+    replace; email has no such problem — it is already batched per person,
+    so a whole night becomes one digest waiting in the morning. Nothing is
+    lost, it simply arrives when it is welcome.
   */
-  const emailable = pending.filter(
-    (entry) =>
+  const emailable: typeof pending = [];
+  /** Worth an email, but not now: waiting for quiet hours to end. */
+  const held = new Set<string>();
+  /** Never going to be emailed. Stamped, or the emailer re-reads it forever. */
+  const dropped: string[] = [];
+
+  for (const entry of pending) {
+    const wanted =
       isEmailable(entry.item) &&
-      !(prefs.get(entry.memberId)?.emailOff ?? []).includes(entry.item.kind)
-  );
+      !(prefs.get(entry.memberId)?.emailOff ?? []).includes(entry.item.kind);
+    if (!wanted) dropped.push(entry.item.id);
+    else if (quiet.get(entry.memberId)) held.add(entry.item.id);
+    else emailable.push(entry);
+  }
 
   // One message per person, not one per notification. Three things in one
   // minute is three lines in one email.
@@ -293,20 +312,24 @@ async function dispatchEmail(admin: SupabaseClient<Database>) {
     }
   }
 
-  // Everything not sent — wrong kind, or switched off — is stamped as well,
-  // or the emailer re-reads it every minute until it ages out.
-  const emailableIds = new Set(emailable.map((entry) => entry.item.id));
-  const notEmailable = pending
-    .filter((entry) => !emailableIds.has(entry.item.id))
-    .map((entry) => entry.item.id);
-
+  /*
+    Sent, permanently rejected, or never going to be emailed at all — all
+    stamped, or the emailer re-reads them every minute until they age out.
+    Held rows are the one exception and the whole point of the change above:
+    leaving them unstamped is what makes holding different from dropping.
+    They were sorted into their three buckets in one pass, so no row can end
+    up in two of them, or in none.
+  */
   const stamped = await markEmailed(admin, [
-    ...new Set([...delivered, ...rejected, ...notEmailable]),
+    ...new Set([...delivered, ...rejected, ...dropped]),
   ]);
 
   return {
     considered: pending.length,
     emailable: emailable.length,
+    // Waiting for somebody's quiet hours to end. Reported so a number that
+    // never comes back down is visible rather than looking like silence.
+    held: held.size,
     people: byMember.size,
     sent: delivered.length,
     rejected: rejected.length,
