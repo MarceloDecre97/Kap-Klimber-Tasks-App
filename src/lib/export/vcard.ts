@@ -38,9 +38,11 @@ export function buildVCard(contact: ContactSummary): string {
   if (contact.website) lines.push(`URL:${esc(contact.website)}`);
 
   // ADR is seven parts: po;extended;street;locality;region;postcode;country.
-  if (contact.street || contact.city || contact.state || contact.postal_code) {
+  if (contact.street || contact.city || contact.state || contact.postal_code || contact.country) {
+    // The second slot is "extended address", which is exactly what a suite
+    // or unit number is, and the last is the country.
     lines.push(
-      `ADR;TYPE=WORK:;;${esc(contact.street)};${esc(contact.city)};${esc(contact.state)};${esc(contact.postal_code)};`
+      `ADR;TYPE=WORK:;${esc(contact.suite)};${esc(contact.street)};${esc(contact.city)};${esc(contact.state)};${esc(contact.postal_code)};${esc(contact.country)}`
     );
   }
 

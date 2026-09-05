@@ -221,9 +221,11 @@ export interface Database {
           email2: string | null;
           website: string | null;
           street: string | null;
+          suite: string | null;
           city: string | null;
           state: string | null;
           postal_code: string | null;
+          country: string | null;
           category_id: string | null;
           source: string | null;
           notes: string | null;

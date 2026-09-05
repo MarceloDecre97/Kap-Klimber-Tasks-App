@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   const headers = [
     "First name", "Last name", "Job title", "Company", "Category",
     "Mobile", "Office phone", "Email", "Second email", "Website",
-    "Street", "City", "State", "ZIP", "Address",
+    "Street", "Suite / unit", "City", "State", "ZIP", "Country", "Address",
     "Where they came from", "Notes", "Added by", "Added on",
   ];
 
@@ -54,9 +54,11 @@ export async function GET(request: NextRequest) {
     c.email2 ?? "",
     c.website ?? "",
     c.street ?? "",
+    c.suite ?? "",
     c.city ?? "",
     c.state ?? "",
     c.postal_code ?? "",
+    c.country ?? "",
     // The pieces and the assembled line: one is for sorting and mail merge,
     // the other is for pasting into an email.
     formatAddress(c) ?? "",

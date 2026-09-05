@@ -22,6 +22,44 @@ function revalidateContactViews(contactId?: string) {
   revalidatePath("/dashboard");
 }
 
+/**
+ * The category a contact should end up with.
+ *
+ * A typed name wins over a picked one, and an existing label is matched
+ * case-insensitively before a new row is made — otherwise "Government" and
+ * "government" become two chips that look identical on the screen.
+ *
+ * Mirrors resolveCategoryId in the task actions deliberately: the two flows
+ * are the same flow, and somebody who has used one should not have to learn
+ * the other.
+ */
+async function resolveContactCategory(
+  supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
+  memberId: string,
+  categoryId: string | null | undefined,
+  newLabel: string | undefined
+): Promise<string | null> {
+  const label = newLabel?.trim();
+  if (!label) return categoryId ?? null;
+
+  const { data: existing } = await supabase
+    .from("contact_categories")
+    .select("id")
+    .ilike("label", label)
+    .maybeSingle();
+  if (existing) return existing.id;
+
+  const { data: created, error } = await supabase
+    .from("contact_categories")
+    // A category somebody adds mid-flow gets the neutral icon and sorts
+    // just above Other, which is where "the one I had to invent" belongs.
+    .insert({ label, icon: "user", sort_order: 90, created_by: memberId })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return created.id;
+}
+
 function rpcError(error: unknown, fallback: string): string {
   const message = (error as { message?: unknown } | null)?.message;
   return typeof message === "string" && message.trim() ? message : fallback;
@@ -82,6 +120,7 @@ export async function createContact(input: unknown): Promise<ActionResult> {
   try {
     const { supabase, member } = await getCurrentMember();
     const v = parsed.data;
+    const categoryId = await resolveContactCategory(supabase, member.id, v.categoryId, v.newCategoryLabel);
 
     const { data: contact, error } = await supabase
       .from("contacts")
@@ -96,10 +135,12 @@ export async function createContact(input: unknown): Promise<ActionResult> {
         email2: v.email2,
         website: v.website,
         street: v.street,
+        suite: v.suite,
         city: v.city,
         state: v.state,
         postal_code: v.postalCode,
-        category_id: v.categoryId ?? null,
+        country: v.country,
+        category_id: categoryId,
         source: v.source,
         notes: v.notes,
         created_by: member.id,
@@ -137,8 +178,9 @@ export async function updateContact(
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the details.") };
 
   try {
-    const { supabase } = await getCurrentMember();
+    const { supabase, member } = await getCurrentMember();
     const v = parsed.data;
+    const categoryId = await resolveContactCategory(supabase, member.id, v.categoryId, v.newCategoryLabel);
 
     const { error } = await supabase
       .from("contacts")
@@ -153,10 +195,12 @@ export async function updateContact(
         email2: v.email2,
         website: v.website,
         street: v.street,
+        suite: v.suite,
         city: v.city,
         state: v.state,
         postal_code: v.postalCode,
-        category_id: v.categoryId ?? null,
+        country: v.country,
+        category_id: categoryId,
         source: v.source,
         notes: v.notes,
       })

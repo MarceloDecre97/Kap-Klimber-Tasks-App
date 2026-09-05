@@ -208,17 +208,28 @@ export function groupContacts(contacts: ContactSummary[]): ContactGroup[] {
    Formatting
    ------------------------------------------------------------------------- */
 
-/** "1440 N Milwaukee Ave · Chicago, IL 60622", skipping whatever is missing. */
+/**
+ * "1440 N Milwaukee Ave, Suite 3F · Chicago, IL 60622 · Switzerland",
+ * skipping whatever is missing.
+ *
+ * Street carries the whole line including the number, because Swiss
+ * addresses put the number after the street and US ones put it before —
+ * splitting it into its own field would force one convention on both and be
+ * wrong somewhere.
+ */
 export function formatAddress(c: {
   street: string | null;
+  suite?: string | null;
   city: string | null;
   state: string | null;
   postal_code: string | null;
+  country?: string | null;
 }): string | null {
+  const streetLine = [c.street?.trim(), c.suite?.trim()].filter(Boolean).join(", ");
   const cityLine = [c.city, [c.state, c.postal_code].filter(Boolean).join(" ")]
     .filter((part) => part && part.trim())
     .join(", ");
-  const parts = [c.street?.trim(), cityLine].filter((part) => part && part.length > 0);
+  const parts = [streetLine, cityLine, c.country?.trim()].filter((part) => part && part.length > 0);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 

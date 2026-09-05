@@ -33,9 +33,11 @@ export interface ContactSummary {
   email2: string | null;
   website: string | null;
   street: string | null;
+  suite: string | null;
   city: string | null;
   state: string | null;
   postal_code: string | null;
+  country: string | null;
   source: string | null;
   notes: string | null;
   category: ContactCategory | null;
@@ -60,7 +62,7 @@ export interface ContactEvent {
 const CONTACT_SELECT = `
   id, first_name, last_name, job_title, company,
   mobile, office_phone, email, email2, website,
-  street, city, state, postal_code, source, notes,
+  street, suite, city, state, postal_code, country, source, notes,
   created_at, deleted_at,
   category:contact_categories(id, label, icon),
   created_by:members!contacts_created_by_fkey(id, display_name, initials, color),

@@ -150,10 +150,14 @@ export const contactInputSchema = z
     email2: optionalEmail,
     website: optionalText(300),
     street: optionalText(200),
+    suite: optionalText(100),
     city: optionalText(100),
     state: optionalText(60),
     postalCode: optionalText(20),
+    country: optionalText(80),
     categoryId: z.string().uuid().nullable().optional(),
+    /** Set when "Other" was opened and a new category name typed. */
+    newCategoryLabel: z.string().trim().min(1).max(60).optional(),
     source: optionalText(200),
     notes: optionalText(4000),
   })
