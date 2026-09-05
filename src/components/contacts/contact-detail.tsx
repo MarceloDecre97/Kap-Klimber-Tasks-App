@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Mail, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronLeft, Download, Mail, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import {
   DeleteContactDialog,
@@ -125,6 +125,18 @@ export function ContactDetail({
             it can do what it says.
           */}
           <div className="flex flex-wrap gap-3">
+            {/*
+              The primary action, and deliberately so: saving the card is
+              what stops you needing this screen at all. Call and Email are
+              the do-it-now actions beside it.
+            */}
+            <a
+              href={`/contacts/${contact.id}/vcard`}
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-btn px-5 text-chip text-on-btn transition-transform duration-150 active:scale-[0.97] hover:bg-btn-hover"
+            >
+              <Download aria-hidden className="size-5" strokeWidth={2} />
+              Add to phone contacts
+            </a>
             {phone && (
               <a
                 href={`tel:${phone.replace(/[^\d+]/g, "")}`}

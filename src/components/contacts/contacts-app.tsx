@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, ChevronDown, ChevronUp, Plus, Search, Tag, Trash2, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronUp, Plus, Search, Sheet, Tag, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/app-header";
 import { useToast } from "@/components/ui/toast";
@@ -93,6 +93,21 @@ export function ContactsApp({
 
   const isEmptyBook = contacts.length === 0;
 
+  /*
+    The same three values the list is filtered by, handed to the export route
+    so the spreadsheet is exactly what is on screen. Built here rather than
+    read from the URL because these filters live in component state — the
+    list has never put them in the address bar.
+  */
+  const exportQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (filters.query.trim()) params.set("q", filters.query.trim());
+    if (filters.company) params.set("company", filters.company);
+    if (filters.categoryId) params.set("category", filters.categoryId);
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }, [filters]);
+
   return (
     <div className="flex h-full flex-col bg-bg">
       <AppHeader current="/contacts" notifications={notifications} />
@@ -110,6 +125,7 @@ export function ContactsApp({
             )}
           </div>
 
+          <div className="flex flex-wrap gap-3">
           <Link
             href="/contacts/new"
             className="inline-flex h-[60px] items-center justify-center gap-2.5 rounded-2xl bg-btn px-5 text-[20px] leading-7 font-bold text-on-btn transition-transform duration-150 active:scale-[0.97] hover:bg-btn-hover"
@@ -117,6 +133,22 @@ export function ContactsApp({
             <Plus aria-hidden className="size-5" strokeWidth={2.5} />
             Add contact
           </Link>
+          {/*
+            A plain link, not a fetch-and-blob: the browser handles the
+            download itself, which is what makes it work in an installed
+            app on Android as well as in a tab. The current filters ride
+            along in the query string so the file matches the screen.
+          */}
+          {!isEmptyBook && (
+            <a
+              href={`/contacts/export${exportQuery}`}
+              className="inline-flex h-[60px] shrink-0 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-fg bg-transparent px-4 text-[18px] leading-7 font-bold text-fg hover:bg-muted"
+            >
+              <Sheet aria-hidden className="size-5" strokeWidth={1.75} />
+              Export
+            </a>
+          )}
+          </div>
 
           {isEmptyBook ? (
             <EmptyBook />
