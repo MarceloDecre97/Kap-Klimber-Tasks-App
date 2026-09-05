@@ -8,11 +8,11 @@ import { AppClock } from "@/components/layout/app-clock";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { ViewNav } from "@/components/layout/view-nav";
+import { ViewNav, type ViewHref } from "@/components/layout/view-nav";
 import type { NotificationFeed } from "@/lib/data/notifications";
 
 /**
- * The one fixed chrome bar both top-level views share.
+ * The one fixed chrome bar every top-level view shares.
  *
  * From `lg` up it is a single row: brand left, view switcher centred,
  * clock and controls right. On a phone none of that fits on one line, and
@@ -43,7 +43,7 @@ export function AppHeader({
   notifications,
   children,
 }: {
-  current: "/tasks" | "/dashboard";
+  current: ViewHref;
   notifications: NotificationFeed;
   children?: ReactNode;
 }) {

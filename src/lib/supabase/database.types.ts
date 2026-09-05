@@ -37,6 +37,9 @@ export type TaskEventKind =
   | "deleted"
   | "restored";
 
+/** Everything a contact's Activity can record. */
+export type ContactEventKind = "created" | "edited" | "deleted" | "restored";
+
 export interface RosterEntry {
   id: string;
   display_name: string;
@@ -190,6 +193,90 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["push_subscriptions"]["Row"]>;
         Relationships: [];
       };
+      contact_categories: {
+        Row: {
+          id: string;
+          label: string;
+          /** A name the app maps to a Lucide icon; unknown falls back. */
+          icon: string;
+          sort_order: number;
+          is_default: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: { label: string; icon?: string; sort_order?: number; created_by: string };
+        Update: Partial<Database["public"]["Tables"]["contact_categories"]["Row"]>;
+        Relationships: [];
+      };
+      contacts: {
+        Row: {
+          id: string;
+          first_name: string;
+          last_name: string;
+          job_title: string | null;
+          company: string | null;
+          mobile: string | null;
+          office_phone: string | null;
+          email: string | null;
+          email2: string | null;
+          website: string | null;
+          street: string | null;
+          city: string | null;
+          state: string | null;
+          postal_code: string | null;
+          category_id: string | null;
+          source: string | null;
+          notes: string | null;
+          created_by: string;
+          /** The bin. Set only through delete_contact, pinned otherwise. */
+          deleted_at: string | null;
+          deleted_by: string | null;
+          created_at: string;
+          updated_at: string;
+          /** Generated: digits only, for the duplicate check. Never written. */
+          mobile_digits: string | null;
+          office_digits: string | null;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["contacts"]["Row"],
+          "id" | "deleted_at" | "deleted_by" | "created_at" | "updated_at" | "mobile_digits" | "office_digits"
+        > &
+          Partial<Pick<Database["public"]["Tables"]["contacts"]["Row"], "id">>;
+        Update: Partial<
+          Omit<
+            Database["public"]["Tables"]["contacts"]["Row"],
+            "id" | "created_by" | "created_at" | "mobile_digits" | "office_digits"
+          >
+        >;
+        Relationships: [];
+      };
+      task_contacts: {
+        Row: {
+          task_id: string;
+          contact_id: string;
+          attached_by: string | null;
+          attached_at: string;
+        };
+        Insert: { task_id: string; contact_id: string; attached_by: string };
+        Update: never;
+        Relationships: [];
+      };
+      contact_events: {
+        Row: {
+          id: string;
+          contact_id: string;
+          member_id: string | null;
+          kind: ContactEventKind;
+          field: string | null;
+          from_value: string | null;
+          to_value: string | null;
+          created_at: string;
+        };
+        /** Written by trigger only. */
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       notification_prefs: {
         Row: {
           member_id: string;
@@ -278,6 +365,40 @@ export interface Database {
       mark_notifications_emailed: { Args: { p_ids: string[] }; Returns: number };
       /** Scheduler only — writes notification rows, never granted to a member. */
       run_scheduled_notifications: { Args: Record<string, never>; Returns: unknown };
+      /**
+       * The address book. See 0022_contacts.sql — the rules these enforce are
+       * described there, and the app must not try to keep them a second time.
+       */
+      delete_contact: { Args: { p_contact_id: string }; Returns: void };
+      restore_contact: { Args: { p_contact_id: string }; Returns: void };
+      purge_contact: {
+        Args: { p_contact_id: string };
+        Returns: { name: string; phones: number; emails: number; addresses: number; tasks: number };
+      };
+      /** The unfinished tasks standing between a contact and the bin. */
+      contact_blocking_tasks: {
+        Args: { p_contact_id: string };
+        Returns: { task_id: string; title: string; status: TaskStatus }[];
+      };
+      /** A warning, never a block. Searches the bin too and says so. */
+      find_contact_duplicates: {
+        Args: {
+          p_email?: string | null;
+          p_email2?: string | null;
+          p_mobile?: string | null;
+          p_office?: string | null;
+          p_exclude_id?: string | null;
+        };
+        Returns: {
+          id: string;
+          first_name: string;
+          last_name: string;
+          job_title: string | null;
+          company: string | null;
+          matched_on: string;
+          in_bin: boolean;
+        }[];
+      };
       /** Handles windows that wrap midnight. See 0020_notification_prefs.sql. */
       in_quiet_hours: {
         Args: { p_from: string | null; p_to: string | null; p_at?: string };
