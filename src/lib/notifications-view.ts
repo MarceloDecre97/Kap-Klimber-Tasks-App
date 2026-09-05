@@ -61,9 +61,31 @@ function noteDetail(item: NotificationItem): string | null {
   return excerpt(item.note.body);
 }
 
+function contactName(item: NotificationItem): string {
+  const name = item.payload.contact_name;
+  return typeof name === "string" && name.trim() ? name.trim() : "A contact";
+}
+
 export function describeNotification(item: NotificationItem): NotificationCopy {
   const who = item.actor?.display_name ?? "Someone";
-  const task = item.task.title;
+
+  /*
+    The one kind with no task behind it, handled before `task` is read at
+    all. Erasing is the only irreversible thing in the address book, so the
+    wording says what happened rather than softening it — and the detail
+    says the part that matters most: it is not in the bin, it is gone.
+  */
+  if (item.kind === "contact_erased") {
+    const company = typeof item.payload.company === "string" ? item.payload.company.trim() : "";
+    return {
+      headline: `${who} erased ${contactName(item)} from the address book`,
+      detail: company
+        ? `${company} · Not in Recently deleted — erased for good.`
+        : "Not in Recently deleted — erased for good.",
+    };
+  }
+
+  const task = item.task?.title ?? "a task";
 
   switch (item.kind) {
     case "note":
@@ -158,7 +180,7 @@ export function describeNotification(item: NotificationItem): NotificationCopy {
 export function unreadMentionTaskIds(feed: { items: NotificationItem[] }): Set<string> {
   const ids = new Set<string>();
   for (const item of feed.items) {
-    if (item.kind === "mention" && item.read_at === null && !item.taskGone) {
+    if (item.kind === "mention" && item.read_at === null && !item.taskGone && item.task) {
       ids.add(item.task.id);
     }
   }

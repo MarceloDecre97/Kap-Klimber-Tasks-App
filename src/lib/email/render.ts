@@ -62,7 +62,7 @@ const FONT = "Helvetica, Arial, sans-serif";
 
 function row(item: NotificationItem, origin: string | null): string {
   const { headline, detail } = describeNotification(item);
-  const href = origin && !item.taskGone ? `${origin}/tasks?task=${item.task.id}` : null;
+  const href = origin && !item.taskGone && item.task ? `${origin}/tasks?task=${item.task.id}` : null;
 
   /*
     Underlined, deliberately.
@@ -148,7 +148,7 @@ export function renderDigest(
   // filters look for, and some people genuinely read mail this way.
   const lines = items.map((item) => {
     const { headline, detail } = describeNotification(item);
-    const link = origin && !item.taskGone ? `\n  ${origin}/tasks?task=${item.task.id}` : "";
+    const link = origin && !item.taskGone && item.task ? `\n  ${origin}/tasks?task=${item.task.id}` : "";
     return `* ${headline}${detail ? `\n  ${detail}` : ""}${link}`;
   });
 

@@ -16,7 +16,11 @@ export interface NotificationItem {
   read_at: string | null;
   /** Null when nobody caused it: the scheduled rules act on their own. */
   actor: MemberSummary | null;
-  task: { id: string; title: string };
+  /**
+   * Null for a notification that is not about a task. Only contact_erased
+   * is, and the thing it names has been erased — there is nothing to link.
+   */
+  task: { id: string; title: string } | null;
   /**
    * The task this is about can no longer be opened — it was deleted, and a
    * deleted task is visible only to its creator. The row still belongs in the
@@ -60,7 +64,7 @@ const READ_VISIBLE_DAYS = 14;
 
 type RawNotification = {
   id: string;
-  task_id: string;
+  task_id: string | null;
   kind: NotificationKind;
   payload: Record<string, unknown> | null;
   created_at: string;
@@ -89,11 +93,33 @@ const NOTIFICATION_SELECT = `
 */
 function toItem(row: RawNotification): NotificationItem | null {
   const payload = row.payload ?? {};
+
+  /*
+    The one kind that is about somebody in the address book rather than a
+    task. It carries no task at all — and the contact it names has been
+    erased, so its name travels in the payload for the same reason a deleted
+    task's title does: there is nothing left to join to.
+  */
+  if (row.kind === "contact_erased") {
+    if (typeof payload.contact_name !== "string" || !payload.contact_name) return null;
+    return {
+      id: row.id,
+      kind: row.kind,
+      created_at: row.created_at,
+      read_at: row.read_at,
+      actor: row.actor,
+      task: null,
+      taskGone: false,
+      note: null,
+      payload,
+    };
+  }
+
   const gone = !row.task || row.task.deleted_at !== null;
   if (gone && row.kind !== "deleted") return null;
 
   const title = row.task?.title ?? (typeof payload.title === "string" ? payload.title : null);
-  if (!title) return null;
+  if (!title || !row.task_id) return null;
 
   return {
     id: row.id,

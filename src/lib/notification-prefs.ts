@@ -91,6 +91,19 @@ export const PREF_GROUPS: PrefGroup[] = [
     kinds: ["deleted", "restored"],
     email: true,
   },
+  /*
+    Switchable like any other, and not locked. It is news rather than an ask
+    — nothing stalls waiting for you to read it — so anybody who does not
+    want it should be able to say so.
+  */
+  {
+    id: "contacts",
+    label: "When a contact you added is erased",
+    detail:
+      "Only when somebody erases them for good. Moving a contact to Recently deleted is reversible and says nothing.",
+    kinds: ["contact_erased"],
+    email: true,
+  },
 ];
 
 export interface NotificationPrefs {

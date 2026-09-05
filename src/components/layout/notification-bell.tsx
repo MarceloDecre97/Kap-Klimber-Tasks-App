@@ -12,6 +12,7 @@ import {
   Trash2,
   Undo2,
   UserPlus,
+  UserRoundX,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +44,8 @@ const KIND_ICON: Record<NotificationKind, LucideIcon> = {
   restored: RotateCcw,
   reminder_upcoming: Bell,
   reminder_due: Bell,
+  /* The address book's own icon, so it does not read as a deleted task. */
+  contact_erased: UserRoundX,
   due_soon: CalendarClock,
   overdue: AlertTriangle,
 };
@@ -240,8 +243,10 @@ function NotificationRow({
   );
 
   // Nothing to open: the task is gone, and for everyone but its creator it is
-  // gone for good. A link here would be a dead end dressed as a way forward.
-  if (item.taskGone) return <div className={className}>{inner}</div>;
+  // gone for good — or there was never a task, as with an erased contact,
+  // which no longer exists either. A link here would be a dead end dressed
+  // as a way forward.
+  if (item.taskGone || !item.task) return <div className={className}>{inner}</div>;
 
   return (
     <Link

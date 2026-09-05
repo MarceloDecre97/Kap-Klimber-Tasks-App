@@ -161,7 +161,12 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const key = `${entry.memberId}:${entry.item.task.id}`;
+    /*
+      Bundled per task, so three changes to one task arrive as one buzz.
+      A notification with no task behind it is its own bundle — there is
+      nothing for it to be grouped with.
+    */
+    const key = `${entry.memberId}:${entry.item.task?.id ?? entry.item.id}`;
     const bundle = bundles.get(key) ?? [];
     bundle.push(entry);
     bundles.set(key, bundle);
@@ -238,13 +243,27 @@ export async function POST(request: Request) {
  * other on the phone instead of stacking into a wall somebody swipes away
  * without reading.
  */
+/**
+ * Where tapping it should land.
+ *
+ * A task that is gone has nothing to open, and neither has an erased
+ * contact — but the book is still where somebody told "Sheena was erased"
+ * is heading, so that one goes there rather than to the Dashboard.
+ */
+function pushUrl(entry: PendingPush): string {
+  if (entry.item.kind === "contact_erased") return "/contacts";
+  if (!entry.item.task || entry.item.taskGone) return "/dashboard";
+  return `/tasks?task=${entry.item.task.id}`;
+}
+
 function renderPush(entry: PendingPush, more = 0) {
   const { headline, detail } = describeNotification(entry.item);
   return {
     title: headline,
     body: pushBody(detail, more),
-    url: entry.item.taskGone ? "/dashboard" : `/tasks?task=${entry.item.task.id}`,
-    tag: `task:${entry.item.task.id}`,
+    url: pushUrl(entry),
+    // Grouped on the phone the same way it is bundled above.
+    tag: entry.item.task ? `task:${entry.item.task.id}` : `notification:${entry.item.id}`,
     at: entry.item.created_at,
   };
 }

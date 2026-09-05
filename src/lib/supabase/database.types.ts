@@ -20,7 +20,9 @@ export type NotificationKind =
   | "reminder_upcoming"
   | "reminder_due"
   | "due_soon"
-  | "overdue";
+  | "overdue"
+  /** The one that is not about a task at all. See 0025_contact_erased.sql. */
+  | "contact_erased";
 
 /**
  * Everything a task's Activity can record. The deletion kinds are what make
@@ -337,7 +339,8 @@ export interface Database {
           id: string;
           member_id: string;
           actor_id: string | null;
-          task_id: string;
+          /** Null for kinds that are not about a task — contact_erased. */
+          task_id: string | null;
           note_id: string | null;
           kind: NotificationKind;
           payload: Record<string, unknown>;
