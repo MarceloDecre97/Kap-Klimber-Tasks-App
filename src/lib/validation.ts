@@ -84,3 +84,79 @@ export const taskFiltersSchema = z.object({
   categoryIds: z.array(z.string().uuid()).default([]),
   assigneeIds: z.array(z.string().uuid()).default([]),
 });
+
+/* -------------------------------------------------------------------------
+   Contacts
+
+   The two required rules mirror the check constraints in 0022_contacts.sql
+   rather than replacing them. The database is what actually guarantees them;
+   these exist so somebody filling in a form is told which field to fix
+   instead of being handed a constraint violation.
+   ------------------------------------------------------------------------- */
+
+/** Empty string in, null out — a blank field is an absent value, not "". */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null))
+    .nullable();
+
+const optionalEmail = z
+  .string()
+  .trim()
+  .max(200)
+  .optional()
+  .transform((v) => (v && v.length > 0 ? v.toLowerCase() : null))
+  .nullable()
+  .refine((v) => v === null || z.string().email().safeParse(v).success, {
+    message: "That email is missing something after the dot.",
+  });
+
+export const contactInputSchema = z
+  .object({
+    /*
+      The message is set on the type as well as on the length rule. Without
+      it, a payload that omits the key entirely — which a server action can
+      be handed, being a public endpoint — reports "expected string,
+      received undefined" instead of the sentence a person can act on.
+    */
+    firstName: z
+      .string({ error: "A first name, at least." })
+      .trim()
+      .min(1, "A first name, at least.")
+      .max(80),
+    lastName: z
+      .string({ error: "Add a last name — the book is sorted by it." })
+      .trim()
+      .min(1, "Add a last name — the book is sorted by it.")
+      .max(80),
+    jobTitle: optionalText(120),
+    company: optionalText(120),
+    mobile: optionalText(40),
+    officePhone: optionalText(40),
+    email: optionalEmail,
+    email2: optionalEmail,
+    website: optionalText(300),
+    street: optionalText(200),
+    city: optionalText(100),
+    state: optionalText(60),
+    postalCode: optionalText(20),
+    categoryId: z.string().uuid().nullable().optional(),
+    source: optionalText(200),
+    notes: optionalText(4000),
+  })
+  .refine(
+    (v) => Boolean(v.mobile || v.officePhone || v.email || v.email2),
+    {
+      message: "A phone or an email — one of the two is enough.",
+      // Reported against the field somebody is most likely to fill first, so
+      // the message lands where they are looking rather than at the top.
+      path: ["mobile"],
+    }
+  );
+
+export type ContactInput = z.input<typeof contactInputSchema>;
+export type ContactValues = z.output<typeof contactInputSchema>;

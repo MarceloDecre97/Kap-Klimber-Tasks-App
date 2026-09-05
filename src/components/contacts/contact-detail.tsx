@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, Mail, Phone } from "lucide-react";
+import { ChevronLeft, Mail, Pencil, Phone } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { CategoryBadge } from "@/components/contacts/category-badge";
 import {
@@ -125,6 +125,16 @@ export function ContactDetail({
             <p className="text-timestamp text-sub">
               Added by {contact.created_by.display_name} · {formatTimestamp(contact.created_at)}
             </p>
+          )}
+
+          {!contact.deleted_at && (
+            <Link
+              href={`/contacts/${contact.id}/edit`}
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-border bg-card px-4 text-chip text-fg hover:bg-muted"
+            >
+              <Pencil aria-hidden className="size-5" strokeWidth={1.75} />
+              Edit contact
+            </Link>
           )}
 
           <Activity events={events} />

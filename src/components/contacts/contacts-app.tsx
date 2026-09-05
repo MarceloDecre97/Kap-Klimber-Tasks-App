@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Building2, Search, Tag, X } from "lucide-react";
+import { Building2, Plus, Search, Tag, X } from "lucide-react";
+import Link from "next/link";
 import { AppHeader } from "@/components/layout/app-header";
 import { ContactRow } from "@/components/contacts/contact-row";
 import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dropdown";
@@ -79,6 +80,14 @@ export function ContactsApp({
               </span>
             )}
           </div>
+
+          <Link
+            href="/contacts/new"
+            className="inline-flex h-[60px] items-center justify-center gap-2.5 rounded-2xl bg-btn px-5 text-[20px] leading-7 font-bold text-on-btn transition-transform duration-150 active:scale-[0.97] hover:bg-btn-hover"
+          >
+            <Plus aria-hidden className="size-5" strokeWidth={2.5} />
+            Add contact
+          </Link>
 
           {isEmptyBook ? (
             <EmptyBook />
