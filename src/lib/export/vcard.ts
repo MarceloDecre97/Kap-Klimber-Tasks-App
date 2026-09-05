@@ -37,12 +37,26 @@ export function buildVCard(contact: ContactSummary): string {
   if (contact.email2) lines.push(`EMAIL;TYPE=INTERNET:${esc(contact.email2)}`);
   if (contact.website) lines.push(`URL:${esc(contact.website)}`);
 
+  /*
+    The address on the card is the person's own if they have one, and the
+    company's otherwise.
+
+    Most people do not have their own — they work at the company address,
+    which is why it lives on the company. Without this fallback, saving such
+    a contact to a phone would produce a card with no address at all, and
+    the whole point of the company table would have made the vCard worse.
+  */
+  const hasOwn = Boolean(
+    contact.street || contact.city || contact.state || contact.postal_code || contact.country
+  );
+  const place = hasOwn ? contact : contact.company_record;
+
   // ADR is seven parts: po;extended;street;locality;region;postcode;country.
-  if (contact.street || contact.city || contact.state || contact.postal_code || contact.country) {
+  if (place && (place.street || place.city || place.state || place.postal_code || place.country)) {
     // The second slot is "extended address", which is exactly what a suite
     // or unit number is, and the last is the country.
     lines.push(
-      `ADR;TYPE=WORK:;${esc(contact.suite)};${esc(contact.street)};${esc(contact.city)};${esc(contact.state)};${esc(contact.postal_code)};${esc(contact.country)}`
+      `ADR;TYPE=WORK:;${esc(place.suite)};${esc(place.street)};${esc(place.city)};${esc(place.state)};${esc(place.postal_code)};${esc(place.country)}`
     );
   }
 

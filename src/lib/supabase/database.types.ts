@@ -208,6 +208,32 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["contact_categories"]["Row"]>;
         Relationships: [];
       };
+      companies: {
+        Row: {
+          id: string;
+          name: string;
+          about: string | null;
+          website: string | null;
+          company_number: string | null;
+          street: string | null;
+          suite: string | null;
+          city: string | null;
+          state: string | null;
+          postal_code: string | null;
+          country: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["companies"]["Row"],
+          "id" | "created_at" | "updated_at"
+        >;
+        Update: Partial<
+          Omit<Database["public"]["Tables"]["companies"]["Row"], "id" | "created_by" | "created_at">
+        >;
+        Relationships: [];
+      };
       contacts: {
         Row: {
           id: string;
@@ -227,6 +253,8 @@ export interface Database {
           postal_code: string | null;
           country: string | null;
           category_id: string | null;
+          /** The company they belong to. `company` is kept in step by trigger. */
+          company_id: string | null;
           source: string | null;
           notes: string | null;
           created_by: string;
@@ -241,9 +269,16 @@ export interface Database {
         };
         Insert: Omit<
           Database["public"]["Tables"]["contacts"]["Row"],
-          "id" | "deleted_at" | "deleted_by" | "created_at" | "updated_at" | "mobile_digits" | "office_digits"
+          | "id"
+          | "company_id"
+          | "deleted_at"
+          | "deleted_by"
+          | "created_at"
+          | "updated_at"
+          | "mobile_digits"
+          | "office_digits"
         > &
-          Partial<Pick<Database["public"]["Tables"]["contacts"]["Row"], "id">>;
+          Partial<Pick<Database["public"]["Tables"]["contacts"]["Row"], "id" | "company_id">>;
         Update: Partial<
           Omit<
             Database["public"]["Tables"]["contacts"]["Row"],
@@ -352,6 +387,9 @@ export interface Database {
        * only, and only on a task already in the bin. Returns what it
        * destroyed: { title, notes, events }. See 0021_purge_task.sql.
        */
+      /** Refused while anyone is still at the company. See 0024_companies.sql. */
+      delete_company: { Args: { p_company_id: string }; Returns: void };
+      company_contact_count: { Args: { p_company_id: string }; Returns: number };
       purge_task: {
         Args: { p_task_id: string };
         Returns: { title: string; notes: number; events: number };

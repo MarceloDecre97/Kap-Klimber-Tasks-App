@@ -7,6 +7,8 @@ import { ChevronLeft, Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { DuplicateDialog } from "@/components/contacts/duplicate-dialog";
+import { Field, Group } from "@/components/contacts/form-field";
+import { CompanyField, type CompanyDraft } from "@/components/contacts/company-field";
 import {
   createContact,
   findDuplicates,
@@ -24,11 +26,12 @@ import {
   type ContactField,
 } from "@/lib/contact-form";
 import { cn } from "@/lib/utils";
+import type { CompanySummary } from "@/lib/companies-view";
 import type { ContactCategory, ContactSummary } from "@/lib/data/contacts";
 
 /** The shape the form holds: every field a string, because inputs are. */
-type Draft = {
-  firstName: string; lastName: string; jobTitle: string; company: string;
+type Draft = CompanyDraft & {
+  firstName: string; lastName: string; jobTitle: string;
   mobile: string; officePhone: string; email: string; email2: string; website: string;
   street: string; suite: string; city: string; state: string; postalCode: string; country: string;
   categoryId: string | null; source: string; notes: string;
@@ -41,7 +44,23 @@ function draftFrom(contact: ContactSummary | null): Draft {
     firstName: contact?.first_name ?? "",
     lastName: contact?.last_name ?? "",
     jobTitle: contact?.job_title ?? "",
+    /*
+      The company arrives as both a name and a link. The name is what shows
+      in the box; the link is what makes the details underneath read-only
+      rather than something this contact is about to invent.
+    */
     company: contact?.company ?? "",
+    companyId: contact?.company_id ?? null,
+    companyAbout: contact?.company_record?.about ?? "",
+    companyWebsite: contact?.company_record?.website ?? "",
+    companyNumber: contact?.company_record?.company_number ?? "",
+    companyStreet: contact?.company_record?.street ?? "",
+    companySuite: contact?.company_record?.suite ?? "",
+    companyCity: contact?.company_record?.city ?? "",
+    companyState: contact?.company_record?.state ?? "",
+    companyPostalCode: contact?.company_record?.postal_code ?? "",
+    companyCountry: contact?.company_record?.country ?? "",
+    updateCompanyDetails: false,
     mobile: contact?.mobile ?? "",
     officePhone: contact?.office_phone ?? "",
     email: contact?.email ?? "",
@@ -74,10 +93,13 @@ function draftFrom(contact: ContactSummary | null): Draft {
 export function ContactForm({
   contact,
   categories,
+  companies,
 }: {
   /** Null when adding. */
   contact: ContactSummary | null;
   categories: ContactCategory[];
+  /** Everything already in the book, for the company box to match against. */
+  companies: CompanySummary[];
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(() => draftFrom(contact));
@@ -104,6 +126,12 @@ export function ContactForm({
     setError(null);
     // Clearing as you fix, rather than only on the next save.
     setErrors((e) => (key in e ? { ...e, [key]: undefined } : e));
+  }
+
+  /** The company field changes several keys at once, so it patches. */
+  function patch(next: Partial<Draft>) {
+    setDraft((d) => ({ ...d, ...next }));
+    setError(null);
   }
 
   function leave(field: ContactField) {
@@ -229,9 +257,10 @@ export function ContactForm({
             <Field label="Job title">
               <Input value={draft.jobTitle} onChange={(e) => set("jobTitle", e.target.value)} autoComplete="off" />
             </Field>
-            <Field label="Company">
-              <Input value={draft.company} onChange={(e) => set("company", e.target.value)} autoComplete="off" />
-            </Field>
+          </Group>
+
+          <Group heading="Where they work">
+            <CompanyField companies={companies} draft={draft} onChange={patch} />
           </Group>
 
           <Group heading="How to reach them" hint="A phone or an email — one of the two is enough.">
@@ -252,7 +281,10 @@ export function ContactForm({
             </Field>
           </Group>
 
-          <Group heading="Where they are">
+          <Group
+            heading="Their own address"
+            hint="Only if they work somewhere other than the company address."
+          >
             {/*
               Street holds the whole line, number included. Swiss addresses
               put the number after the street and US ones before it, and a
@@ -382,64 +414,5 @@ export function ContactForm({
         onSaveAnyway={() => save(true)}
       />
     </div>
-  );
-}
-
-function Group({
-  heading,
-  hint,
-  children,
-}: {
-  heading: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-0.5">
-        <h2 className="text-section-heading text-fg">{heading}</h2>
-        {hint && <p className="text-[16px] leading-6 text-sub text-pretty">{hint}</p>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  required,
-  hint,
-  error,
-  className,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  hint?: string;
-  /** Outlines the field and prints the reason under it. */
-  error?: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className={cn("flex flex-col gap-2", className)}>
-      <span className={cn("text-field-label", error ? "text-danger" : "text-fg")}>
-        {label}
-        {required && <span className="text-danger"> *</span>}
-      </span>
-      {/*
-        The outline is drawn by a wrapper rather than by reaching into the
-        input, so every control gets the same treatment whatever it is —
-        and the app's focus ring still wins when the field is focused.
-      */}
-      <span className={cn("flex flex-col rounded-2xl", error && "outline-2 outline-offset-2 outline-danger")}>
-        {children}
-      </span>
-      {error ? (
-        <span className="text-[16px] leading-6 font-bold text-danger text-pretty">{error}</span>
-      ) : (
-        hint && <span className="text-timestamp text-sub text-pretty">{hint}</span>
-      )}
-    </label>
   );
 }

@@ -48,7 +48,9 @@ export function ContactDetail({
   const [isPending, startTransition] = useTransition();
 
   const role = roleLine(contact);
-  const address = formatAddress(contact);
+  const ownAddress = formatAddress(contact);
+  const company = contact.company_record;
+  const companyAddress = company ? formatAddress(company) : null;
   const phone = contact.mobile ?? contact.office_phone;
 
   /*
@@ -111,8 +113,25 @@ export function ContactDetail({
               <h1 className="text-screen-title text-fg text-pretty wrap-anywhere">
                 {fullName(contact)}
               </h1>
-              {role && (
-                <p className="text-[18px] leading-7 text-sub text-pretty wrap-anywhere">{role}</p>
+              {/*
+                The company half of the role line is a link when there is a
+                company page behind it — which is how you get from "who is
+                this" to "what is their address" without going hunting.
+              */}
+              {company ? (
+                <p className="text-[18px] leading-7 text-sub text-pretty wrap-anywhere">
+                  {contact.job_title ? `${contact.job_title} · ` : ""}
+                  <Link
+                    href={`/companies/${company.id}`}
+                    className="text-brand underline underline-offset-4"
+                  >
+                    {company.name}
+                  </Link>
+                </p>
+              ) : (
+                role && (
+                  <p className="text-[18px] leading-7 text-sub text-pretty wrap-anywhere">{role}</p>
+                )
               )}
               {contact.category && (
                 <span>
@@ -174,9 +193,31 @@ export function ContactDetail({
             <Row label="Website" value={contact.website} href={externalHref(contact.website)} />
           </Section>
 
-          {address && (
-            <Section heading="Where they are">
-              <Row label="Address" value={address} />
+          {/*
+            The company, in full, on the person's own page. Somebody looking
+            up a contact to visit them needs the address then and there —
+            "it is on the company page" is one tap too many at a gate.
+          */}
+          {company && (
+            <Section heading="Where they work">
+              <Row label="Company" value={company.name} href={`/companies/${company.id}`} />
+              <Row label="What they do" value={company.about} />
+              <Row
+                label="Main line"
+                value={company.company_number}
+                href={company.company_number ? `tel:${company.company_number.replace(/[^\d+]/g, "")}` : null}
+              />
+              <Row label="Company website" value={company.website} href={externalHref(company.website)} />
+              <Row
+                label={ownAddress ? "Company address" : "Address"}
+                value={companyAddress}
+              />
+            </Section>
+          )}
+
+          {ownAddress && (
+            <Section heading={company ? "Their own address" : "Where they are"}>
+              <Row label="Address" value={ownAddress} />
             </Section>
           )}
 
@@ -312,14 +353,21 @@ function Row({
   href?: string | null;
 }) {
   if (!value) return null;
+  const linkClass =
+    "text-[18px] leading-7 text-brand underline underline-offset-4 wrap-anywhere";
   return (
     <div className="flex flex-col gap-0.5 px-4 py-3">
       <span className="text-timestamp text-sub">{label}</span>
-      {href ? (
+      {/* An in-app destination goes through the router; tel: and https: do not. */}
+      {href?.startsWith("/") ? (
+        <Link href={href} className={linkClass}>
+          {value}
+        </Link>
+      ) : href ? (
         <a
           href={href}
           {...(href.startsWith("http") ? { target: "_blank", rel: "noreferrer noopener" } : {})}
-          className="text-[18px] leading-7 text-brand underline underline-offset-4 wrap-anywhere"
+          className={linkClass}
         >
           {value}
         </a>

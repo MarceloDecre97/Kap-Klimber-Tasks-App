@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
-import { contactInputSchema } from "@/lib/validation";
+import { contactInputSchema, type ContactValues } from "@/lib/validation";
 
 type ActionResult<T = { contactId: string }> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -45,7 +45,7 @@ async function resolveContactCategory(
   const { data: existing } = await supabase
     .from("contact_categories")
     .select("id")
-    .ilike("label", label)
+    .ilike("label", likeLiteral(label))
     .maybeSingle();
   if (existing) return existing.id;
 
@@ -57,6 +57,90 @@ async function resolveContactCategory(
     .select("id")
     .single();
   if (error) throw error;
+  return created.id;
+}
+
+/**
+ * A value used as a whole `ilike` pattern, with its wildcards defused.
+ *
+ * `%` and `_` are pattern syntax, so a category called "50% club" or a
+ * company called "Smith_Co" would otherwise match the wrong row — or the
+ * wrong several — and silently link a contact to somebody else's company.
+ */
+function likeLiteral(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
+/**
+ * The company a contact should end up linked to.
+ *
+ * There is no company step in front of the contact form. Whatever was typed
+ * in the company box is matched against the book case-insensitively — the
+ * same way the unique index matches, so a name that would collide links
+ * instead of failing — and if nothing matches, the company is created here
+ * from the fields filled in underneath. One save, two rows, linked.
+ *
+ * The details of an *existing* company are only rewritten when somebody
+ * deliberately opened "Edit company details". Otherwise, editing a contact
+ * to fix their mobile would push that contact's stale copy of the address
+ * over everybody else's at the same company.
+ */
+async function resolveCompany(
+  supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
+  memberId: string,
+  v: ContactValues
+): Promise<string | null> {
+  const name = v.company?.trim();
+  if (!name) return null;
+
+  const details = {
+    about: v.companyAbout,
+    website: v.companyWebsite,
+    company_number: v.companyNumber,
+    street: v.companyStreet,
+    suite: v.companySuite,
+    city: v.companyCity,
+    state: v.companyState,
+    postal_code: v.companyPostalCode,
+    country: v.companyCountry,
+  };
+
+  const { data: existing } = await supabase
+    .from("companies")
+    .select("id")
+    .ilike("name", likeLiteral(name))
+    .maybeSingle();
+
+  if (existing) {
+    if (v.updateCompanyDetails) {
+      const { error } = await supabase.from("companies").update(details).eq("id", existing.id);
+      if (error) throw error;
+    }
+    return existing.id;
+  }
+
+  const { data: created, error } = await supabase
+    .from("companies")
+    .insert({ name, ...details, created_by: memberId })
+    .select("id")
+    .single();
+
+  if (error) {
+    /*
+      Two people adding the first contact at the same new company at the
+      same moment. The unique index is what stops the duplicate; this is
+      what stops the loser of that race from seeing an error about it.
+    */
+    if ((error as { code?: string }).code === "23505") {
+      const { data: raced } = await supabase
+        .from("companies")
+        .select("id")
+        .ilike("name", likeLiteral(name))
+        .maybeSingle();
+      if (raced) return raced.id;
+    }
+    throw error;
+  }
   return created.id;
 }
 
@@ -121,6 +205,7 @@ export async function createContact(input: unknown): Promise<ActionResult> {
     const { supabase, member } = await getCurrentMember();
     const v = parsed.data;
     const categoryId = await resolveContactCategory(supabase, member.id, v.categoryId, v.newCategoryLabel);
+    const companyId = await resolveCompany(supabase, member.id, v);
 
     const { data: contact, error } = await supabase
       .from("contacts")
@@ -129,6 +214,7 @@ export async function createContact(input: unknown): Promise<ActionResult> {
         last_name: v.lastName,
         job_title: v.jobTitle,
         company: v.company,
+        company_id: companyId,
         mobile: v.mobile,
         office_phone: v.officePhone,
         email: v.email,
@@ -181,6 +267,7 @@ export async function updateContact(
     const { supabase, member } = await getCurrentMember();
     const v = parsed.data;
     const categoryId = await resolveContactCategory(supabase, member.id, v.categoryId, v.newCategoryLabel);
+    const companyId = await resolveCompany(supabase, member.id, v);
 
     const { error } = await supabase
       .from("contacts")
@@ -189,6 +276,7 @@ export async function updateContact(
         last_name: v.lastName,
         job_title: v.jobTitle,
         company: v.company,
+        company_id: companyId,
         mobile: v.mobile,
         office_phone: v.officePhone,
         email: v.email,

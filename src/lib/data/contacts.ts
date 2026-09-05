@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemberSummary } from "@/lib/data/tasks";
+import type { CompanySummary } from "@/lib/companies-view";
 import type { ContactEventKind, Database, TaskStatus } from "@/lib/supabase/database.types";
 
 /**
@@ -26,7 +27,15 @@ export interface ContactSummary {
   first_name: string;
   last_name: string;
   job_title: string | null;
+  /**
+   * The company's name, kept in step with the linked company by trigger.
+   * Still read directly by the list, the search, the vCard and the export;
+   * see 0024_companies.sql for why it survives alongside the link.
+   */
   company: string | null;
+  company_id: string | null;
+  /** The linked company in full — its address stands in for the person's. */
+  company_record: CompanySummary | null;
   mobile: string | null;
   office_phone: string | null;
   email: string | null;
@@ -60,10 +69,14 @@ export interface ContactEvent {
 }
 
 const CONTACT_SELECT = `
-  id, first_name, last_name, job_title, company,
+  id, first_name, last_name, job_title, company, company_id,
   mobile, office_phone, email, email2, website,
   street, suite, city, state, postal_code, country, source, notes,
   created_at, deleted_at,
+  company_record:companies(
+    id, name, about, website, company_number,
+    street, suite, city, state, postal_code, country, created_at
+  ),
   category:contact_categories(id, label, icon),
   created_by:members!contacts_created_by_fkey(id, display_name, initials, color),
   deleted_by:members!contacts_deleted_by_fkey(id, display_name, initials, color)
@@ -75,10 +88,14 @@ const CONTACT_SELECT = `
   than fight that at every call site, the rows come back through this shape
   and are mapped once.
 */
-type RawContact = Omit<ContactSummary, "category" | "created_by" | "deleted_by"> & {
+type RawContact = Omit<
+  ContactSummary,
+  "category" | "created_by" | "deleted_by" | "company_record"
+> & {
   category: ContactCategory | null;
   created_by: MemberSummary | null;
   deleted_by: MemberSummary | null;
+  company_record: CompanySummary | null;
 };
 
 function toContact(row: RawContact): ContactSummary {
@@ -87,6 +104,7 @@ function toContact(row: RawContact): ContactSummary {
     category: row.category ?? null,
     created_by: row.created_by ?? null,
     deleted_by: row.deleted_by ?? null,
+    company_record: row.company_record ?? null,
   };
 }
 
@@ -148,6 +166,28 @@ export async function getContact(
 
   if (error) throw error;
   return data ? toContact(data as unknown as RawContact) : null;
+}
+
+/**
+ * Everybody at one company, in the book's own order.
+ *
+ * The bin is excluded: a company page is a list of people you can call, and
+ * somebody who was deleted last week is not one of them.
+ */
+export async function listContactsAtCompany(
+  supabase: SupabaseClient<Database>,
+  companyId: string
+): Promise<ContactSummary[]> {
+  const { data, error } = await supabase
+    .from("contacts")
+    .select(CONTACT_SELECT)
+    .eq("company_id", companyId)
+    .is("deleted_at", null)
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true });
+
+  if (error) throw error;
+  return ((data ?? []) as unknown as RawContact[]).map(toContact);
 }
 
 /**

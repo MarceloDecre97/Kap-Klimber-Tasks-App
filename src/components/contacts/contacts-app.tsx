@@ -139,6 +139,20 @@ export function ContactsApp({
             app on Android as well as in a tab. The current filters ride
             along in the query string so the file matches the screen.
           */}
+          {/*
+            Companies are a sub-page of the book, not a fourth thing in the
+            nav. You come here for people; you go there when an address needs
+            correcting once for everybody.
+          */}
+          {!isEmptyBook && (
+            <Link
+              href="/companies"
+              className="inline-flex h-[60px] shrink-0 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-fg bg-transparent px-4 text-[18px] leading-7 font-bold text-fg hover:bg-muted"
+            >
+              <Building2 aria-hidden className="size-5" strokeWidth={1.75} />
+              Companies
+            </Link>
+          )}
           {!isEmptyBook && (
             <a
               href={`/contacts/export${exportQuery}`}

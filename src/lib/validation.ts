@@ -160,6 +160,33 @@ export const contactInputSchema = z
     newCategoryLabel: z.string().trim().min(1).max(60).optional(),
     source: optionalText(200),
     notes: optionalText(4000),
+
+    /*
+      The company, as typed rather than as picked.
+
+      There is no company step to pass through first. `company` is whatever
+      was typed in the box; `companyId` is set only when that name matched
+      one already in the book. When it did not, the fields below are what
+      the person filled in underneath, and saving creates the company and
+      links it in the same breath. See 0024_companies.sql.
+    */
+    companyId: z.string().uuid().nullable().optional(),
+    companyAbout: optionalText(600),
+    companyWebsite: optionalText(300),
+    companyNumber: optionalText(40),
+    companyStreet: optionalText(200),
+    companySuite: optionalText(100),
+    companyCity: optionalText(100),
+    companyState: optionalText(60),
+    companyPostalCode: optionalText(20),
+    companyCountry: optionalText(80),
+    /*
+      Only true when "Edit company details" was opened on a company that
+      already exists. Without it, opening a contact and saving an unrelated
+      change would quietly write that contact's stale copy of the company
+      over everyone else's.
+    */
+    updateCompanyDetails: z.boolean().optional(),
   })
   .refine(
     (v) => Boolean(v.mobile || v.officePhone || v.email || v.email2),
@@ -173,3 +200,27 @@ export const contactInputSchema = z
 
 export type ContactInput = z.input<typeof contactInputSchema>;
 export type ContactValues = z.output<typeof contactInputSchema>;
+
+/**
+ * A company edited on its own page, where the name is the one thing that
+ * cannot be blank — everything else is optional, because a company you have
+ * only just heard of is still worth writing down.
+ */
+export const companyInputSchema = z.object({
+  name: z
+    .string({ error: "A company needs a name." })
+    .trim()
+    .min(1, "A company needs a name.")
+    .max(120),
+  about: optionalText(600),
+  website: optionalText(300),
+  companyNumber: optionalText(40),
+  street: optionalText(200),
+  suite: optionalText(100),
+  city: optionalText(100),
+  state: optionalText(60),
+  postalCode: optionalText(20),
+  country: optionalText(80),
+});
+
+export type CompanyInput = z.input<typeof companyInputSchema>;

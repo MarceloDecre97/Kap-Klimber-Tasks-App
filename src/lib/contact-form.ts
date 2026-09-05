@@ -34,7 +34,7 @@ export const FIELD_LABELS: Record<ContactField, string> = {
  * reports the reachability rule against `mobile`, which is where somebody
  * filling this in is most likely to be looking.
  */
-export function validateContact(draft: Record<string, unknown>): ContactErrors {
+export function validateContact(draft: unknown): ContactErrors {
   const result = contactInputSchema.safeParse(draft);
   if (result.success) return {};
 

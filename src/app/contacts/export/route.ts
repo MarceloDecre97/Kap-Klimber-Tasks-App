@@ -35,8 +35,16 @@ export async function GET(request: NextRequest) {
   };
   const rows = contacts.filter((contact) => matchesContact(contact, filters));
 
+  /*
+    The company's own columns sit beside its name rather than at the end.
+    Somebody mail-merging a letter needs the company address in the same
+    glance as the company, and the person's own address further along is
+    the exception — the one they use only when it differs.
+  */
   const headers = [
-    "First name", "Last name", "Job title", "Company", "Category",
+    "First name", "Last name", "Job title",
+    "Company", "Company main line", "Company website", "Company address",
+    "Category",
     "Mobile", "Office phone", "Email", "Second email", "Website",
     "Street", "Suite / unit", "City", "State", "ZIP", "Country", "Address",
     "Where they came from", "Notes", "Added by", "Added on",
@@ -47,6 +55,9 @@ export async function GET(request: NextRequest) {
     c.last_name,
     c.job_title ?? "",
     c.company ?? "",
+    c.company_record?.company_number ?? "",
+    c.company_record?.website ?? "",
+    (c.company_record ? formatAddress(c.company_record) : null) ?? "",
     c.category?.label ?? "",
     c.mobile ?? "",
     c.office_phone ?? "",
