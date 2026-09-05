@@ -19,8 +19,8 @@ import type { NotificationFeed } from "@/lib/data/notifications";
  * letting it wrap freely produced three ragged rows, so it folds into a
  * deliberate two:
  *
- *     [ logo ................. bell  settings ]
- *     [ view switcher .............. clock    ]
+ *     [ logo ......... clock  bell  settings ]
+ *     [ view switcher ....................... ]
  *
  * There is still only one DOM for both. The controls group is `display:
  * contents` below `lg`, which dissolves it so the clock, the bell and
@@ -51,7 +51,12 @@ export function AppHeader({
     <header className="flex shrink-0 flex-col gap-2.5 border-b-[1.5px] border-border bg-card px-5 pt-[calc(env(safe-area-inset-top)+10px)] pb-3.5 lg:gap-3">
       <div className="flex flex-wrap items-center gap-2 lg:gap-3">
         <div className="order-1 flex min-w-0 items-center lg:flex-1">
-          <BrandLogo width={364} height={56} className="h-6 w-auto max-w-full min-[360px]:h-7 sm:h-10 lg:h-14" priority />
+          {/*
+            A step smaller below `sm`: row one now carries the clock as well
+            as the bell and settings, and the logo is the only element that
+            can give up width without losing meaning.
+          */}
+          <BrandLogo width={364} height={56} className="h-5 w-auto max-w-full min-[360px]:h-6 sm:h-10 lg:h-14" priority />
         </div>
 
         {/*
@@ -66,10 +71,15 @@ export function AppHeader({
         </div>
 
         <div className="contents lg:order-3 lg:flex lg:flex-1 lg:items-center lg:justify-end lg:gap-2">
-          <AppClock className="order-5 lg:order-1" />
-          <NotificationBell feed={notifications} className="order-2 ml-auto lg:order-2 lg:ml-0" />
+          {/*
+            On a phone the clock sits on row one now. With three nav
+            segments the switcher needs the whole of row two, and the clock
+            wrapping to a third row cost 56px of a small screen.
+          */}
+          <AppClock className="order-2 ml-auto lg:order-1 lg:ml-0" />
+          <NotificationBell feed={notifications} className="order-3 lg:order-2 lg:ml-0" />
           <ThemeToggle className="hidden lg:order-3 lg:ml-0 lg:inline-flex" />
-          <Link href="/settings" className="order-3 lg:order-4">
+          <Link href="/settings" className="order-4 lg:order-4">
             <IconButton aria-label="Settings" className="size-12 lg:size-14">
               <Settings aria-hidden className="size-5" />
             </IconButton>

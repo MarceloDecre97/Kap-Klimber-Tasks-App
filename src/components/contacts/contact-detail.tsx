@@ -14,12 +14,14 @@ import { Avatar } from "@/components/ui/avatar";
 import { CategoryBadge } from "@/components/contacts/category-badge";
 import {
   avatarColor,
+  describeChange,
   formatAddress,
   fullName,
+  groupContactEvents,
   initialsOf,
   roleLine,
 } from "@/lib/contacts-view";
-import { formatTimestamp } from "@/lib/utils";
+import { formatTimestamp, formatTimestampWithYear } from "@/lib/utils";
 import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
 
 /**
@@ -32,9 +34,12 @@ import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
 export function ContactDetail({
   contact,
   events,
+  fromTaskId,
 }: {
   contact: ContactSummary;
   events: ContactEvent[];
+  /** Set when you arrived from a task's contact pill. */
+  fromTaskId?: string | null;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -78,12 +83,16 @@ export function ContactDetail({
   return (
     <div className="flex h-full flex-col bg-bg">
       <header className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-border bg-card px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-3">
+        {/*
+          Back goes where you came from. Arriving from a task and being
+          returned to the address book loses the thing you were doing.
+        */}
         <Link
-          href="/contacts"
+          href={fromTaskId ? `/tasks?task=${fromTaskId}` : "/contacts"}
           className="flex h-14 items-center gap-2 rounded-xl px-3 text-[18px] leading-7 font-bold text-brand"
         >
           <ChevronLeft aria-hidden className="size-5" />
-          Contacts
+          {fromTaskId ? "Back to task" : "Contacts"}
         </Link>
       </header>
 
@@ -178,7 +187,8 @@ export function ContactDetail({
 
           {contact.created_by && (
             <p className="text-timestamp text-sub">
-              Added by {contact.created_by.display_name} · {formatTimestamp(contact.created_at)}
+              Added by {contact.created_by.display_name} ·{" "}
+              {formatTimestampWithYear(contact.created_at)}
             </p>
           )}
 
@@ -235,8 +245,17 @@ export function ContactDetail({
         mode={deleting ?? "confirm"}
         blocking={blocking}
         onClose={() => setDeleting(null)}
+        /*
+          Back to the book, not this page.
+
+          Staying here left "Erase for good" one tap below the button that
+          had just been pressed — which is not the two deliberate actions
+          this was built for. Erasing now means going to Contacts and
+          opening Recently deleted on purpose.
+        */
         onDeleted={() => {
           setDeleting(null);
+          router.replace("/contacts");
           router.refresh();
           showToast({ message: `${fullName(contact)} moved to Recently deleted` });
         }}
@@ -318,43 +337,36 @@ function Row({
  * makes that rule safe rather than alarming.
  */
 function Activity({ events }: { events: ContactEvent[] }) {
-  if (events.length === 0) return null;
+  // One entry per save, and the "added this contact" event dropped — the
+  // line above already says who added them, two lines up.
+  const entries = groupContactEvents(events);
+  if (entries.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-2">
       <h2 className="text-field-label text-sub">Activity</h2>
       <ol className="flex flex-col divide-y-[1.5px] divide-border rounded-2xl border-[1.5px] border-border bg-card">
-        {events.map((event) => (
-          <li key={event.id} className="flex flex-col gap-0.5 px-4 py-3">
-            <span className="text-[17px] leading-6 text-fg text-pretty">
-              {describeEvent(event)}
+        {entries.map((entry) => (
+          <li key={entry.id} className="flex flex-col gap-1 px-4 py-3">
+            <span className="text-[17px] leading-6 font-bold text-fg text-pretty">
+              {entry.headline}
             </span>
-            <span className="text-timestamp text-sub">{formatTimestamp(event.created_at)}</span>
+            {entry.changes.length > 0 && (
+              <ul className="flex flex-col gap-0.5">
+                {entry.changes.map((change) => (
+                  <li
+                    key={`${entry.id}-${change.field}`}
+                    className="text-[17px] leading-6 text-sub text-pretty wrap-anywhere"
+                  >
+                    <span className="text-fg">{change.field}</span> · {describeChange(change)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <span className="text-timestamp text-sub">{formatTimestamp(entry.at)}</span>
           </li>
         ))}
       </ol>
     </div>
   );
-}
-
-function describeEvent(event: ContactEvent): string {
-  const who = event.member?.display_name ?? "Someone";
-  switch (event.kind) {
-    case "created":
-      return `${who} added this contact`;
-    case "deleted":
-      return `${who} moved this contact to Recently deleted`;
-    case "restored":
-      return `${who} put this contact back`;
-    case "edited": {
-      const field = event.field ?? "something";
-      if (event.from_value && event.to_value) {
-        return `${who} changed ${field.toLowerCase()} from ${event.from_value} to ${event.to_value}`;
-      }
-      if (event.to_value) return `${who} set ${field.toLowerCase()} to ${event.to_value}`;
-      return `${who} cleared ${field.toLowerCase()}`;
-    }
-    default:
-      return `${who} made a change`;
-  }
 }

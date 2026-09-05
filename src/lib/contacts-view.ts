@@ -238,3 +238,88 @@ export function roleLine(c: { job_title: string | null; company: string | null }
  * having asked for it.
  */
 export const DELETED_CONTACTS_VISIBLE_DAYS = 15;
+
+/* -------------------------------------------------------------------------
+   The activity log, as people read it
+   ------------------------------------------------------------------------- */
+
+/** One save: who did it, when, and every field that moved in it. */
+export interface ActivityEntry {
+  id: string;
+  at: string;
+  who: string;
+  /** Null for the whole-row events — deleted, restored. */
+  changes: { field: string; from: string | null; to: string | null }[];
+  headline: string;
+}
+
+/**
+ * Groups an activity log by the save that produced it.
+ *
+ * Three fields changed in one press used to read as three entries, all
+ * stamped the same minute, which made a routine edit look like a flurry.
+ *
+ * They are grouped on the exact timestamp rather than on the minute, and
+ * that is the point: Postgres `now()` returns the *transaction* time, so
+ * every row written by one save shares a value to the microsecond. Two
+ * separate edits eight seconds apart stay two entries, where a minute-based
+ * rule would have merged them and quietly rewritten what happened.
+ *
+ * `created` is dropped entirely. The screen already says "Added by Marcelo"
+ * above, and saying it twice, two lines apart, reads as a bug.
+ */
+export function groupContactEvents(
+  events: { id: string; kind: string; field: string | null; from_value: string | null; to_value: string | null; created_at: string; member: { display_name: string } | null }[]
+): ActivityEntry[] {
+  const entries: ActivityEntry[] = [];
+
+  for (const event of events) {
+    if (event.kind === "created") continue;
+    const who = event.member?.display_name ?? "Someone";
+
+    if (event.kind === "deleted" || event.kind === "restored") {
+      entries.push({
+        id: event.id,
+        at: event.created_at,
+        who,
+        changes: [],
+        headline:
+          event.kind === "deleted"
+            ? `${who} moved this contact to Recently deleted`
+            : `${who} put this contact back`,
+      });
+      continue;
+    }
+
+    // An edit joins the entry directly above it only when that entry is the
+    // same person's, from the same instant. Anything else starts a new one.
+    const last = entries[entries.length - 1];
+    const sameSave =
+      last && last.changes.length > 0 && last.at === event.created_at && last.who === who;
+
+    const change = {
+      field: event.field ?? "Something",
+      from: event.from_value,
+      to: event.to_value,
+    };
+
+    if (sameSave) last.changes.push(change);
+    else
+      entries.push({
+        id: event.id,
+        at: event.created_at,
+        who,
+        changes: [change],
+        headline: `${who} edited`,
+      });
+  }
+
+  return entries;
+}
+
+/** "App owner → App owner and founder", or the half that exists. */
+export function describeChange(change: { field: string; from: string | null; to: string | null }): string {
+  if (change.from && change.to) return `${change.from} → ${change.to}`;
+  if (change.to) return `set to ${change.to}`;
+  return "cleared";
+}

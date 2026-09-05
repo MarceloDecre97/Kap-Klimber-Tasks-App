@@ -66,7 +66,18 @@ function sheetXml(headers: string[], rows: string[][]): string {
     })
     .join("");
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+  /*
+    ignoredErrors covers the whole used range for numberStoredAsText.
+
+    Every cell here is deliberately text — that is the entire reason this
+    writer exists — but Excel does not know that and marks each phone number
+    and ZIP with a green triangle, which reads as the file being wrong. This
+    tells it the choice was made on purpose.
+  */
+  const lastCol = cellRef(Math.max(headers.length - 1, 0), 1).replace(/\d+$/, "");
+  const usedRange = `A1:${lastCol}${all.length}`;
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData><ignoredErrors><ignoredError sqref="${usedRange}" numberStoredAsText="1"/></ignoredErrors></worksheet>`;
 }
 
 /* -------------------------------------------------------------------------

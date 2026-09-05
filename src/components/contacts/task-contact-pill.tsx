@@ -18,13 +18,24 @@ import type { TaskContact } from "@/lib/data/tasks";
  * how a thumb aiming for the row ends up dialling somebody by accident.
  * Calling is one more tap away, on the page this opens.
  */
-export function TaskContactPill({ contact }: { contact: TaskContact }) {
+export function TaskContactPill({
+  contact,
+  taskId,
+}: {
+  contact: TaskContact;
+  /**
+   * Where this pill lives. Carried into the contact so its Back button can
+   * return you to this task rather than to the book — landing in the address
+   * book loses the place you were working.
+   */
+  taskId: string;
+}) {
   const role = roleLine(contact);
   const phone = contact.mobile ?? contact.office_phone;
 
   return (
     <Link
-      href={`/contacts/${contact.id}`}
+      href={`/contacts/${contact.id}?from=${taskId}`}
       className={cn(
         "flex min-h-14 items-center gap-2.5 rounded-full border-[1.5px] border-border bg-card py-1.5 pl-1.5 pr-3.5",
         "transition-colors duration-150 hover:bg-muted"

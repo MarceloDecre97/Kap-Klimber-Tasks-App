@@ -470,7 +470,7 @@ export function TaskPill({
               </div>
               <div className="flex flex-col gap-2.5">
                 {contacts.map((contact) => (
-                  <TaskContactPill key={contact.id} contact={contact} />
+                  <TaskContactPill key={contact.id} contact={contact} taskId={task.id} />
                 ))}
               </div>
             </div>

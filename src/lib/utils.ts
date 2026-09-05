@@ -242,6 +242,24 @@ export function formatTimestamp(iso: string, timeZone?: string): string {
 }
 
 /**
+ * The same instant with the year — "Sep 5, 2026, 3:26 PM".
+ *
+ * For the handful of places that record when something was first created
+ * rather than what happened lately. A year is noise on a note from this
+ * morning and the only thing that matters on a contact added two years ago.
+ */
+export function formatTimestampWithYear(iso: string, timeZone: string = APP_TIMEZONE): string {
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(new Date(iso));
+}
+
+/**
  * "27 Aug" for a plain SQL `date` value ("2026-08-27"), which carries no
  * time-of-day and no zone of its own. Parsed AND formatted in UTC so the
  * calendar day is a fixed label that can never shift by a day — unlike a
