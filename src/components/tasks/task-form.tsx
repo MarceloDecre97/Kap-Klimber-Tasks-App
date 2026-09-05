@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PRIORITIES, PRIORITY_ORDER, STATUSES, STATUS_ORDER } from "@/lib/constants";
+import { ContactPicker } from "@/components/contacts/contact-picker";
 import { createTask, updateTask } from "@/app/tasks/actions";
 import { cn, toZonedDateInput, toZonedTimeInput, zonedWallClockToIso } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ import { cn, toZonedDateInput, toZonedTimeInput, zonedWallClockToIso } from "@/l
 const TITLE_MAX = 200;
 /** Past this, the title will start getting clamped in the list on a phone. */
 const TITLE_LONG = 80;
+import type { ContactSummary } from "@/lib/data/contacts";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
 
@@ -29,6 +31,7 @@ interface FormState {
   priority: Priority;
   status: TaskStatus;
   assigneeIds: string[];
+  contactIds: string[];
   dueDate: string;
   reminderEnabled: boolean;
   reminderDate: string;
@@ -45,6 +48,7 @@ function initialState(task?: TaskWithRelations): FormState {
     priority: task?.priority ?? "medium",
     status: task?.status ?? "not_started",
     assigneeIds: task?.assignees.map((a) => a.id) ?? [],
+    contactIds: task?.contacts.map((c) => c.id) ?? [],
     dueDate: task?.due_date ?? "",
     reminderEnabled: !!task?.reminder_at,
     reminderDate: task?.reminder_at ? toZonedDateInput(task.reminder_at) : "",
@@ -57,10 +61,13 @@ export function TaskForm({
   task,
   roster,
   categories,
+  contacts,
 }: {
   mode: "create" | "edit";
   task?: TaskWithRelations;
   roster: MemberSummary[];
+  /** The whole book, for the picker to search. Never a fetch per keystroke. */
+  contacts: ContactSummary[];
   categories: { id: string; label: string }[];
 }) {
   const router = useRouter();
@@ -105,6 +112,7 @@ export function TaskForm({
       priority: form.priority,
       status: form.status,
       assigneeIds: form.assigneeIds,
+      contactIds: form.contactIds,
       dueDate: form.dueDate || null,
       reminderAt,
     };
@@ -189,6 +197,19 @@ export function TaskForm({
             ))}
           </div>
           {form.assigneeIds.length === 0 && <p className="text-[16px] leading-[22px] text-sub">Pick at least one person.</p>}
+        </Field>
+
+        {/*
+          Optional, and last of the "who" fields. Somebody outside the
+          company that whoever picks this up will need to ring — the number
+          travels with the task instead of living in one person's phone.
+        */}
+        <Field label="Contacts">
+          <ContactPicker
+            contacts={contacts}
+            selectedIds={form.contactIds}
+            onChange={(next) => update("contactIds", next)}
+          />
         </Field>
 
         <Field label="Priority">

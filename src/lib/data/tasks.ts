@@ -25,6 +25,23 @@ export interface TaskEvent {
   member: MemberSummary | null;
 }
 
+/**
+ * Just enough of a contact to draw a pill: who they are, one number to show,
+ * and whether the book still has them. Anything more belongs on the contact's
+ * own page, which the pill links to.
+ */
+export interface TaskContact {
+  id: string;
+  first_name: string;
+  last_name: string;
+  job_title: string | null;
+  company: string | null;
+  mobile: string | null;
+  office_phone: string | null;
+  /** Set while the contact is in Recently deleted — still attached, not gone. */
+  deleted_at: string | null;
+}
+
 export interface TaskNote {
   id: string;
   body: string;
@@ -70,6 +87,13 @@ export interface TaskWithRelations {
   created_by: string;
   category: { id: string; label: string } | null;
   assignees: MemberSummary[];
+  /**
+   * The contacts attached to this task, at most two. Always an array: a task
+   * with none is the overwhelmingly common case and must render exactly as it
+   * did before contacts existed, so absence is an empty list rather than a
+   * null anything downstream has to remember to check.
+   */
+  contacts: TaskContact[];
   notes: TaskNote[];
   /** Status and due-date changes, oldest first. Empty until 0007 is applied. */
   events: TaskEvent[];
@@ -88,6 +112,7 @@ const TASK_SELECT = `
   reads:task_reads(last_read_at),
   events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
+  contacts:task_contacts(contact:contacts(id, first_name, last_name, job_title, company, mobile, office_phone, deleted_at)),
   notes:task_notes(id, body, created_at, edited_at, parent_note_id, deleted_at, member:members!task_notes_member_id_fkey(id, display_name, initials, color), likes:task_note_likes(member_id))
 `;
 
@@ -122,6 +147,7 @@ type RawTask = {
   created_by: string;
   category: { id: string; label: string } | null;
   assignees: { member: MemberSummary | null }[] | null;
+  contacts: { contact: TaskContact | null }[] | null;
   notes: RawTaskNote[] | null;
   reads: { last_read_at: string }[] | null;
   events: RawTaskEvent[] | null;
@@ -182,6 +208,15 @@ function mapTask(row: RawTask): TaskWithRelations {
   return {
     ...row,
     assignees: (row.assignees ?? []).map((a) => a.member).filter((m): m is MemberSummary => !!m),
+    /*
+      Ordered by surname so two pills on one task keep a stable order rather
+      than whatever the join happened to return — a list that reshuffles
+      between refreshes reads as something having changed.
+    */
+    contacts: (row.contacts ?? [])
+      .map((c) => c.contact)
+      .filter((c): c is TaskContact => !!c)
+      .sort((a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name)),
     notes: nestNotes(row.notes ?? []),
     last_read_at: row.reads?.[0]?.last_read_at ?? null,
     events: (row.events ?? []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at)),

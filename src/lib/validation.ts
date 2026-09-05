@@ -21,6 +21,15 @@ export const taskInputSchema = z.object({
   priority: priorityEnum,
   status: statusEnum,
   assigneeIds: z.array(z.string().uuid()).min(1, "Pick at least one person."),
+  /*
+    Optional, and capped at two — the same cap the database enforces with a
+    trigger. This copy exists so the form can say so in words rather than
+    letting somebody pick a third and meet a raise() on save.
+  */
+  contactIds: z
+    .array(z.string().uuid())
+    .max(2, "Two contacts at most. Take one off to swap it.")
+    .optional(),
   dueDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid due date.")

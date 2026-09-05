@@ -9,6 +9,7 @@ import {
   ChevronDown,
   GitCommitHorizontal,
   Hourglass,
+  Contact,
   MessageSquare,
   Pencil,
   ThumbsUp,
@@ -18,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
+import { TaskContactPill } from "@/components/contacts/task-contact-pill";
 import { MentionTextarea } from "@/components/tasks/mention-textarea";
 import { NoteBody } from "@/components/tasks/note-body";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
@@ -123,6 +125,7 @@ export function TaskPill({
 
   const timeline = buildTimeline(task);
   const noteCount = countNotes(task.notes);
+  const contacts = task.contacts;
   const overdueDays =
     task.due_date && task.status !== "complete"
       ? Math.max(0, -daysBetweenKeys(zonedDateKey(new Date()), task.due_date))
@@ -236,6 +239,21 @@ export function TaskPill({
           >
             <MessageSquare aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
             {noteCount}
+          </span>
+        )}
+        {/*
+          Says a contact is attached without opening the card, so a task you
+          could act on right now is distinguishable from one you would have
+          to expand to find out about. Brand-coloured, like the mention
+          marker: this is a resource on the task, not a fact about its state.
+        */}
+        {contacts.length > 0 && (
+          <span
+            className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-brand px-2.5 text-[15px] leading-5 font-bold text-brand"
+            title={`${contacts.length} ${contacts.length === 1 ? "contact" : "contacts"} on this task`}
+          >
+            <Contact aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
+            {contacts.length}
           </span>
         )}
         {/*
@@ -444,6 +462,19 @@ export function TaskPill({
               })}
             </div>
           </div>
+
+          {contacts.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="text-field-label">
+                {contacts.length === 1 ? "Contact" : "Contacts"}
+              </div>
+              <div className="flex flex-col gap-2.5">
+                {contacts.map((contact) => (
+                  <TaskContactPill key={contact.id} contact={contact} />
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-3">
             <div className="text-section-heading">Activity</div>

@@ -52,6 +52,53 @@ async function resolveCategoryId(
   return categoryId ?? null;
 }
 
+/**
+ * Bring a task's attached contacts in line with what was submitted.
+ *
+ * Diffed rather than cleared and rewritten: `attached_at` and `attached_by`
+ * are a record of when somebody put a contact on a task, and deleting every
+ * row on each save would reset that history every time a title was fixed.
+ *
+ * The two-at-most rule is not checked here. The database enforces it with a
+ * trigger, and a second copy of a rule is one copy that will eventually be
+ * wrong — this only has to send the right set.
+ */
+async function syncTaskContacts(
+  supabase: SupabaseClient<Database>,
+  taskId: string,
+  memberId: string,
+  contactIds: string[] | undefined
+): Promise<void> {
+  if (contactIds === undefined) return;
+
+  const { data: current, error: readError } = await supabase
+    .from("task_contacts")
+    .select("contact_id")
+    .eq("task_id", taskId);
+  if (readError) throw readError;
+
+  const have = new Set((current ?? []).map((row) => row.contact_id));
+  const want = new Set(contactIds);
+
+  const toAdd = [...want].filter((id) => !have.has(id));
+  const toRemove = [...have].filter((id) => !want.has(id));
+
+  if (toRemove.length > 0) {
+    const { error } = await supabase
+      .from("task_contacts")
+      .delete()
+      .eq("task_id", taskId)
+      .in("contact_id", toRemove);
+    if (error) throw error;
+  }
+  if (toAdd.length > 0) {
+    const { error } = await supabase
+      .from("task_contacts")
+      .insert(toAdd.map((contactId) => ({ task_id: taskId, contact_id: contactId, attached_by: memberId })));
+    if (error) throw error;
+  }
+}
+
 export async function createTask(input: unknown): Promise<ActionResult> {
   const parsed = taskInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That task isn't valid." };
@@ -82,6 +129,8 @@ export async function createTask(input: unknown): Promise<ActionResult> {
       .from("task_assignees")
       .insert(data.assigneeIds.map((memberId) => ({ task_id: task.id, member_id: memberId })));
     if (assigneeError) throw assigneeError;
+
+    await syncTaskContacts(supabase, task.id, member.id, data.contactIds);
 
     revalidateTaskViews();
     return { ok: true, taskId: task.id };
@@ -151,6 +200,8 @@ export async function updateTask(taskIdInput: string, input: unknown): Promise<A
         .insert(added.map((memberId) => ({ task_id: taskId.data, member_id: memberId })));
       if (assigneeError) throw assigneeError;
     }
+
+    await syncTaskContacts(supabase, taskId.data, member.id, data.contactIds);
 
     revalidateTaskViews();
     return { ok: true, taskId: taskId.data };
