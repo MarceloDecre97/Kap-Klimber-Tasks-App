@@ -19,19 +19,34 @@ import type { ContactSummary } from "@/lib/data/contacts";
  * one meaning — tapping it opens the person — and a second live target
  * inside it is how a thumb aiming for the row ends up dialling instead.
  */
-export function ContactRow({ contact, className }: { contact: ContactSummary; className?: string }) {
+export function ContactRow({
+  contact,
+  className,
+  onSelect,
+  selected,
+}: {
+  contact: ContactSummary;
+  className?: string;
+  /*
+    Given only on a wide screen, where the row opens the panel beside the
+    list instead of a new page. Without it the row stays a link, which is
+    what every phone in the team gets.
+  */
+  onSelect?: () => void;
+  selected?: boolean;
+}) {
   const role = roleLine(contact);
   const phone = contact.mobile ?? contact.office_phone;
 
-  return (
-    <Link
-      href={`/contacts/${contact.id}`}
-      className={cn(
-        "flex min-h-14 items-start gap-3 rounded-2xl border-[1.5px] border-border bg-card p-3.5",
-        "shadow-[0_1px_3px_rgba(2,6,23,0.08)] transition-colors duration-150 hover:bg-muted",
-        className
-      )}
-    >
+  const rowClass = cn(
+    "flex min-h-14 w-full items-start gap-3 rounded-2xl border-[1.5px] bg-card p-3.5 text-left",
+    "shadow-[0_1px_3px_rgba(2,6,23,0.08)] transition-colors duration-150 hover:bg-muted",
+    selected ? "border-brand bg-muted" : "border-border",
+    className
+  );
+
+  const inner = (
+    <>
       <Avatar
         initials={initialsOf(contact)}
         color={avatarColor(contact)}
@@ -55,6 +70,20 @@ export function ContactRow({ contact, className }: { contact: ContactSummary; cl
       </span>
 
       <ChevronRight aria-hidden className="mt-2 size-[22px] shrink-0 text-sub" strokeWidth={1.75} />
+    </>
+  );
+
+  if (onSelect) {
+    return (
+      <button type="button" onClick={onSelect} aria-current={selected} className={cn(rowClass, "cursor-pointer")}>
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <Link href={`/contacts/${contact.id}`} className={rowClass}>
+      {inner}
     </Link>
   );
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
+import { listContactEvents, type ContactEvent } from "@/lib/data/contacts";
 import { contactInputSchema, type ContactValues } from "@/lib/validation";
 
 type ActionResult<T = { contactId: string }> = ({ ok: true } & T) | { ok: false; error: string };
@@ -195,6 +196,28 @@ export async function findDuplicates(
     return { ok: false, error: rpcError(error, "Couldn't check for duplicates.") };
   }
   return { ok: true, matches: (data ?? []) as DuplicateMatch[] };
+}
+
+/**
+ * One contact's activity, fetched on demand.
+ *
+ * The book's list page does not load anybody's history — it would be one
+ * query per contact for a panel that shows one at a time. The desktop
+ * detail panel asks for it when a person is actually selected.
+ */
+export async function contactActivity(
+  contactIdInput: string
+): Promise<ActionResult<{ events: ContactEvent[] }>> {
+  const contactId = contactIdSchema.safeParse(contactIdInput);
+  if (!contactId.success) return { ok: false, error: "Invalid contact." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    return { ok: true, events: await listContactEvents(supabase, contactId.data) };
+  } catch (error) {
+    console.error("contactActivity failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't load that history.") };
+  }
 }
 
 export async function createContact(input: unknown): Promise<ActionResult> {

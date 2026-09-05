@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, ChevronDown, ChevronUp, Plus, Search, Sheet, Tag, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/app-header";
 import { useToast } from "@/components/ui/toast";
 import { DeleteContactDialog } from "@/components/contacts/delete-contact-dialog";
-import { restoreContact } from "@/app/contacts/actions";
+import { contactActivity, restoreContact } from "@/app/contacts/actions";
+import { ContactDetail } from "@/components/contacts/contact-detail";
 import { Avatar } from "@/components/ui/avatar";
 import { ContactRow } from "@/components/contacts/contact-row";
 import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dropdown";
@@ -26,7 +27,7 @@ import {
   type ContactFilters,
 } from "@/lib/contacts-view";
 import { cn, formatDateGroup } from "@/lib/utils";
-import type { ContactCategory, ContactSummary } from "@/lib/data/contacts";
+import type { ContactCategory, ContactEvent, ContactSummary } from "@/lib/data/contacts";
 import type { NotificationFeed } from "@/lib/data/notifications";
 
 /**
@@ -56,6 +57,52 @@ export function ContactsApp({
   const [showBin, setShowBin] = useState(false);
   const [erasing, setErasing] = useState<ContactSummary | null>(null);
   const [, startTransition] = useTransition();
+
+  /*
+    The desktop panel.
+
+    On a laptop a row opens the contact beside the list instead of replacing
+    it — the list keeps its place, its scroll and its search, which is the
+    whole point of the wider screen. Below `lg` none of this exists and a row
+    is the link it has always been.
+
+    Nothing is selected to begin with, deliberately. Auto-opening the first
+    contact tells you something about somebody you did not ask about, and
+    makes the panel look like it belongs to the top of the list rather than
+    to whoever you pick.
+  */
+  const [wide, setWide] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panelEvents, setPanelEvents] = useState<ContactEvent[]>([]);
+  /* Which contact the in-flight activity request belongs to. */
+  const pendingActivity = useRef<string | null>(null);
+
+  useEffect(() => {
+    /*
+      Matched to the `lg` breakpoint the layout below uses, so the two can
+      never disagree about whether there is a panel. It starts false and
+      corrects itself after mount: the first render is the phone's, which is
+      the one that must be right before hydration.
+    */
+    const query = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setWide(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  function select(contact: ContactSummary) {
+    setSelectedId(contact.id);
+    setPanelEvents([]);
+    pendingActivity.current = contact.id;
+    startTransition(async () => {
+      const result = await contactActivity(contact.id);
+      // Clicking down the list faster than the fetches return would
+      // otherwise land one person's history under another person's name.
+      if (pendingActivity.current !== contact.id) return;
+      if (result.ok) setPanelEvents(result.events);
+    });
+  }
 
   function putBack(contact: ContactSummary) {
     startTransition(async () => {
@@ -94,6 +141,16 @@ export function ContactsApp({
   const isEmptyBook = contacts.length === 0;
 
   /*
+    Looked up in the list rather than stored, so a contact that has just been
+    deleted, restored or edited empties or updates the panel on its own
+    rather than leaving a stale copy of themselves in it.
+  */
+  const selected = useMemo(
+    () => (selectedId ? contacts.find((c) => c.id === selectedId) ?? null : null),
+    [contacts, selectedId]
+  );
+
+  /*
     The same three values the list is filtered by, handed to the export route
     so the spreadsheet is exactly what is on screen. Built here rather than
     read from the URL because these filters live in component state — the
@@ -112,8 +169,15 @@ export function ContactsApp({
     <div className="flex h-full flex-col bg-bg">
       <AppHeader current="/contacts" notifications={notifications} />
 
+      {/*
+        One column on a phone, two from `lg`. The row below is the only thing
+        that changes: it stops being the page's scroller and becomes a pair
+        of panes that scroll independently, so reading somebody's details
+        never moves the list you were working down.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden">
       <div className="flex-1 overflow-y-auto px-5 py-6">
-        <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4">
+        <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4 lg:max-w-[620px]">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h1 className="text-screen-title text-fg">Contacts</h1>
             {!isEmptyBook && (
@@ -243,9 +307,14 @@ export function ContactsApp({
                       390px, so on a laptop one column of them across a
                       900px page is mostly whitespace.
                     */}
-                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
                       {group.people.map((contact) => (
-                        <ContactRow key={contact.id} contact={contact} />
+                        <ContactRow
+                          key={contact.id}
+                          contact={contact}
+                          onSelect={wide ? () => select(contact) : undefined}
+                          selected={wide && contact.id === selectedId}
+                        />
                       ))}
                     </div>
                   </div>
@@ -328,6 +397,33 @@ export function ContactsApp({
             </div>
           )}
         </div>
+      </div>
+
+      {/*
+        The panel. Empty until somebody is picked, and quiet about it — this
+        is a place for a contact to appear, not a thing to read.
+      */}
+      <aside className="hidden shrink-0 flex-col border-l-[1.5px] border-border bg-card lg:flex lg:w-[440px] xl:w-[520px]">
+        {selected ? (
+          /*
+            Keyed on the contact so switching people starts the panel at the
+            top rather than halfway down the last person's notes.
+          */
+          <ContactDetail
+            key={selected.id}
+            contact={selected}
+            events={panelEvents}
+            embedded
+            onGone={() => setSelectedId(null)}
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center px-8">
+            <p className="max-w-[280px] text-center text-[17px] leading-6 text-sub text-pretty">
+              Pick somebody from the list and they will show up here.
+            </p>
+          </div>
+        )}
+      </aside>
       </div>
 
       <DeleteContactDialog

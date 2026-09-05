@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, Mail, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronLeft, Download, ExternalLink, Mail, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import {
   DeleteContactDialog,
@@ -21,7 +21,7 @@ import {
   initialsOf,
   roleLine,
 } from "@/lib/contacts-view";
-import { formatTimestamp, formatTimestampWithYear } from "@/lib/utils";
+import { cn, formatTimestamp, formatTimestampWithYear } from "@/lib/utils";
 import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
 
 /**
@@ -30,16 +30,27 @@ import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
  * Its own route rather than a sheet over the list: it is a place you can be
  * sent to — from a task's contact pill, or a link somebody pastes — and a
  * sheet has no address.
+ *
+ * The same component fills the desktop panel beside the list, where it drops
+ * its own header and back link — the list is right there — and hands the
+ * "this contact is gone now" decision back to the page holding it. One
+ * component rather than a panel version that slowly stops matching.
  */
 export function ContactDetail({
   contact,
   events,
   fromTaskId,
+  embedded = false,
+  onGone,
 }: {
   contact: ContactSummary;
   events: ContactEvent[];
   /** Set when you arrived from a task's contact pill. */
   fromTaskId?: string | null;
+  /** True inside the desktop list panel: no header, no going anywhere. */
+  embedded?: boolean;
+  /** Called instead of navigating when the contact is deleted or erased. */
+  onGone?: () => void;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -70,6 +81,23 @@ export function ContactDetail({
     });
   }
 
+  /**
+   * Where to go when this contact stops existing.
+   *
+   * On its own page there is nothing left to show, so it goes back to the
+   * book. In the desktop panel the book is already on screen — the panel
+   * simply empties, and the list behind it refreshes.
+   */
+  function gone(message: string) {
+    if (embedded) {
+      onGone?.();
+    } else {
+      router.replace("/contacts");
+    }
+    router.refresh();
+    showToast({ message });
+  }
+
   function putBack() {
     startTransition(async () => {
       const result = await restoreContact(contact.id);
@@ -83,23 +111,36 @@ export function ContactDetail({
   }
 
   return (
-    <div className="flex h-full flex-col bg-bg">
-      <header className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-border bg-card px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-3">
-        {/*
-          Back goes where you came from. Arriving from a task and being
-          returned to the address book loses the thing you were doing.
-        */}
-        <Link
-          href={fromTaskId ? `/tasks?task=${fromTaskId}` : "/contacts"}
-          className="flex h-14 items-center gap-2 rounded-xl px-3 text-[18px] leading-7 font-bold text-brand"
-        >
-          <ChevronLeft aria-hidden className="size-5" />
-          {fromTaskId ? "Back to task" : "Contacts"}
-        </Link>
-      </header>
+    <div className={cn("flex flex-col bg-bg", embedded ? "min-h-0 flex-1" : "h-full")}>
+      {!embedded && (
+        <header className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-border bg-card px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-3">
+          {/*
+            Back goes where you came from. Arriving from a task and being
+            returned to the address book loses the thing you were doing.
+          */}
+          <Link
+            href={fromTaskId ? `/tasks?task=${fromTaskId}` : "/contacts"}
+            className="flex h-14 items-center gap-2 rounded-xl px-3 text-[18px] leading-7 font-bold text-brand"
+          >
+            <ChevronLeft aria-hidden className="size-5" />
+            {fromTaskId ? "Back to task" : "Contacts"}
+          </Link>
+        </header>
+      )}
 
-      <div className="flex-1 overflow-y-auto px-5 py-6">
-        <div className="mx-auto flex w-full max-w-[640px] flex-col gap-6">
+      <div className={cn("flex-1 overflow-y-auto px-5", embedded ? "py-5" : "py-6")}>
+        <div
+          className={cn("mx-auto flex w-full flex-col gap-6", embedded ? "max-w-none" : "max-w-[640px]")}
+        >
+          {embedded && (
+            <Link
+              href={`/contacts/${contact.id}`}
+              className="inline-flex w-fit items-center gap-2 text-[17px] leading-6 font-bold text-brand"
+            >
+              <ExternalLink aria-hidden className="size-[18px]" strokeWidth={2} />
+              Open full page
+            </Link>
+          )}
           {contact.deleted_at && (
             <p className="rounded-2xl border-[1.5px] border-danger bg-card px-4 py-3 text-[17px] leading-6 text-danger text-pretty">
               This contact is in Recently deleted
@@ -296,9 +337,7 @@ export function ContactDetail({
         */
         onDeleted={() => {
           setDeleting(null);
-          router.replace("/contacts");
-          router.refresh();
-          showToast({ message: `${fullName(contact)} moved to Recently deleted` });
+          gone(`${fullName(contact)} moved to Recently deleted`);
         }}
         /*
           Erasing leaves this page pointing at a row that no longer exists,
@@ -307,9 +346,7 @@ export function ContactDetail({
         */
         onErased={() => {
           setDeleting(null);
-          router.replace("/contacts");
-          router.refresh();
-          showToast({ message: `${fullName(contact)} erased` });
+          gone(`${fullName(contact)} erased`);
         }}
         onError={(message) => showToast({ message })}
       />
