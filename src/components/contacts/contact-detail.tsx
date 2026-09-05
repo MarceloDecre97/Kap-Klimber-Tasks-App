@@ -1,7 +1,15 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, Mail, Pencil, Phone } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, Mail, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import {
+  DeleteContactDialog,
+  type BlockingTaskInfo,
+} from "@/components/contacts/delete-contact-dialog";
+import { blockingTasksFor, restoreContact } from "@/app/contacts/actions";
 import { Avatar } from "@/components/ui/avatar";
 import { CategoryBadge } from "@/components/contacts/category-badge";
 import {
@@ -28,9 +36,44 @@ export function ContactDetail({
   contact: ContactSummary;
   events: ContactEvent[];
 }) {
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [deleting, setDeleting] = useState<"blocked" | "confirm" | "erase" | null>(null);
+  const [blocking, setBlocking] = useState<BlockingTaskInfo[]>([]);
+  const [isPending, startTransition] = useTransition();
+
   const role = roleLine(contact);
   const address = formatAddress(contact);
   const phone = contact.mobile ?? contact.office_phone;
+
+  /*
+    Which dialog to open is the database's answer, not a guess made here.
+    Asking first is what lets the blocked case name the task and offer to
+    open it, instead of the delete simply failing with a message.
+  */
+  function beginDelete() {
+    startTransition(async () => {
+      const result = await blockingTasksFor(contact.id);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      setBlocking(result.tasks);
+      setDeleting(result.tasks.length > 0 ? "blocked" : "confirm");
+    });
+  }
+
+  function putBack() {
+    startTransition(async () => {
+      const result = await restoreContact(contact.id);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      router.refresh();
+      showToast({ message: "Contact put back" });
+    });
+  }
 
   return (
     <div className="flex h-full flex-col bg-bg">
@@ -127,19 +170,77 @@ export function ContactDetail({
             </p>
           )}
 
-          {!contact.deleted_at && (
-            <Link
-              href={`/contacts/${contact.id}/edit`}
-              className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-border bg-card px-4 text-chip text-fg hover:bg-muted"
-            >
-              <Pencil aria-hidden className="size-5" strokeWidth={1.75} />
-              Edit contact
-            </Link>
-          )}
+          <div className="flex flex-wrap gap-3">
+            {contact.deleted_at ? (
+              <>
+                <button
+                  type="button"
+                  onClick={putBack}
+                  disabled={isPending}
+                  className="inline-flex h-14 cursor-pointer items-center justify-center gap-2 rounded-2xl border-[1.5px] border-border bg-card px-4 text-chip text-fg hover:bg-muted disabled:opacity-60"
+                >
+                  <RotateCcw aria-hidden className="size-5" strokeWidth={1.75} />
+                  Put back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleting("erase")}
+                  disabled={isPending}
+                  className="inline-flex h-14 cursor-pointer items-center justify-center gap-2 rounded-2xl border-[1.5px] border-danger bg-card px-4 text-chip text-danger hover:bg-danger-hover-bg disabled:opacity-60"
+                >
+                  <Trash2 aria-hidden className="size-5" strokeWidth={1.75} />
+                  Erase for good
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href={`/contacts/${contact.id}/edit`}
+                  className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-border bg-card px-4 text-chip text-fg hover:bg-muted"
+                >
+                  <Pencil aria-hidden className="size-5" strokeWidth={1.75} />
+                  Edit contact
+                </Link>
+                <button
+                  type="button"
+                  onClick={beginDelete}
+                  disabled={isPending}
+                  className="inline-flex h-14 cursor-pointer items-center justify-center gap-2 rounded-2xl border-[1.5px] border-border bg-card px-4 text-chip text-sub hover:border-danger hover:bg-danger-hover-bg hover:text-danger disabled:opacity-60"
+                >
+                  <Trash2 aria-hidden className="size-5" strokeWidth={1.75} />
+                  Delete contact
+                </button>
+              </>
+            )}
+          </div>
 
           <Activity events={events} />
         </div>
       </div>
+
+      <DeleteContactDialog
+        contact={deleting ? contact : null}
+        mode={deleting ?? "confirm"}
+        blocking={blocking}
+        onClose={() => setDeleting(null)}
+        onDeleted={() => {
+          setDeleting(null);
+          router.refresh();
+          showToast({ message: `${fullName(contact)} moved to Recently deleted` });
+        }}
+        /*
+          Erasing leaves this page pointing at a row that no longer exists,
+          so it goes back to the book rather than refreshing into a 404.
+          No Undo on the toast: there is nothing left to bring back.
+        */
+        onErased={() => {
+          setDeleting(null);
+          router.replace("/contacts");
+          router.refresh();
+          showToast({ message: `${fullName(contact)} erased` });
+        }}
+        onError={(message) => showToast({ message })}
+      />
     </div>
   );
 }

@@ -1,22 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Building2, Plus, Search, Tag, X } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Building2, ChevronDown, ChevronUp, Plus, Search, Tag, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/app-header";
+import { useToast } from "@/components/ui/toast";
+import { DeleteContactDialog } from "@/components/contacts/delete-contact-dialog";
+import { restoreContact } from "@/app/contacts/actions";
+import { Avatar } from "@/components/ui/avatar";
 import { ContactRow } from "@/components/contacts/contact-row";
 import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dropdown";
 import {
   CATEGORY_ICONS,
   DEFAULT_CATEGORY_ICON,
+  DELETED_CONTACTS_VISIBLE_DAYS,
   EMPTY_CONTACT_FILTERS,
+  avatarColor,
   companiesIn,
   countActiveContactFilters,
+  fullName,
   groupContacts,
+  initialsOf,
   matchesContact,
   type ContactFilters,
 } from "@/lib/contacts-view";
-import { cn } from "@/lib/utils";
+import { cn, formatDateGroup } from "@/lib/utils";
 import type { ContactCategory, ContactSummary } from "@/lib/data/contacts";
 import type { NotificationFeed } from "@/lib/data/notifications";
 
@@ -31,14 +40,34 @@ import type { NotificationFeed } from "@/lib/data/notifications";
  */
 export function ContactsApp({
   contacts,
+  deletedContacts,
   categories,
   notifications,
 }: {
   contacts: ContactSummary[];
+  /** The bin, shared: it names who deleted each one, and anyone can act. */
+  deletedContacts: ContactSummary[];
   categories: ContactCategory[];
   notifications: NotificationFeed;
 }) {
+  const router = useRouter();
+  const { showToast } = useToast();
   const [filters, setFilters] = useState<ContactFilters>(EMPTY_CONTACT_FILTERS);
+  const [showBin, setShowBin] = useState(false);
+  const [erasing, setErasing] = useState<ContactSummary | null>(null);
+  const [, startTransition] = useTransition();
+
+  function putBack(contact: ContactSummary) {
+    startTransition(async () => {
+      const result = await restoreContact(contact.id);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      router.refresh();
+      showToast({ message: `${fullName(contact)} put back` });
+    });
+  }
 
   const companies = useMemo(() => companiesIn(contacts), [contacts]);
   const matching = useMemo(
@@ -178,8 +207,96 @@ export function ContactsApp({
               )}
             </>
           )}
+          {deletedContacts.length > 0 && (
+            <div className="flex flex-col gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBin((open) => !open)}
+                aria-expanded={showBin}
+                className="flex min-h-14 w-full cursor-pointer items-center gap-2 rounded-2xl border-[1.5px] border-border bg-card px-4 py-3 text-left text-section-heading text-fg"
+              >
+                {showBin ? (
+                  <ChevronUp aria-hidden className="size-[22px] shrink-0" />
+                ) : (
+                  <ChevronDown aria-hidden className="size-[22px] shrink-0" />
+                )}
+                Recently deleted ({deletedContacts.length})
+              </button>
+
+              {showBin && (
+                <div className="flex flex-col gap-2.5">
+                  {/*
+                    Says what it does and, just as deliberately, what it does
+                    not: nothing here disappears on its own. The fortnight is
+                    how long a row stays listed, not a countdown to erasure —
+                    a clock quietly taking a contact pill off a finished task
+                    is an action nobody asked for.
+                  */}
+                  <p className="px-1 text-[16px] leading-6 text-sub text-pretty">
+                    Deleted in the last {DELETED_CONTACTS_VISIBLE_DAYS} days. Nothing is erased
+                    unless somebody erases it.
+                  </p>
+                  {deletedContacts.map((contact) => (
+                    <div
+                      key={contact.id}
+                      className="flex min-h-14 items-center gap-3 rounded-2xl border-[1.5px] border-border bg-card p-3.5"
+                    >
+                      <Avatar
+                        initials={initialsOf(contact)}
+                        color={avatarColor(contact)}
+                        size={44}
+                        className="opacity-60"
+                      />
+                      <div className="flex min-w-0 grow flex-col">
+                        <span className="text-[17px] leading-6 text-fg text-pretty wrap-anywhere">
+                          {fullName(contact)}
+                        </span>
+                        <span className="text-timestamp text-sub">
+                          Deleted {contact.deleted_at ? formatDateGroup(contact.deleted_at) : ""}
+                          {contact.deleted_by ? ` by ${contact.deleted_by.display_name}` : ""}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => putBack(contact)}
+                          className="inline-flex h-11 shrink-0 cursor-pointer items-center rounded-xl border-[1.5px] border-border bg-card px-3 text-[16px] leading-[22px] font-bold text-fg hover:bg-muted"
+                        >
+                          Put back
+                        </button>
+                        <span aria-hidden className="h-8 w-px shrink-0 bg-line" />
+                        <button
+                          type="button"
+                          aria-label={`Erase ${fullName(contact)} for good`}
+                          title="Erase for good"
+                          onClick={() => setErasing(contact)}
+                          className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl text-muted-fg transition-colors duration-150 hover:bg-danger-hover-bg hover:text-danger"
+                        >
+                          <Trash2 aria-hidden className="size-5" strokeWidth={1.75} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      <DeleteContactDialog
+        contact={erasing}
+        mode="erase"
+        blocking={[]}
+        onClose={() => setErasing(null)}
+        onDeleted={() => setErasing(null)}
+        onErased={(contact) => {
+          setErasing(null);
+          router.refresh();
+          showToast({ message: `${fullName(contact)} erased` });
+        }}
+        onError={(message) => showToast({ message })}
+      />
     </div>
   );
 }

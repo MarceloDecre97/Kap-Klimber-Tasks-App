@@ -171,3 +171,100 @@ export async function updateContact(
     return { ok: false, error: rpcError(error, "Couldn't save those changes.") };
   }
 }
+
+/* -------------------------------------------------------------------------
+   Deleting a contact
+
+   Every rule here lives in 0022_contacts.sql — who may, when, and what it
+   takes with it. These actions carry the call and the message back; they
+   deliberately do not re-implement the checks, because two copies of a rule
+   is one copy that will be wrong.
+   ------------------------------------------------------------------------- */
+
+/**
+ * What is standing in the way, if anything.
+ *
+ * Asked before offering to delete, so the dialog can say which task is
+ * holding the contact and offer to open it — rather than refusing and
+ * leaving somebody to work out why on their own.
+ */
+export async function blockingTasksFor(
+  contactIdInput: string
+): Promise<ActionResult<{ tasks: { task_id: string; title: string; status: string }[] }>> {
+  const contactId = contactIdSchema.safeParse(contactIdInput);
+  if (!contactId.success) return { ok: false, error: "Invalid contact." };
+
+  const { supabase } = await getCurrentMember();
+  const { data, error } = await supabase.rpc("contact_blocking_tasks", {
+    p_contact_id: contactId.data,
+  });
+  if (error) {
+    console.error("blockingTasksFor failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't check that contact.") };
+  }
+  return { ok: true, tasks: (data ?? []) as { task_id: string; title: string; status: string }[] };
+}
+
+/** Step one: into Recently deleted, where it stays until somebody acts. */
+export async function deleteContact(contactIdInput: string): Promise<ActionResult> {
+  const contactId = contactIdSchema.safeParse(contactIdInput);
+  if (!contactId.success) return { ok: false, error: "Invalid contact." };
+
+  const { supabase } = await getCurrentMember();
+  const { error } = await supabase.rpc("delete_contact", { p_contact_id: contactId.data });
+  if (error) {
+    console.error("deleteContact failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't delete that contact.") };
+  }
+
+  revalidateContactViews(contactId.data);
+  return { ok: true, contactId: contactId.data };
+}
+
+/** Out of the bin, unchanged, with its task pills still attached. */
+export async function restoreContact(contactIdInput: string): Promise<ActionResult> {
+  const contactId = contactIdSchema.safeParse(contactIdInput);
+  if (!contactId.success) return { ok: false, error: "Invalid contact." };
+
+  const { supabase } = await getCurrentMember();
+  const { error } = await supabase.rpc("restore_contact", { p_contact_id: contactId.data });
+  if (error) {
+    console.error("restoreContact failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't put that contact back.") };
+  }
+
+  revalidateContactViews(contactId.data);
+  return { ok: true, contactId: contactId.data };
+}
+
+/**
+ * Step two, and the only irreversible thing in the book.
+ *
+ * Returns what it destroyed so the toast can name it — and note there is no
+ * Undo offered anywhere afterwards, because there is nothing left to bring
+ * back and the button would be a lie.
+ */
+export interface PurgedContact {
+  name: string;
+  phones: number;
+  emails: number;
+  addresses: number;
+  tasks: number;
+}
+
+export async function purgeContact(
+  contactIdInput: string
+): Promise<ActionResult<{ contactId: string; erased: PurgedContact | null }>> {
+  const contactId = contactIdSchema.safeParse(contactIdInput);
+  if (!contactId.success) return { ok: false, error: "Invalid contact." };
+
+  const { supabase } = await getCurrentMember();
+  const { data, error } = await supabase.rpc("purge_contact", { p_contact_id: contactId.data });
+  if (error) {
+    console.error("purgeContact failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't erase that contact.") };
+  }
+
+  revalidateContactViews(contactId.data);
+  return { ok: true, contactId: contactId.data, erased: (data as PurgedContact) ?? null };
+}
