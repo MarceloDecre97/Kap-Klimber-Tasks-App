@@ -180,6 +180,8 @@ export const contactInputSchema = z
     companyState: optionalText(60),
     companyPostalCode: optionalText(20),
     companyCountry: optionalText(80),
+    companyTypeId: z.string().uuid().nullable().optional(),
+    newCompanyTypeLabel: z.string().trim().min(1).max(60).optional(),
     /*
       Only true when "Edit company details" was opened on a company that
       already exists. Without it, opening a contact and saving an unrelated
@@ -220,7 +222,16 @@ export const companyInputSchema = z.object({
   city: optionalText(100),
   state: optionalText(60),
   postalCode: optionalText(20),
+  /*
+    Checked against the country list on the way in as well as being picked
+    from it in the form. A country that matches nothing there is dropped
+    rather than stored: the companies book is filtered by this column, and
+    one unmatched spelling is a filter entry nobody can reconcile.
+  */
   country: optionalText(80),
+  typeId: z.string().uuid().nullable().optional(),
+  /** Set when "New type" was opened and a name typed. */
+  newTypeLabel: z.string().trim().min(1).max(60).optional(),
 });
 
 export type CompanyInput = z.input<typeof companyInputSchema>;

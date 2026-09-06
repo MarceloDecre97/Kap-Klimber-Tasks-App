@@ -26,7 +26,7 @@ import {
   type ContactField,
 } from "@/lib/contact-form";
 import { cn } from "@/lib/utils";
-import type { CompanySummary } from "@/lib/companies-view";
+import type { CompanySummary, CompanyType } from "@/lib/companies-view";
 import type { ContactCategory, ContactSummary } from "@/lib/data/contacts";
 
 /** The shape the form holds: every field a string, because inputs are. */
@@ -60,6 +60,8 @@ function draftFrom(contact: ContactSummary | null): Draft {
     companyState: contact?.company_record?.state ?? "",
     companyPostalCode: contact?.company_record?.postal_code ?? "",
     companyCountry: contact?.company_record?.country ?? "",
+    companyTypeId: contact?.company_record?.type?.id ?? null,
+    newCompanyTypeLabel: "",
     updateCompanyDetails: false,
     mobile: contact?.mobile ?? "",
     officePhone: contact?.office_phone ?? "",
@@ -94,12 +96,14 @@ export function ContactForm({
   contact,
   categories,
   companies,
+  companyTypes,
 }: {
   /** Null when adding. */
   contact: ContactSummary | null;
   categories: ContactCategory[];
   /** Everything already in the book, for the company box to match against. */
   companies: CompanySummary[];
+  companyTypes: CompanyType[];
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(() => draftFrom(contact));
@@ -260,7 +264,7 @@ export function ContactForm({
           </Group>
 
           <Group heading="Where they work">
-            <CompanyField companies={companies} draft={draft} onChange={patch} />
+            <CompanyField companies={companies} types={companyTypes} draft={draft} onChange={patch} />
           </Group>
 
           <Group heading="How to reach them" hint="A phone or an email — one of the two is enough.">

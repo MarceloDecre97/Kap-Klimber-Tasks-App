@@ -2,14 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { Building2, Check, Pencil, TriangleAlert } from "lucide-react";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Field } from "@/components/contacts/form-field";
+import { CompanyFields, type CompanyDetails } from "@/components/companies/company-fields";
 import { formatAddress } from "@/lib/contacts-view";
 import {
   exactCompanyMatch,
   nearCompanyMatches,
   suggestCompanies,
   type CompanySummary,
+  type CompanyType,
 } from "@/lib/companies-view";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,8 @@ export interface CompanyDraft {
   companyState: string;
   companyPostalCode: string;
   companyCountry: string;
+  companyTypeId: string | null;
+  newCompanyTypeLabel: string;
   updateCompanyDetails: boolean;
 }
 
@@ -40,6 +44,8 @@ const BLANK_DETAILS = {
   companyState: "",
   companyPostalCode: "",
   companyCountry: "",
+  companyTypeId: null as string | null,
+  newCompanyTypeLabel: "",
 };
 
 function detailsOf(c: CompanySummary | null) {
@@ -54,7 +60,47 @@ function detailsOf(c: CompanySummary | null) {
     companyState: c.state ?? "",
     companyPostalCode: c.postal_code ?? "",
     companyCountry: c.country ?? "",
+    companyTypeId: c.type?.id ?? null,
+    newCompanyTypeLabel: "",
   };
+}
+
+/*
+  The draft carries the company's fields under `company*` names so it can be
+  one flat object the server action reads directly. The shared editor speaks
+  the plain names. These two turn one into the other, in one place, rather
+  than at every field.
+*/
+function toDetails(d: CompanyDraft): CompanyDetails {
+  return {
+    about: d.companyAbout,
+    website: d.companyWebsite,
+    companyNumber: d.companyNumber,
+    street: d.companyStreet,
+    suite: d.companySuite,
+    city: d.companyCity,
+    state: d.companyState,
+    postalCode: d.companyPostalCode,
+    country: d.companyCountry,
+    typeId: d.companyTypeId,
+    newTypeLabel: d.newCompanyTypeLabel,
+  };
+}
+
+function fromDetails(patch: Partial<CompanyDetails>): Partial<CompanyDraft> {
+  const out: Partial<CompanyDraft> = {};
+  if ("about" in patch) out.companyAbout = patch.about;
+  if ("website" in patch) out.companyWebsite = patch.website;
+  if ("companyNumber" in patch) out.companyNumber = patch.companyNumber;
+  if ("street" in patch) out.companyStreet = patch.street;
+  if ("suite" in patch) out.companySuite = patch.suite;
+  if ("city" in patch) out.companyCity = patch.city;
+  if ("state" in patch) out.companyState = patch.state;
+  if ("postalCode" in patch) out.companyPostalCode = patch.postalCode;
+  if ("country" in patch) out.companyCountry = patch.country;
+  if ("typeId" in patch) out.companyTypeId = patch.typeId ?? null;
+  if ("newTypeLabel" in patch) out.newCompanyTypeLabel = patch.newTypeLabel;
+  return out;
 }
 
 /**
@@ -73,10 +119,12 @@ function detailsOf(c: CompanySummary | null) {
  */
 export function CompanyField({
   companies,
+  types,
   draft,
   onChange,
 }: {
   companies: CompanySummary[];
+  types: CompanyType[];
   draft: CompanyDraft;
   onChange: (patch: Partial<CompanyDraft>) => void;
 }) {
@@ -122,59 +170,11 @@ export function CompanyField({
   }
 
   const detailFields = (
-    <>
-      <Field label="What they do" hint="A sentence. It shows on the company's page.">
-        <Textarea
-          value={draft.companyAbout}
-          onChange={(e) => onChange({ companyAbout: e.target.value })}
-          rows={2}
-          className="min-h-[72px] resize-y"
-          maxLength={600}
-        />
-      </Field>
-      <Field label="Company website">
-        <Input
-          value={draft.companyWebsite}
-          onChange={(e) => onChange({ companyWebsite: e.target.value })}
-          inputMode="url"
-          autoComplete="off"
-          placeholder="multimatic.com"
-        />
-      </Field>
-      {/*
-        The switchboard, not this person's line. Their own numbers are up in
-        "How to reach them" — this is the one you ring when you have lost
-        everybody's direct number.
-      */}
-      <Field label="Company main line" hint="The switchboard, not their own number.">
-        <Input
-          value={draft.companyNumber}
-          onChange={(e) => onChange({ companyNumber: e.target.value })}
-          inputMode="tel"
-          autoComplete="off"
-        />
-      </Field>
-      <Field label="Street" hint="Including the number, however it is written there.">
-        <Input value={draft.companyStreet} onChange={(e) => onChange({ companyStreet: e.target.value })} autoComplete="off" />
-      </Field>
-      <Field label="Suite / unit / floor">
-        <Input value={draft.companySuite} onChange={(e) => onChange({ companySuite: e.target.value })} autoComplete="off" />
-      </Field>
-      <Field label="City">
-        <Input value={draft.companyCity} onChange={(e) => onChange({ companyCity: e.target.value })} autoComplete="off" />
-      </Field>
-      <div className="flex gap-3">
-        <Field label="State / region" className="flex-1">
-          <Input value={draft.companyState} onChange={(e) => onChange({ companyState: e.target.value })} autoComplete="off" />
-        </Field>
-        <Field label="ZIP / postcode" className="flex-1">
-          <Input value={draft.companyPostalCode} onChange={(e) => onChange({ companyPostalCode: e.target.value })} autoComplete="off" />
-        </Field>
-      </div>
-      <Field label="Country">
-        <Input value={draft.companyCountry} onChange={(e) => onChange({ companyCountry: e.target.value })} autoComplete="off" />
-      </Field>
-    </>
+    <CompanyFields
+      types={types}
+      value={toDetails(draft)}
+      onChange={(patch) => onChange(fromDetails(patch))}
+    />
   );
 
   return (

@@ -210,6 +210,21 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["contact_categories"]["Row"]>;
         Relationships: [];
       };
+      company_types: {
+        Row: {
+          id: string;
+          label: string;
+          icon: string;
+          sort_order: number;
+          is_default: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: { label: string; icon?: string; sort_order?: number; created_by: string };
+        /** Renaming one renames it under every company carrying it. Not here. */
+        Update: never;
+        Relationships: [];
+      };
       companies: {
         Row: {
           id: string;
@@ -223,14 +238,17 @@ export interface Database {
           state: string | null;
           postal_code: string | null;
           country: string | null;
+          /** What kind of organisation. See 0026_company_types.sql. */
+          type_id: string | null;
           created_by: string;
           created_at: string;
           updated_at: string;
         };
         Insert: Omit<
           Database["public"]["Tables"]["companies"]["Row"],
-          "id" | "created_at" | "updated_at"
-        >;
+          "id" | "type_id" | "created_at" | "updated_at"
+        > &
+          Partial<Pick<Database["public"]["Tables"]["companies"]["Row"], "type_id">>;
         Update: Partial<
           Omit<Database["public"]["Tables"]["companies"]["Row"], "id" | "created_by" | "created_at">
         >;

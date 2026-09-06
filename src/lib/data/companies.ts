@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CompanySummary } from "@/lib/companies-view";
+import type { CompanySummary, CompanyType } from "@/lib/companies-view";
 import type { Database } from "@/lib/supabase/database.types";
 
 /**
@@ -14,7 +14,8 @@ import type { Database } from "@/lib/supabase/database.types";
 
 const COMPANY_SELECT = `
   id, name, about, website, company_number,
-  street, suite, city, state, postal_code, country, created_at
+  street, suite, city, state, postal_code, country, created_at,
+  type:company_types(id, label, icon)
 `;
 
 /**
@@ -48,6 +49,7 @@ export async function listCompanies(
 
   return ((companies.data ?? []) as unknown as CompanySummary[]).map((company) => ({
     ...company,
+    type: company.type ?? null,
     contact_count: tally.get(company.id) ?? 0,
   }));
 }
@@ -64,5 +66,21 @@ export async function getCompany(
     .maybeSingle();
 
   if (error) throw error;
-  return (data as unknown as CompanySummary) ?? null;
+  if (!data) return null;
+  const company = data as unknown as CompanySummary;
+  return { ...company, type: company.type ?? null };
+}
+
+/** The types, in the order the table says to show them. */
+export async function listCompanyTypes(
+  supabase: SupabaseClient<Database>
+): Promise<CompanyType[]> {
+  const { data, error } = await supabase
+    .from("company_types")
+    .select("id, label, icon")
+    .order("sort_order", { ascending: true })
+    .order("label", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as CompanyType[];
 }

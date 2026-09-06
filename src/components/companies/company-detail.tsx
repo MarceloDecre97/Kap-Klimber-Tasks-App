@@ -3,22 +3,26 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, ChevronLeft, Globe, Pencil, Phone, Trash2 } from "lucide-react";
+import { ChevronLeft, ExternalLink, Globe, Pencil, Phone, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Field, Group } from "@/components/contacts/form-field";
+import { CompanyFields, type CompanyDetails as Details } from "@/components/companies/company-fields";
 import { ContactRow } from "@/components/contacts/contact-row";
 import { deleteCompany, updateCompany } from "@/app/companies/actions";
-import { companyPeopleLine, type CompanySummary } from "@/lib/companies-view";
+import {
+  COMPANY_TYPE_ICONS,
+  DEFAULT_COMPANY_TYPE_ICON,
+  companyPeopleLine,
+  type CompanySummary,
+  type CompanyType,
+} from "@/lib/companies-view";
 import { formatAddress } from "@/lib/contacts-view";
-import { formatTimestampWithYear } from "@/lib/utils";
+import { cn, formatTimestampWithYear } from "@/lib/utils";
 import type { ContactSummary } from "@/lib/data/contacts";
 
-type Draft = {
-  name: string; about: string; website: string; companyNumber: string;
-  street: string; suite: string; city: string; state: string; postalCode: string; country: string;
-};
+type Draft = Details & { name: string };
 
 function draftFrom(c: CompanySummary): Draft {
   return {
@@ -32,26 +36,37 @@ function draftFrom(c: CompanySummary): Draft {
     state: c.state ?? "",
     postalCode: c.postal_code ?? "",
     country: c.country ?? "",
+    typeId: c.type?.id ?? null,
+    newTypeLabel: "",
   };
 }
 
 /**
  * One company, and everybody at it.
  *
- * Reading by default, editing on a press — the same shape as the company
- * block inside the contact form, and for the same reason. Everything here is
- * shared: a correction made once reaches every colleague, and a mistake made
- * once does too.
- *
- * Renaming is allowed. The trigger in 0024_companies.sql carries the new
- * name out to every contact, so nothing is left saying the old one.
+ * The mirror of ContactDetail, embedded flag and all: its own page when you
+ * arrive by link, and the right-hand panel when the companies book is open
+ * beside it. Reading by default, editing on a press — everything here is
+ * shared, so a correction made once reaches every colleague, and a mistake
+ * made once does too.
  */
 export function CompanyDetail({
   company,
   people,
+  types,
+  embedded = false,
+  onGone,
+  onOpenContact,
 }: {
   company: CompanySummary;
   people: ContactSummary[];
+  types: CompanyType[];
+  /** True inside the desktop panel: no header, no going anywhere. */
+  embedded?: boolean;
+  /** Called instead of navigating when the company is removed. */
+  onGone?: () => void;
+  /** In the panel, opening a person switches books rather than navigating. */
+  onOpenContact?: (contact: ContactSummary) => void;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -63,9 +78,10 @@ export function CompanyDetail({
 
   const address = formatAddress(company);
   const website = externalHref(company.website);
+  const Icon = COMPANY_TYPE_ICONS[company.type?.icon ?? ""] ?? DEFAULT_COMPANY_TYPE_ICON;
 
-  function set<K extends keyof Draft>(key: K, value: string) {
-    setDraft((d) => ({ ...d, [key]: value }));
+  function patch(next: Partial<Draft>) {
+    setDraft((d) => ({ ...d, ...next }));
     setError(null);
   }
 
@@ -94,26 +110,39 @@ export function CompanyDetail({
         showToast({ message: result.error });
         return;
       }
-      router.replace("/companies");
+      if (embedded) onGone?.();
+      else router.replace("/contacts?book=companies");
       router.refresh();
       showToast({ message: `${company.name} removed` });
     });
   }
 
   return (
-    <div className="flex h-full flex-col bg-bg">
-      <header className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-border bg-card px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-3">
-        <Link
-          href="/companies"
-          className="flex h-14 items-center gap-2 rounded-xl px-3 text-[18px] leading-7 font-bold text-brand"
-        >
-          <ChevronLeft aria-hidden className="size-5" />
-          Companies
-        </Link>
-      </header>
+    <div className={cn("flex flex-col bg-bg", embedded ? "min-h-0 flex-1" : "h-full")}>
+      {!embedded && (
+        <header className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-border bg-card px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-3">
+          <Link
+            href="/contacts?book=companies"
+            className="flex h-14 items-center gap-2 rounded-xl px-3 text-[18px] leading-7 font-bold text-brand"
+          >
+            <ChevronLeft aria-hidden className="size-5" />
+            Companies
+          </Link>
+        </header>
+      )}
 
-      <div className="flex-1 overflow-y-auto px-5 py-6">
-        <div className="mx-auto flex w-full max-w-[640px] flex-col gap-6">
+      <div className={cn("flex-1 overflow-y-auto px-5", embedded ? "py-5" : "py-6")}>
+        <div className={cn("mx-auto flex w-full flex-col gap-6", embedded ? "max-w-none" : "max-w-[640px]")}>
+          {embedded && (
+            <Link
+              href={`/companies/${company.id}`}
+              className="inline-flex w-fit items-center gap-2 text-[17px] leading-6 font-bold text-brand"
+            >
+              <ExternalLink aria-hidden className="size-[18px]" strokeWidth={2} />
+              Open full page
+            </Link>
+          )}
+
           {error && (
             <p className="rounded-2xl border-[1.5px] border-danger bg-danger-hover-bg px-4 py-3 text-[17px] leading-6 text-danger text-pretty">
               {error}
@@ -122,11 +151,12 @@ export function CompanyDetail({
 
           <div className="flex items-start gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl border-[1.5px] border-border bg-muted">
-              <Building2 aria-hidden className="size-7 text-sub" strokeWidth={1.75} />
+              <Icon aria-hidden className="size-7 text-sub" strokeWidth={1.75} />
             </span>
             <div className="flex min-w-0 grow flex-col gap-1">
               <h1 className="text-screen-title text-fg text-pretty wrap-anywhere">{company.name}</h1>
               <p className="text-[17px] leading-6 text-sub">
+                {company.type ? `${company.type.label} · ` : ""}
                 {companyPeopleLine(people.length)}
               </p>
             </div>
@@ -139,43 +169,9 @@ export function CompanyDetail({
                 hint="Shared. Changing anything here changes it for everyone who works there."
               >
                 <Field label="Name" required>
-                  <Input value={draft.name} onChange={(e) => set("name", e.target.value)} maxLength={120} autoComplete="off" />
+                  <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} maxLength={120} autoComplete="off" />
                 </Field>
-                <Field label="What they do">
-                  <Textarea
-                    value={draft.about}
-                    onChange={(e) => set("about", e.target.value)}
-                    rows={3}
-                    className="min-h-[88px] resize-y"
-                    maxLength={600}
-                  />
-                </Field>
-                <Field label="Website">
-                  <Input value={draft.website} onChange={(e) => set("website", e.target.value)} inputMode="url" autoComplete="off" />
-                </Field>
-                <Field label="Main line" hint="The switchboard, not anybody's own number.">
-                  <Input value={draft.companyNumber} onChange={(e) => set("companyNumber", e.target.value)} inputMode="tel" autoComplete="off" />
-                </Field>
-                <Field label="Street" hint="Including the number, however it is written there.">
-                  <Input value={draft.street} onChange={(e) => set("street", e.target.value)} autoComplete="off" />
-                </Field>
-                <Field label="Suite / unit / floor">
-                  <Input value={draft.suite} onChange={(e) => set("suite", e.target.value)} autoComplete="off" />
-                </Field>
-                <Field label="City">
-                  <Input value={draft.city} onChange={(e) => set("city", e.target.value)} autoComplete="off" />
-                </Field>
-                <div className="flex gap-3">
-                  <Field label="State / region" className="flex-1">
-                    <Input value={draft.state} onChange={(e) => set("state", e.target.value)} autoComplete="off" />
-                  </Field>
-                  <Field label="ZIP / postcode" className="flex-1">
-                    <Input value={draft.postalCode} onChange={(e) => set("postalCode", e.target.value)} autoComplete="off" />
-                  </Field>
-                </div>
-                <Field label="Country">
-                  <Input value={draft.country} onChange={(e) => set("country", e.target.value)} autoComplete="off" />
-                </Field>
+                <CompanyFields types={types} value={draft} onChange={patch} />
               </Group>
 
               <div className="flex flex-col gap-3">
@@ -225,6 +221,7 @@ export function CompanyDetail({
               </div>
 
               <Section heading="Details">
+                <Row label="Type" value={company.type?.label ?? null} />
                 <Row label="Main line" value={company.company_number} />
                 <Row label="Website" value={company.website} />
                 <Row label="Address" value={address} />
@@ -235,13 +232,21 @@ export function CompanyDetail({
           <Section heading="Who works there">
             {people.length === 0 ? (
               <p className="text-[17px] leading-6 text-sub text-pretty">
-                Nobody in the book works here any more.
+                Nobody in the book works here yet. Add a contact and type this company on them.
               </p>
             ) : (
               <ul className="flex flex-col gap-2.5">
                 {people.map((person) => (
                   <li key={person.id}>
-                    <ContactRow contact={person} />
+                    {/*
+                      In the panel, opening somebody flips back to the
+                      contacts book rather than leaving the screen — the two
+                      books are one place, and a person is one tap away.
+                    */}
+                    <ContactRow
+                      contact={person}
+                      onSelect={onOpenContact ? () => onOpenContact(person) : undefined}
+                    />
                   </li>
                 ))}
               </ul>
@@ -264,8 +269,8 @@ export function CompanyDetail({
               </button>
               {/*
                 Only offered once the last person has gone. While anybody is
-                still here the button would only ever produce a refusal, and
-                a button that always refuses is worse than no button.
+                still here the button would produce nothing but a refusal,
+                and a button that always refuses is worse than no button.
               */}
               {people.length === 0 && (
                 <button

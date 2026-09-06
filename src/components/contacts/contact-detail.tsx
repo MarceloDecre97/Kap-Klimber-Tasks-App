@@ -42,6 +42,7 @@ export function ContactDetail({
   fromTaskId,
   embedded = false,
   onGone,
+  onOpenCompany,
 }: {
   contact: ContactSummary;
   events: ContactEvent[];
@@ -51,6 +52,12 @@ export function ContactDetail({
   embedded?: boolean;
   /** Called instead of navigating when the contact is deleted or erased. */
   onGone?: () => void;
+  /**
+   * In the panel, the company flips the book beside it rather than
+   * navigating. The two books are one place; leaving it to look at a
+   * company would undo the whole point of the panel.
+   */
+  onOpenCompany?: (companyId: string) => void;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -162,12 +169,22 @@ export function ContactDetail({
               {company ? (
                 <p className="text-[18px] leading-7 text-sub text-pretty wrap-anywhere">
                   {contact.job_title ? `${contact.job_title} · ` : ""}
-                  <Link
-                    href={`/companies/${company.id}`}
-                    className="text-brand underline underline-offset-4"
-                  >
-                    {company.name}
-                  </Link>
+                  {onOpenCompany ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenCompany(company.id)}
+                      className="cursor-pointer text-brand underline underline-offset-4"
+                    >
+                      {company.name}
+                    </button>
+                  ) : (
+                    <Link
+                      href={`/companies/${company.id}`}
+                      className="text-brand underline underline-offset-4"
+                    >
+                      {company.name}
+                    </Link>
+                  )}
                 </p>
               ) : (
                 role && (
@@ -241,7 +258,12 @@ export function ContactDetail({
           */}
           {company && (
             <Section heading="Where they work">
-              <Row label="Company" value={company.name} href={`/companies/${company.id}`} />
+              <Row
+                label="Company"
+                value={company.name}
+                href={onOpenCompany ? null : `/companies/${company.id}`}
+                onClick={onOpenCompany ? () => onOpenCompany(company.id) : undefined}
+              />
               <Row label="What they do" value={company.about} />
               <Row
                 label="Main line"
@@ -384,10 +406,13 @@ function Row({
   label,
   value,
   href,
+  onClick,
 }: {
   label: string;
   value: string | null;
   href?: string | null;
+  /** For a destination inside this screen rather than a page of its own. */
+  onClick?: () => void;
 }) {
   if (!value) return null;
   const linkClass =
@@ -395,8 +420,12 @@ function Row({
   return (
     <div className="flex flex-col gap-0.5 px-4 py-3">
       <span className="text-timestamp text-sub">{label}</span>
-      {/* An in-app destination goes through the router; tel: and https: do not. */}
-      {href?.startsWith("/") ? (
+      {onClick ? (
+        <button type="button" onClick={onClick} className={cn(linkClass, "cursor-pointer text-left")}>
+          {value}
+        </button>
+      ) : /* An in-app destination goes through the router; tel: and https: do not. */
+      href?.startsWith("/") ? (
         <Link href={href} className={linkClass}>
           {value}
         </Link>

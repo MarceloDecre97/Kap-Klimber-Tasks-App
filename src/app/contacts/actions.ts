@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
 import { listContactEvents, type ContactEvent } from "@/lib/data/contacts";
 import { contactInputSchema, type ContactValues } from "@/lib/validation";
+import { canonicalCountry } from "@/lib/countries";
 
 type ActionResult<T = { contactId: string }> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -73,6 +74,38 @@ function likeLiteral(value: string): string {
 }
 
 /**
+ * The type of the company being written from the contact form.
+ *
+ * Deliberately the same rules as resolveContactCategory above and as the
+ * twin in the companies actions: match an existing label case-insensitively,
+ * and make a real row out of anything invented mid-save.
+ */
+async function resolveCompanyType(
+  supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
+  memberId: string,
+  typeId: string | null | undefined,
+  newLabel: string | undefined
+): Promise<string | null> {
+  const label = newLabel?.trim();
+  if (!label) return typeId ?? null;
+
+  const { data: existing } = await supabase
+    .from("company_types")
+    .select("id")
+    .ilike("label", likeLiteral(label))
+    .maybeSingle();
+  if (existing) return existing.id;
+
+  const { data: created, error } = await supabase
+    .from("company_types")
+    .insert({ label, icon: "building", sort_order: 90, created_by: memberId })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return created.id;
+}
+
+/**
  * The company a contact should end up linked to.
  *
  * There is no company step in front of the contact form. Whatever was typed
@@ -103,7 +136,10 @@ async function resolveCompany(
     city: v.companyCity,
     state: v.companyState,
     postal_code: v.companyPostalCode,
-    country: v.companyCountry,
+    // Only ever a name from the country list; anything else is dropped
+    // rather than becoming a second spelling of somewhere in the filter.
+    country: canonicalCountry(v.companyCountry),
+    type_id: await resolveCompanyType(supabase, memberId, v.companyTypeId, v.newCompanyTypeLabel),
   };
 
   const { data: existing } = await supabase
@@ -248,7 +284,7 @@ export async function createContact(input: unknown): Promise<ActionResult> {
         city: v.city,
         state: v.state,
         postal_code: v.postalCode,
-        country: v.country,
+        country: canonicalCountry(v.country),
         category_id: categoryId,
         source: v.source,
         notes: v.notes,
@@ -310,7 +346,7 @@ export async function updateContact(
         city: v.city,
         state: v.state,
         postal_code: v.postalCode,
-        country: v.country,
+        country: canonicalCountry(v.country),
         category_id: categoryId,
         source: v.source,
         notes: v.notes,
