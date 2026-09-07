@@ -13,11 +13,32 @@ export const passwordSchema = z.string().min(1, "Enter your password.").max(200)
 export const priorityEnum = z.enum(["asap", "high", "medium", "low", "someday"]);
 export const statusEnum = z.enum(["not_started", "in_progress", "for_review", "waiting", "complete"]);
 
+/**
+ * A label somebody may or may not have typed into a "new one" box.
+ *
+ * `.optional()` on its own is not enough, and this is the trap it hides. An
+ * untouched box sends "" — which is a string, not undefined — so it sails
+ * past `.optional()`, reaches `.min(1)`, and fails. The form is then refused
+ * in Zod's own words ("Too small: expected string to have >=1 characters")
+ * with every visible field correctly filled in, which is about as unhelpful
+ * as a validation message can be.
+ *
+ * Empty in, absent out. Written once so no future field can repeat it: the
+ * pattern had already been copied into three schemas before it was noticed.
+ */
+const optionalLabel = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined));
+
 export const taskInputSchema = z.object({
   title: z.string().trim().min(1, "Give the task a title so people know what it is.").max(200),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
   categoryId: z.string().uuid().nullable().optional(),
-  newCategoryLabel: z.string().trim().min(1).max(60).optional(),
+  newCategoryLabel: optionalLabel(60),
   priority: priorityEnum,
   status: statusEnum,
   assigneeIds: z.array(z.string().uuid()).min(1, "Pick at least one person."),
@@ -157,7 +178,7 @@ export const contactInputSchema = z
     country: optionalText(80),
     categoryId: z.string().uuid().nullable().optional(),
     /** Set when "Other" was opened and a new category name typed. */
-    newCategoryLabel: z.string().trim().min(1).max(60).optional(),
+    newCategoryLabel: optionalLabel(60),
     source: optionalText(200),
     notes: optionalText(4000),
 
@@ -181,7 +202,7 @@ export const contactInputSchema = z
     companyPostalCode: optionalText(20),
     companyCountry: optionalText(80),
     companyTypeId: z.string().uuid().nullable().optional(),
-    newCompanyTypeLabel: z.string().trim().min(1).max(60).optional(),
+    newCompanyTypeLabel: optionalLabel(60),
     /*
       Only true when "Edit company details" was opened on a company that
       already exists. Without it, opening a contact and saving an unrelated
@@ -231,7 +252,7 @@ export const companyInputSchema = z.object({
   country: optionalText(80),
   typeId: z.string().uuid().nullable().optional(),
   /** Set when "New type" was opened and a name typed. */
-  newTypeLabel: z.string().trim().min(1).max(60).optional(),
+  newTypeLabel: optionalLabel(60),
 });
 
 export type CompanyInput = z.input<typeof companyInputSchema>;
