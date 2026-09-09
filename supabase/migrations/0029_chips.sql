@@ -39,10 +39,30 @@ create index if not exists company_type_links_type_idx on public.company_type_li
 comment on table public.company_type_links is
   'What a company is. Several, because a trailer dealer that also upfits is both.';
 
--- Everything already chosen through the single column comes across.
-insert into public.company_type_links (company_id, type_id)
-select id, type_id from public.companies where type_id is not null
-on conflict do nothing;
+/*
+  Everything already chosen through the single column comes across.
+
+  Wrapped in a check because the Supabase SQL editor does not run a script as
+  one transaction: a failure part-way leaves everything before it applied. So
+  a second run of this file meets a companies table whose type_id has already
+  been dropped at the bottom, and fails on a column that is *supposed* to be
+  gone. Inside EXECUTE the reference is not parsed until it is reached, which
+  is what makes the guard work at all.
+*/
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'companies' and column_name = 'type_id'
+  ) then
+    execute $q$
+      insert into public.company_type_links (company_id, type_id)
+      select id, type_id from public.companies where type_id is not null
+      on conflict do nothing
+    $q$;
+  end if;
+end;
+$$;
 
 -- The rest of the trade as Opus Kap meets it. Installer stays: a company that
 -- installs and a person who installs privately are both real, and Corebridge
@@ -96,25 +116,37 @@ create index if not exists contact_relationship_links_rel_idx
 -- contact's *company* as a type and the person's chip is left blank rather
 -- than inventing a relationship nobody chose.
 -- ---------------------------------------------------------------------------
-insert into public.contact_relationship_links (contact_id, relationship_id)
-select c.id, r.id
-from public.contacts c
-join public.contact_categories cat on cat.id = c.category_id
-join public.contact_relationships r
-  on (cat.label = 'Partners'  and r.label = 'Partner')
-  or (cat.label = 'Investors' and r.label = 'Investor')
-on conflict do nothing;
+-- Guarded for the same reason as above: on a second run the old table and
+-- column are already gone, and that is success, not an error.
+do $$
+begin
+  if to_regclass('public.contact_categories') is null then return; end if;
 
-insert into public.company_type_links (company_id, type_id)
-select c.company_id, t.id
-from public.contacts c
-join public.contact_categories cat on cat.id = c.category_id
-join public.company_types t
-  on (cat.label in ('Fleets', 'Customers') and t.label = 'Fleet')
-  or (cat.label = 'Suppliers'              and t.label = 'Supplier')
-  or (cat.label = 'Industry'               and t.label = 'Institution')
-where c.company_id is not null
-on conflict do nothing;
+  execute $q$
+    insert into public.contact_relationship_links (contact_id, relationship_id)
+    select c.id, r.id
+    from public.contacts c
+    join public.contact_categories cat on cat.id = c.category_id
+    join public.contact_relationships r
+      on (cat.label = 'Partners'  and r.label = 'Partner')
+      or (cat.label = 'Investors' and r.label = 'Investor')
+    on conflict do nothing
+  $q$;
+
+  execute $q$
+    insert into public.company_type_links (company_id, type_id)
+    select c.company_id, t.id
+    from public.contacts c
+    join public.contact_categories cat on cat.id = c.category_id
+    join public.company_types t
+      on (cat.label in ('Fleets', 'Customers') and t.label = 'Fleet')
+      or (cat.label = 'Suppliers'              and t.label = 'Supplier')
+      or (cat.label = 'Industry'               and t.label = 'Institution')
+    where c.company_id is not null
+    on conflict do nothing
+  $q$;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 4. The old shapes go
