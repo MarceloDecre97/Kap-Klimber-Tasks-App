@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { ChevronRight, Phone } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
-import { CategoryBadge } from "@/components/contacts/category-badge";
-import { avatarColor, fullName, initialsOf, roleLine } from "@/lib/contacts-view";
+import { ChipRow } from "@/components/contacts/chip-picker";
+import { DEFAULT_RELATIONSHIP_ICON, RELATIONSHIP_ICONS } from "@/lib/companies-view";
+import { avatarColor, fullName, initialsOf } from "@/lib/contacts-view";
 import { cn } from "@/lib/utils";
 import type { ContactSummary } from "@/lib/data/contacts";
 
@@ -35,7 +36,6 @@ export function ContactRow({
   onSelect?: () => void;
   selected?: boolean;
 }) {
-  const role = roleLine(contact);
   const phone = contact.mobile ?? contact.office_phone;
 
   const rowClass = cn(
@@ -54,12 +54,31 @@ export function ContactRow({
         className="mt-0.5"
       />
 
-      <span className="flex min-w-0 grow flex-col gap-1.5">
+      {/*
+        Name, company, role — three lines rather than "role · company" on one.
+        A real job title ("Vice President of Aftermarket Sales and Operations")
+        wrapped and orphaned the company name behind it, which is the half you
+        are usually scanning for.
+      */}
+      <span className="flex min-w-0 grow flex-col gap-1">
         <span className="text-card-title text-fg text-pretty wrap-anywhere">{fullName(contact)}</span>
-        {role && <span className="text-[18px] leading-7 text-sub text-pretty wrap-anywhere">{role}</span>}
+        {contact.company && (
+          <span className="text-[18px] leading-7 font-bold text-fg text-pretty wrap-anywhere">
+            {contact.company}
+          </span>
+        )}
+        {contact.job_title && (
+          <span className="text-[17px] leading-6 text-sub text-pretty wrap-anywhere">
+            {contact.job_title}
+          </span>
+        )}
 
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          {contact.category && <CategoryBadge category={contact.category} />}
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">
+          <ChipRow
+            items={contact.relationships}
+            icons={RELATIONSHIP_ICONS}
+            fallbackIcon={DEFAULT_RELATIONSHIP_ICON}
+          />
           {phone && (
             <span className="inline-flex items-center gap-1.5 text-timestamp text-sub">
               <Phone aria-hidden className="size-[18px] shrink-0" strokeWidth={1.75} />

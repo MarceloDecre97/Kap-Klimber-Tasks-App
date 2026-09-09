@@ -1,6 +1,6 @@
 import { getCurrentMember } from "@/lib/get-current-member";
 import { listNotifications } from "@/lib/data/notifications";
-import { listContactCategories, listContacts, listDeletedContacts } from "@/lib/data/contacts";
+import { listContactRelationships, listContacts, listDeletedContacts } from "@/lib/data/contacts";
 import { listCompanies, listCompanyTypes } from "@/lib/data/companies";
 import { ContactsApp, type Book } from "@/components/contacts/contacts-app";
 import { DELETED_CONTACTS_VISIBLE_DAYS } from "@/lib/contacts-view";
@@ -20,10 +20,10 @@ export default async function ContactsPage({
   const { book } = await searchParams;
   const { supabase } = await getCurrentMember();
 
-  const [contacts, deleted, categories, companies, companyTypes, notifications] = await Promise.all([
+  const [contacts, deleted, relationships, companies, companyTypes, notifications] = await Promise.all([
     listContacts(supabase),
     listDeletedContacts(supabase, DELETED_CONTACTS_VISIBLE_DAYS),
-    listContactCategories(supabase),
+    listContactRelationships(supabase),
     listCompanies(supabase),
     listCompanyTypes(supabase),
     listNotifications(supabase),
@@ -35,7 +35,7 @@ export default async function ContactsPage({
     <ContactsApp
       contacts={contacts}
       deletedContacts={deleted}
-      categories={categories}
+      relationships={relationships}
       companies={companies}
       companyTypes={companyTypes}
       notifications={notifications}

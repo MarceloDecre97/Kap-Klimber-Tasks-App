@@ -29,7 +29,7 @@ export interface CompanyDraft {
   companyState: string;
   companyPostalCode: string;
   companyCountry: string;
-  companyTypeId: string | null;
+  companyTypeIds: string[];
   newCompanyTypeLabel: string;
   updateCompanyDetails: boolean;
 }
@@ -44,7 +44,7 @@ const BLANK_DETAILS = {
   companyState: "",
   companyPostalCode: "",
   companyCountry: "",
-  companyTypeId: null as string | null,
+  companyTypeIds: [] as string[],
   newCompanyTypeLabel: "",
 };
 
@@ -60,7 +60,7 @@ function detailsOf(c: CompanySummary | null) {
     companyState: c.state ?? "",
     companyPostalCode: c.postal_code ?? "",
     companyCountry: c.country ?? "",
-    companyTypeId: c.type?.id ?? null,
+    companyTypeIds: c.types.map((t) => t.id),
     newCompanyTypeLabel: "",
   };
 }
@@ -82,7 +82,7 @@ function toDetails(d: CompanyDraft): CompanyDetails {
     state: d.companyState,
     postalCode: d.companyPostalCode,
     country: d.companyCountry,
-    typeId: d.companyTypeId,
+    typeIds: d.companyTypeIds,
     newTypeLabel: d.newCompanyTypeLabel,
   };
 }
@@ -98,7 +98,7 @@ function fromDetails(patch: Partial<CompanyDetails>): Partial<CompanyDraft> {
   if ("state" in patch) out.companyState = patch.state;
   if ("postalCode" in patch) out.companyPostalCode = patch.postalCode;
   if ("country" in patch) out.companyCountry = patch.country;
-  if ("typeId" in patch) out.companyTypeId = patch.typeId ?? null;
+  if ("typeIds" in patch) out.companyTypeIds = patch.typeIds;
   if ("newTypeLabel" in patch) out.newCompanyTypeLabel = patch.newTypeLabel;
   return out;
 }
@@ -278,6 +278,10 @@ export function CompanyField({
             </>
           ) : (
             <>
+              <CompanyLine
+                label={linked.types.length === 1 ? "Type" : "Types"}
+                value={linked.types.map((t) => t.label).join(" · ") || null}
+              />
               <CompanyLine label="What they do" value={linked.about} />
               <CompanyLine label="Website" value={linked.website} />
               <CompanyLine label="Main line" value={linked.company_number} />

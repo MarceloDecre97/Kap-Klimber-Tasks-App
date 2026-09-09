@@ -15,8 +15,24 @@ import type { Database } from "@/lib/supabase/database.types";
 const COMPANY_SELECT = `
   id, name, about, website, company_number,
   street, suite, city, state, postal_code, country, created_at,
-  type:company_types(id, label, icon)
+  type_links:company_type_links(type:company_types(id, label, icon))
 `;
+
+type RawCompany = Omit<CompanySummary, "types"> & {
+  type_links: { type: CompanyType | null }[] | null;
+};
+
+/** A join table comes back wrapped; unwrapped once, and sorted for stability. */
+function toCompany(row: RawCompany): CompanySummary {
+  const { type_links, ...company } = row;
+  return {
+    ...company,
+    types: (type_links ?? [])
+      .map((l) => l.type)
+      .filter((t): t is CompanyType => Boolean(t))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  };
+}
 
 /**
  * Every company, with how many people are at each.
@@ -47,10 +63,9 @@ export async function listCompanies(
     if (row.company_id) tally.set(row.company_id, (tally.get(row.company_id) ?? 0) + 1);
   }
 
-  return ((companies.data ?? []) as unknown as CompanySummary[]).map((company) => ({
-    ...company,
-    type: company.type ?? null,
-    contact_count: tally.get(company.id) ?? 0,
+  return ((companies.data ?? []) as unknown as RawCompany[]).map((row) => ({
+    ...toCompany(row),
+    contact_count: tally.get(row.id) ?? 0,
   }));
 }
 
@@ -66,9 +81,7 @@ export async function getCompany(
     .maybeSingle();
 
   if (error) throw error;
-  if (!data) return null;
-  const company = data as unknown as CompanySummary;
-  return { ...company, type: company.type ?? null };
+  return data ? toCompany(data as unknown as RawCompany) : null;
 }
 
 /**

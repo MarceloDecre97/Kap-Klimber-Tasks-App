@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Plus, TriangleAlert } from "lucide-react";
+import { ChevronLeft, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { CountryField, countryUnmatched } from "@/components/ui/country-field";
@@ -16,7 +16,12 @@ import {
   updateContact,
   type DuplicateMatch,
 } from "@/app/contacts/actions";
-import { CATEGORY_ICONS, DEFAULT_CATEGORY_ICON } from "@/lib/contacts-view";
+import { ChipPicker } from "@/components/contacts/chip-picker";
+import {
+  DEFAULT_RELATIONSHIP_ICON,
+  RELATIONSHIP_ICONS,
+  type ContactRelationship,
+} from "@/lib/companies-view";
 import {
   FIELD_LABELS,
   emailProblem,
@@ -27,18 +32,17 @@ import {
   type ContactField,
 } from "@/lib/contact-form";
 import { formatPhone } from "@/lib/phones";
-import { cn } from "@/lib/utils";
 import type { CompanySummary, CompanyType } from "@/lib/companies-view";
-import type { ContactCategory, ContactSummary } from "@/lib/data/contacts";
+import type { ContactSummary } from "@/lib/data/contacts";
 
 /** The shape the form holds: every field a string, because inputs are. */
 type Draft = CompanyDraft & {
   firstName: string; lastName: string; jobTitle: string;
   mobile: string; officePhone: string; email: string; email2: string; website: string;
   street: string; suite: string; city: string; state: string; postalCode: string; country: string;
-  categoryId: string | null; source: string; notes: string;
-  /** Set when "Other" is open and a new category name is being typed. */
-  newCategoryLabel: string;
+  relationshipIds: string[]; source: string; notes: string;
+  /** Set when the "new relationship" box is open and a name is being typed. */
+  newRelationshipLabel: string;
 };
 
 function draftFrom(contact: ContactSummary | null): Draft {
@@ -62,7 +66,7 @@ function draftFrom(contact: ContactSummary | null): Draft {
     companyState: contact?.company_record?.state ?? "",
     companyPostalCode: contact?.company_record?.postal_code ?? "",
     companyCountry: contact?.company_record?.country ?? "",
-    companyTypeId: contact?.company_record?.type?.id ?? null,
+    companyTypeIds: contact?.company_record?.types.map((t) => t.id) ?? [],
     newCompanyTypeLabel: "",
     updateCompanyDetails: false,
     mobile: contact?.mobile ?? "",
@@ -76,10 +80,10 @@ function draftFrom(contact: ContactSummary | null): Draft {
     state: contact?.state ?? "",
     postalCode: contact?.postal_code ?? "",
     country: contact?.country ?? "",
-    categoryId: contact?.category?.id ?? null,
+    relationshipIds: contact?.relationships.map((r) => r.id) ?? [],
     source: contact?.source ?? "",
     notes: contact?.notes ?? "",
-    newCategoryLabel: "",
+    newRelationshipLabel: "",
   };
 }
 
@@ -96,13 +100,13 @@ function draftFrom(contact: ContactSummary | null): Draft {
  */
 export function ContactForm({
   contact,
-  categories,
+  relationships,
   companies,
   companyTypes,
 }: {
   /** Null when adding. */
   contact: ContactSummary | null;
-  categories: ContactCategory[];
+  relationships: ContactRelationship[];
   /** Everything already in the book, for the company box to match against. */
   companies: CompanySummary[];
   companyTypes: CompanyType[];
@@ -122,7 +126,6 @@ export function ContactForm({
   */
   const [touched, setTouched] = useState<Partial<Record<ContactField, boolean>>>({});
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
-  const [otherOpen, setOtherOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const editing = contact !== null;
@@ -349,75 +352,24 @@ export function ContactForm({
           </Group>
 
           <Group heading="Details">
-            <div className="flex flex-col gap-2">
-              <span className="text-field-label text-fg">Category</span>
-              <div className="flex flex-wrap gap-2">
-                {categories.map((cat) => {
-                  const Icon = CATEGORY_ICONS[cat.icon] ?? DEFAULT_CATEGORY_ICON;
-                  const on = draft.categoryId === cat.id && !draft.newCategoryLabel;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      aria-pressed={on}
-                      // Pressing the chosen one again clears it: a category
-                      // is optional, and without this there is no way back
-                      // to none once anything has been picked.
-                      onClick={() => {
-                        set("newCategoryLabel", "");
-                        set("categoryId", on ? null : cat.id);
-                      }}
-                      className={cn(
-                        "inline-flex h-14 cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-4",
-                        "text-chip transition-transform duration-150 active:scale-[0.97]",
-                        on ? "border-btn bg-btn text-on-btn" : "border-border bg-card text-fg hover:bg-muted"
-                      )}
-                    >
-                      <Icon aria-hidden className="size-5 shrink-0" strokeWidth={1.75} />
-                      {cat.label}
-                    </button>
-                  );
-                })}
-
-                {/*
-                  The same flow the task form has: type a name and it becomes
-                  a real category everyone sees. Before this, "Other" was a
-                  dead end — the only way to add one was the SQL editor.
-                */}
-                <button
-                  type="button"
-                  aria-pressed={otherOpen}
-                  onClick={() => {
-                    if (otherOpen) {
-                      setOtherOpen(false);
-                      set("newCategoryLabel", "");
-                    } else {
-                      setOtherOpen(true);
-                      set("categoryId", null);
-                    }
-                  }}
-                  className={cn(
-                    "inline-flex h-14 cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-4",
-                    "text-chip transition-transform duration-150 active:scale-[0.97]",
-                    otherOpen ? "border-btn bg-btn text-on-btn" : "border-border bg-card text-fg hover:bg-muted"
-                  )}
-                >
-                  <Plus aria-hidden className="size-5 shrink-0" strokeWidth={2.5} />
-                  New category
-                </button>
-              </div>
-
-              {otherOpen && (
-                <Input
-                  value={draft.newCategoryLabel}
-                  onChange={(e) => set("newCategoryLabel", e.target.value)}
-                  placeholder="Government, Schools, Press…"
-                  aria-label="New category name"
-                  maxLength={60}
-                  autoComplete="off"
-                />
-              )}
-            </div>
+            {/*
+              What this person is to Opus Kap — not what their company does.
+              The old categories (Fleets, Partners, Suppliers) all described
+              organisations, so the chip was always guessable from the company
+              and carried nothing. See 0029_chips.sql.
+            */}
+            <ChipPicker
+              label="What they are to us"
+              options={relationships}
+              icons={RELATIONSHIP_ICONS}
+              fallbackIcon={DEFAULT_RELATIONSHIP_ICON}
+              selected={draft.relationshipIds}
+              onChange={(next) => set("relationshipIds", next)}
+              newLabel={draft.newRelationshipLabel}
+              onNewLabel={(next) => set("newRelationshipLabel", next)}
+              newPlaceholder="Accountant, Inspector, Journalist…"
+              newButtonLabel="New relationship"
+            />
 
             <Field label="Where they came from" hint="Website form, a trade show, a referral.">
               <Input value={draft.source} onChange={(e) => set("source", e.target.value)} autoComplete="off" />

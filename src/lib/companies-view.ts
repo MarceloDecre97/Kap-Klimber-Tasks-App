@@ -1,4 +1,5 @@
 import {
+  Briefcase,
   Building2,
   Factory,
   HardHat,
@@ -6,7 +7,10 @@ import {
   Landmark,
   LifeBuoy,
   Package,
+  Scale,
+  TrendingUp,
   Truck,
+  User,
   Users,
   Wrench,
   type LucideIcon,
@@ -41,7 +45,8 @@ export interface CompanySummary {
   state: string | null;
   postal_code: string | null;
   country: string | null;
-  type: CompanyType | null;
+  /** Several, because a trailer dealer that also upfits is both. */
+  types: CompanyType[];
   created_at: string;
   /** Live contacts at this company. Absent where it was not asked for. */
   contact_count?: number;
@@ -219,6 +224,8 @@ export function companyPeopleLine(count: number): string {
 export const DEFAULT_COMPANY_TYPE_ICON: LucideIcon = Building2;
 
 export const COMPANY_TYPE_ICONS: Record<string, LucideIcon> = {
+  scale: Scale,
+  "trending-up": TrendingUp,
   truck: Truck,
   factory: Factory,
   wrench: Wrench,
@@ -253,15 +260,17 @@ export function countActiveCompanyFilters(f: CompanyFilters): number {
 
 export function matchesCompany(c: CompanySummary, filters: CompanyFilters): boolean {
   if (filters.country && c.country !== filters.country) return false;
-  if (filters.typeId && c.type?.id !== filters.typeId) return false;
+  if (filters.typeId && !c.types.some((t) => t.id === filters.typeId)) return false;
 
   const q = filters.query.trim().toLowerCase();
   if (!q) return true;
 
   // The name, where it is, what it does, and its number — the four things
   // somebody has in mind when they come looking for a company.
-  return [c.name, c.city, c.state, c.country, c.about, c.website, c.company_number, c.type?.label]
-    .some((field) => field && field.toLowerCase().includes(q));
+  return [
+    c.name, c.city, c.state, c.country, c.about, c.website, c.company_number,
+    ...c.types.map((t) => t.label),
+  ].some((field) => field && field.toLowerCase().includes(q));
 }
 
 /** Every country actually in use, for the filter. Deduped and sorted. */
@@ -315,4 +324,45 @@ export function groupCompanies(companies: CompanySummary[]): CompanyGroup[] {
     if (b.letter === "#") return -1;
     return a.letter.localeCompare(b.letter);
   });
+}
+
+/* -------------------------------------------------------------------------
+   What a person is to us
+
+   A separate vocabulary from the company one, and deliberately so. The old
+   contact categories — Fleets, Partners, Suppliers — all described
+   organisations, so the chip on a person was always guessable from their
+   company and carried nothing. These are not: nothing about Royal Truck &
+   Utility Trailer says whether Mike is our client contact or our consultant.
+   ------------------------------------------------------------------------- */
+
+export interface ContactRelationship {
+  id: string;
+  label: string;
+  icon: string;
+}
+
+export const DEFAULT_RELATIONSHIP_ICON: LucideIcon = User;
+
+export const RELATIONSHIP_ICONS: Record<string, LucideIcon> = {
+  handshake: Handshake,
+  users: Users,
+  briefcase: Briefcase,
+  scale: Scale,
+  "trending-up": TrendingUp,
+  "hard-hat": HardHat,
+  user: User,
+  building: Building2,
+  truck: Truck,
+};
+
+/**
+ * Chips for a row, with the overflow counted rather than wrapped.
+ *
+ * Three chips on a 390px row is confetti. Two and a "+1" says the same thing
+ * and leaves the row readable; the full set shows on the page and the panel,
+ * where there is room for it.
+ */
+export function chipsForRow<T>(all: T[], max = 2): { shown: T[]; more: number } {
+  return { shown: all.slice(0, max), more: Math.max(0, all.length - max) };
 }

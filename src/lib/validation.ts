@@ -196,9 +196,14 @@ export const contactInputSchema = z
     state: optionalText(60),
     postalCode: optionalText(20),
     country: optionalText(80),
-    categoryId: z.string().uuid().nullable().optional(),
-    /** Set when "Other" was opened and a new category name typed. */
-    newCategoryLabel: optionalLabel(60),
+    /*
+      What this person is to us. Several allowed: somebody really can be a
+      consultant and an investor. See 0029_chips.sql for why this replaced a
+      single category that described their company rather than them.
+    */
+    relationshipIds: z.array(z.string().uuid()).max(6).optional(),
+    /** Set when "New relationship" was opened and a name typed. */
+    newRelationshipLabel: optionalLabel(60),
     source: optionalText(200),
     notes: optionalText(4000),
 
@@ -221,7 +226,7 @@ export const contactInputSchema = z
     companyState: optionalText(60),
     companyPostalCode: optionalText(20),
     companyCountry: optionalText(80),
-    companyTypeId: z.string().uuid().nullable().optional(),
+    companyTypeIds: z.array(z.string().uuid()).max(8).optional(),
     newCompanyTypeLabel: optionalLabel(60),
     /*
       Only true when "Edit company details" was opened on a company that
@@ -270,7 +275,8 @@ export const companyInputSchema = z.object({
     one unmatched spelling is a filter entry nobody can reconcile.
   */
   country: optionalText(80),
-  typeId: z.string().uuid().nullable().optional(),
+  /* Several, because a trailer dealer that also upfits is both. */
+  typeIds: z.array(z.string().uuid()).max(8).optional(),
   /** Set when "New type" was opened and a name typed. */
   newTypeLabel: optionalLabel(60),
 });

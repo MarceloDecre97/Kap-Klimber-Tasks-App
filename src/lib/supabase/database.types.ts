@@ -195,11 +195,10 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["push_subscriptions"]["Row"]>;
         Relationships: [];
       };
-      contact_categories: {
+      contact_relationships: {
         Row: {
           id: string;
           label: string;
-          /** A name the app maps to a Lucide icon; unknown falls back. */
           icon: string;
           sort_order: number;
           is_default: boolean;
@@ -207,7 +206,20 @@ export interface Database {
           created_at: string;
         };
         Insert: { label: string; icon?: string; sort_order?: number; created_by: string };
-        Update: Partial<Database["public"]["Tables"]["contact_categories"]["Row"]>;
+        /** Renaming one renames it under everybody carrying it. Not here. */
+        Update: never;
+        Relationships: [];
+      };
+      contact_relationship_links: {
+        Row: { contact_id: string; relationship_id: string };
+        Insert: { contact_id: string; relationship_id: string };
+        Update: never;
+        Relationships: [];
+      };
+      company_type_links: {
+        Row: { company_id: string; type_id: string };
+        Insert: { company_id: string; type_id: string };
+        Update: never;
         Relationships: [];
       };
       company_types: {
@@ -238,17 +250,14 @@ export interface Database {
           state: string | null;
           postal_code: string | null;
           country: string | null;
-          /** What kind of organisation. See 0026_company_types.sql. */
-          type_id: string | null;
           created_by: string;
           created_at: string;
           updated_at: string;
         };
         Insert: Omit<
           Database["public"]["Tables"]["companies"]["Row"],
-          "id" | "type_id" | "created_at" | "updated_at"
-        > &
-          Partial<Pick<Database["public"]["Tables"]["companies"]["Row"], "type_id">>;
+          "id" | "created_at" | "updated_at"
+        >;
         Update: Partial<
           Omit<Database["public"]["Tables"]["companies"]["Row"], "id" | "created_by" | "created_at">
         >;
@@ -272,7 +281,6 @@ export interface Database {
           state: string | null;
           postal_code: string | null;
           country: string | null;
-          category_id: string | null;
           /** The company they belong to. `company` is kept in step by trigger. */
           company_id: string | null;
           source: string | null;

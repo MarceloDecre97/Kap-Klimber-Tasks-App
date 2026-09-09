@@ -25,41 +25,76 @@ function revalidateContactViews(contactId?: string) {
 }
 
 /**
- * The category a contact should end up with.
+ * The relationships a contact should end up with.
  *
- * A typed name wins over a picked one, and an existing label is matched
- * case-insensitively before a new row is made — otherwise "Government" and
- * "government" become two chips that look identical on the screen.
+ * A typed name is added to whatever was picked, and an existing label is
+ * matched case-insensitively before a new row is made — otherwise "Lawyer"
+ * and "lawyer" become two chips that look identical on the screen.
  *
- * Mirrors resolveCategoryId in the task actions deliberately: the two flows
- * are the same flow, and somebody who has used one should not have to learn
- * the other.
+ * Several, because somebody really can be a consultant and an investor. This
+ * replaced a single category that described their *company* rather than them;
+ * see 0029_chips.sql.
  */
-async function resolveContactCategory(
+async function resolveRelationships(
   supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
   memberId: string,
-  categoryId: string | null | undefined,
+  relationshipIds: string[] | undefined,
   newLabel: string | undefined
-): Promise<string | null> {
+): Promise<string[]> {
+  const ids = [...(relationshipIds ?? [])];
   const label = newLabel?.trim();
-  if (!label) return categoryId ?? null;
+  if (!label) return ids;
 
   const { data: existing } = await supabase
-    .from("contact_categories")
+    .from("contact_relationships")
     .select("id")
     .ilike("label", likeLiteral(label))
     .maybeSingle();
-  if (existing) return existing.id;
+  if (existing) return ids.includes(existing.id) ? ids : [...ids, existing.id];
 
   const { data: created, error } = await supabase
-    .from("contact_categories")
-    // A category somebody adds mid-flow gets the neutral icon and sorts
-    // just above Other, which is where "the one I had to invent" belongs.
+    .from("contact_relationships")
+    // The neutral icon, sorting just above Other — where "the one I had to
+    // invent" belongs.
     .insert({ label, icon: "user", sort_order: 90, created_by: memberId })
     .select("id")
     .single();
   if (error) throw error;
-  return created.id;
+  return [...ids, created.id];
+}
+
+/** The links a contact should have, made to match. Diffed, never rewritten. */
+async function syncRelationships(
+  supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
+  contactId: string,
+  relationshipIds: string[]
+): Promise<void> {
+  const { data: current, error: readError } = await supabase
+    .from("contact_relationship_links")
+    .select("relationship_id")
+    .eq("contact_id", contactId);
+  if (readError) throw readError;
+
+  const have = new Set((current ?? []).map((r) => r.relationship_id));
+  const want = new Set(relationshipIds);
+
+  const remove = [...have].filter((id) => !want.has(id));
+  const add = [...want].filter((id) => !have.has(id));
+
+  if (remove.length > 0) {
+    const { error } = await supabase
+      .from("contact_relationship_links")
+      .delete()
+      .eq("contact_id", contactId)
+      .in("relationship_id", remove);
+    if (error) throw error;
+  }
+  if (add.length > 0) {
+    const { error } = await supabase
+      .from("contact_relationship_links")
+      .insert(add.map((relationship_id) => ({ contact_id: contactId, relationship_id })));
+    if (error) throw error;
+  }
 }
 
 /**
@@ -74,27 +109,28 @@ function likeLiteral(value: string): string {
 }
 
 /**
- * The type of the company being written from the contact form.
+ * The types of the company being written from the contact form.
  *
- * Deliberately the same rules as resolveContactCategory above and as the
- * twin in the companies actions: match an existing label case-insensitively,
- * and make a real row out of anything invented mid-save.
+ * Deliberately the same rules as its twin in the companies actions: match an
+ * existing label case-insensitively, and make a real row out of anything
+ * invented mid-save.
  */
-async function resolveCompanyType(
+async function resolveCompanyTypes(
   supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
   memberId: string,
-  typeId: string | null | undefined,
+  typeIds: string[] | undefined,
   newLabel: string | undefined
-): Promise<string | null> {
+): Promise<string[]> {
+  const ids = [...(typeIds ?? [])];
   const label = newLabel?.trim();
-  if (!label) return typeId ?? null;
+  if (!label) return ids;
 
   const { data: existing } = await supabase
     .from("company_types")
     .select("id")
     .ilike("label", likeLiteral(label))
     .maybeSingle();
-  if (existing) return existing.id;
+  if (existing) return ids.includes(existing.id) ? ids : [...ids, existing.id];
 
   const { data: created, error } = await supabase
     .from("company_types")
@@ -102,7 +138,40 @@ async function resolveCompanyType(
     .select("id")
     .single();
   if (error) throw error;
-  return created.id;
+  return [...ids, created.id];
+}
+
+/** The company's type links, made to match. Diffed, never rewritten. */
+async function syncCompanyTypes(
+  supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
+  companyId: string,
+  typeIds: string[]
+): Promise<void> {
+  const { data: current, error: readError } = await supabase
+    .from("company_type_links")
+    .select("type_id")
+    .eq("company_id", companyId);
+  if (readError) throw readError;
+
+  const have = new Set((current ?? []).map((r) => r.type_id));
+  const want = new Set(typeIds);
+  const remove = [...have].filter((id) => !want.has(id));
+  const add = [...want].filter((id) => !have.has(id));
+
+  if (remove.length > 0) {
+    const { error } = await supabase
+      .from("company_type_links")
+      .delete()
+      .eq("company_id", companyId)
+      .in("type_id", remove);
+    if (error) throw error;
+  }
+  if (add.length > 0) {
+    const { error } = await supabase
+      .from("company_type_links")
+      .insert(add.map((type_id) => ({ company_id: companyId, type_id })));
+    if (error) throw error;
+  }
 }
 
 /**
@@ -139,7 +208,6 @@ async function resolveCompany(
     // Only ever a name from the country list; anything else is dropped
     // rather than becoming a second spelling of somewhere in the filter.
     country: canonicalCountry(v.companyCountry),
-    type_id: await resolveCompanyType(supabase, memberId, v.companyTypeId, v.newCompanyTypeLabel),
   };
 
   const { data: existing } = await supabase
@@ -152,6 +220,11 @@ async function resolveCompany(
     if (v.updateCompanyDetails) {
       const { error } = await supabase.from("companies").update(details).eq("id", existing.id);
       if (error) throw error;
+      await syncCompanyTypes(
+        supabase,
+        existing.id,
+        await resolveCompanyTypes(supabase, memberId, v.companyTypeIds, v.newCompanyTypeLabel)
+      );
     }
     return existing.id;
   }
@@ -178,6 +251,12 @@ async function resolveCompany(
     }
     throw error;
   }
+
+  await syncCompanyTypes(
+    supabase,
+    created.id,
+    await resolveCompanyTypes(supabase, memberId, v.companyTypeIds, v.newCompanyTypeLabel)
+  );
   return created.id;
 }
 
@@ -263,7 +342,9 @@ export async function createContact(input: unknown): Promise<ActionResult> {
   try {
     const { supabase, member } = await getCurrentMember();
     const v = parsed.data;
-    const categoryId = await resolveContactCategory(supabase, member.id, v.categoryId, v.newCategoryLabel);
+    const relationshipIds = await resolveRelationships(
+      supabase, member.id, v.relationshipIds, v.newRelationshipLabel
+    );
     const companyId = await resolveCompany(supabase, member.id, v);
 
     const { data: contact, error } = await supabase
@@ -285,7 +366,6 @@ export async function createContact(input: unknown): Promise<ActionResult> {
         state: v.state,
         postal_code: v.postalCode,
         country: canonicalCountry(v.country),
-        category_id: categoryId,
         source: v.source,
         notes: v.notes,
         created_by: member.id,
@@ -294,6 +374,7 @@ export async function createContact(input: unknown): Promise<ActionResult> {
       .single();
 
     if (error) throw error;
+    await syncRelationships(supabase, contact.id, relationshipIds);
 
     revalidateContactViews(contact.id);
     return { ok: true, contactId: contact.id };
@@ -325,7 +406,9 @@ export async function updateContact(
   try {
     const { supabase, member } = await getCurrentMember();
     const v = parsed.data;
-    const categoryId = await resolveContactCategory(supabase, member.id, v.categoryId, v.newCategoryLabel);
+    const relationshipIds = await resolveRelationships(
+      supabase, member.id, v.relationshipIds, v.newRelationshipLabel
+    );
     const companyId = await resolveCompany(supabase, member.id, v);
 
     const { error } = await supabase
@@ -347,13 +430,13 @@ export async function updateContact(
         state: v.state,
         postal_code: v.postalCode,
         country: canonicalCountry(v.country),
-        category_id: categoryId,
         source: v.source,
         notes: v.notes,
       })
       .eq("id", contactId.data);
 
     if (error) throw error;
+    await syncRelationships(supabase, contactId.data, relationshipIds);
 
     revalidateContactViews(contactId.data);
     return { ok: true, contactId: contactId.data };

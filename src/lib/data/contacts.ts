@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemberSummary } from "@/lib/data/tasks";
-import type { CompanySummary } from "@/lib/companies-view";
+import type { CompanySummary, CompanyType, ContactRelationship } from "@/lib/companies-view";
 import type { ContactEventKind, Database, TaskStatus } from "@/lib/supabase/database.types";
 
 /**
@@ -13,13 +13,6 @@ import type { ContactEventKind, Database, TaskStatus } from "@/lib/supabase/data
  * What the queries do decide is the bin: the book excludes it, and one
  * query exists to show it.
  */
-
-export interface ContactCategory {
-  id: string;
-  label: string;
-  /** A name, not a component. See categoryIcon in contacts-view.ts. */
-  icon: string;
-}
 
 /** Everything a row in the book needs, and everything the detail needs too. */
 export interface ContactSummary {
@@ -49,7 +42,12 @@ export interface ContactSummary {
   country: string | null;
   source: string | null;
   notes: string | null;
-  category: ContactCategory | null;
+  /**
+   * What this person is to Opus Kap. Several, because somebody really can be
+   * a consultant and an investor — and none, because most people are simply
+   * somebody at a company. See 0029_chips.sql.
+   */
+  relationships: ContactRelationship[];
   /** Who put it in the book. A shared book gets asked this constantly. */
   created_by: MemberSummary | null;
   created_at: string;
@@ -73,11 +71,14 @@ const CONTACT_SELECT = `
   mobile, office_phone, email, email2, website,
   street, suite, city, state, postal_code, country, source, notes,
   created_at, deleted_at,
+  relationship_links:contact_relationship_links(
+    relationship:contact_relationships(id, label, icon)
+  ),
   company_record:companies(
     id, name, about, website, company_number,
-    street, suite, city, state, postal_code, country, created_at
+    street, suite, city, state, postal_code, country, created_at,
+    type_links:company_type_links(type:company_types(id, label, icon))
   ),
-  category:contact_categories(id, label, icon),
   created_by:members!contacts_created_by_fkey(id, display_name, initials, color),
   deleted_by:members!contacts_deleted_by_fkey(id, display_name, initials, color)
 `;
@@ -88,23 +89,51 @@ const CONTACT_SELECT = `
   than fight that at every call site, the rows come back through this shape
   and are mapped once.
 */
-type RawContact = Omit<
-  ContactSummary,
-  "category" | "created_by" | "deleted_by" | "company_record"
-> & {
-  category: ContactCategory | null;
-  created_by: MemberSummary | null;
-  deleted_by: MemberSummary | null;
-  company_record: CompanySummary | null;
+type RawCompany = Omit<CompanySummary, "types"> & {
+  type_links: { type: CompanyType | null }[] | null;
 };
 
+type RawContact = Omit<
+  ContactSummary,
+  "relationships" | "created_by" | "deleted_by" | "company_record"
+> & {
+  relationship_links: { relationship: ContactRelationship | null }[] | null;
+  created_by: MemberSummary | null;
+  deleted_by: MemberSummary | null;
+  company_record: RawCompany | null;
+};
+
+/**
+ * A join table comes back as rows wrapping the thing you wanted.
+ *
+ * Unwrapped once, here, rather than at every call site — and sorted by label,
+ * so a company that is both an Upfitter and a Trailer Dealer always reads the
+ * same way round rather than shuffling between page loads.
+ */
+function linked<T extends { label: string }>(
+  rows: { [key: string]: T | null }[] | null,
+  key: string
+): T[] {
+  return (rows ?? [])
+    .map((row) => row[key])
+    .filter((item): item is T => Boolean(item))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function toCompany(row: RawCompany | null): CompanySummary | null {
+  if (!row) return null;
+  const { type_links, ...company } = row;
+  return { ...company, types: linked<CompanyType>(type_links, "type") };
+}
+
 function toContact(row: RawContact): ContactSummary {
+  const { relationship_links, ...rest } = row;
   return {
-    ...row,
-    category: row.category ?? null,
+    ...rest,
+    relationships: linked<ContactRelationship>(relationship_links, "relationship"),
     created_by: row.created_by ?? null,
     deleted_by: row.deleted_by ?? null,
-    company_record: row.company_record ?? null,
+    company_record: toCompany(row.company_record),
   };
 }
 
@@ -217,18 +246,18 @@ export async function listContactEvents(
   return (data ?? []) as unknown as ContactEvent[];
 }
 
-/** The categories, in the order the table says to show them. */
-export async function listContactCategories(
+/** The relationships, in the order the table says to show them. */
+export async function listContactRelationships(
   supabase: SupabaseClient<Database>
-): Promise<ContactCategory[]> {
+): Promise<ContactRelationship[]> {
   const { data, error } = await supabase
-    .from("contact_categories")
+    .from("contact_relationships")
     .select("id, label, icon")
     .order("sort_order", { ascending: true })
     .order("label", { ascending: true });
 
   if (error) throw error;
-  return (data ?? []) as ContactCategory[];
+  return (data ?? []) as ContactRelationship[];
 }
 
 /**

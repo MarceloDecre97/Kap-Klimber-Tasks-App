@@ -1,19 +1,3 @@
-import {
-  Briefcase,
-  Building2,
-  ClipboardList,
-  Compass,
-  HardHat,
-  Handshake,
-  Landmark,
-  Package,
-  Target,
-  TrendingUp,
-  Truck,
-  User,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
 import type { ContactSummary } from "@/lib/data/contacts";
 
 /**
@@ -24,40 +8,6 @@ import type { ContactSummary } from "@/lib/data/contacts";
  * client component. A client importing from there fails at bundle time,
  * which typecheck does not catch.
  */
-
-/* -------------------------------------------------------------------------
-   Category icons
-
-   Categories live in a table so the team can add one without a migration,
-   which means the icon has to travel as a name. This is the whitelist that
-   turns that name back into a component — anything unrecognised falls back
-   rather than breaking the row, so a category added from the SQL editor with
-   a typo still renders.
-   ------------------------------------------------------------------------- */
-export const DEFAULT_CATEGORY_ICON: LucideIcon = User;
-
-/*
-  Exported as a map and indexed at the call site rather than wrapped in a
-  `categoryIcon()` helper. A function returning a component, assigned to a
-  capitalised const and rendered, is indistinguishable from defining a
-  component mid-render — React's lint rule says so, and it is right to. A
-  property lookup is what the existing badge does, and it reads the same.
-*/
-export const CATEGORY_ICONS: Record<string, LucideIcon> = {
-  target: Target,
-  truck: Truck,
-  handshake: Handshake,
-  package: Package,
-  landmark: Landmark,
-  "trending-up": TrendingUp,
-  user: User,
-  users: Users,
-  briefcase: Briefcase,
-  building: Building2,
-  compass: Compass,
-  "hard-hat": HardHat,
-  clipboard: ClipboardList,
-};
 
 /* -------------------------------------------------------------------------
    Names
@@ -111,13 +61,14 @@ export function avatarColor(c: { first_name: string; last_name: string }): strin
 export interface ContactFilters {
   query: string;
   company: string | null;
-  categoryId: string | null;
+  /** What this person is to us. Replaced the old company-shaped category. */
+  relationshipId: string | null;
 }
 
-export const EMPTY_CONTACT_FILTERS: ContactFilters = { query: "", company: null, categoryId: null };
+export const EMPTY_CONTACT_FILTERS: ContactFilters = { query: "", company: null, relationshipId: null };
 
 export function countActiveContactFilters(f: ContactFilters): number {
-  return (f.company ? 1 : 0) + (f.categoryId ? 1 : 0);
+  return (f.company ? 1 : 0) + (f.relationshipId ? 1 : 0);
 }
 
 /**
@@ -129,7 +80,9 @@ export function countActiveContactFilters(f: ContactFilters): number {
  */
 export function matchesContact(c: ContactSummary, filters: ContactFilters): boolean {
   if (filters.company && c.company !== filters.company) return false;
-  if (filters.categoryId && c.category?.id !== filters.categoryId) return false;
+  if (filters.relationshipId && !c.relationships.some((r) => r.id === filters.relationshipId)) {
+    return false;
+  }
 
   const q = filters.query.trim().toLowerCase();
   if (!q) return true;
@@ -137,7 +90,8 @@ export function matchesContact(c: ContactSummary, filters: ContactFilters): bool
   const digits = q.replace(/\D/g, "");
   const haystack = [
     c.first_name, c.last_name, c.job_title, c.company,
-    c.email, c.email2, c.mobile, c.office_phone, c.category?.label,
+    c.email, c.email2, c.mobile, c.office_phone,
+    ...c.relationships.map((r) => r.label),
   ]
     .filter(Boolean)
     .join(" ")

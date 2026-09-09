@@ -39,21 +39,22 @@ function likeLiteral(value: string): string {
  * reasoning, as the contact categories. Anything somebody invents mid-save
  * becomes a real type everybody can pick next time.
  */
-async function resolveCompanyType(
+async function resolveCompanyTypes(
   supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
   memberId: string,
-  typeId: string | null | undefined,
+  typeIds: string[] | undefined,
   newLabel: string | undefined
-): Promise<string | null> {
+): Promise<string[]> {
+  const ids = [...(typeIds ?? [])];
   const label = newLabel?.trim();
-  if (!label) return typeId ?? null;
+  if (!label) return ids;
 
   const { data: existing } = await supabase
     .from("company_types")
     .select("id")
     .ilike("label", likeLiteral(label))
     .maybeSingle();
-  if (existing) return existing.id;
+  if (existing) return ids.includes(existing.id) ? ids : [...ids, existing.id];
 
   const { data: created, error } = await supabase
     .from("company_types")
@@ -63,7 +64,47 @@ async function resolveCompanyType(
     .select("id")
     .single();
   if (error) throw error;
-  return created.id;
+  return [...ids, created.id];
+}
+
+/**
+ * The links a company should have, made to match.
+ *
+ * Diffed rather than cleared and rewritten, so a type that was already there
+ * is left alone. Nothing hangs off these rows today, but clear-and-rewrite is
+ * the shape that quietly destroys whatever gets added to them later.
+ */
+async function syncCompanyTypes(
+  supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
+  companyId: string,
+  typeIds: string[]
+): Promise<void> {
+  const { data: current, error: readError } = await supabase
+    .from("company_type_links")
+    .select("type_id")
+    .eq("company_id", companyId);
+  if (readError) throw readError;
+
+  const have = new Set((current ?? []).map((r) => r.type_id));
+  const want = new Set(typeIds);
+
+  const remove = [...have].filter((id) => !want.has(id));
+  const add = [...want].filter((id) => !have.has(id));
+
+  if (remove.length > 0) {
+    const { error } = await supabase
+      .from("company_type_links")
+      .delete()
+      .eq("company_id", companyId)
+      .in("type_id", remove);
+    if (error) throw error;
+  }
+  if (add.length > 0) {
+    const { error } = await supabase
+      .from("company_type_links")
+      .insert(add.map((type_id) => ({ company_id: companyId, type_id })));
+    if (error) throw error;
+  }
 }
 
 function dbError(error: unknown, fallback: string): string {
@@ -94,7 +135,7 @@ export async function updateCompany(
   const v = parsed.data;
   try {
     const { supabase, member } = await getCurrentMember();
-    const typeId = await resolveCompanyType(supabase, member.id, v.typeId, v.newTypeLabel);
+    const typeIds = await resolveCompanyTypes(supabase, member.id, v.typeIds, v.newTypeLabel);
 
     const { error } = await supabase
       .from("companies")
@@ -109,11 +150,12 @@ export async function updateCompany(
         state: v.state,
         postal_code: v.postalCode,
         country: canonicalCountry(v.country),
-        type_id: typeId,
       })
       .eq("id", companyId.data);
 
     if (error) throw error;
+    await syncCompanyTypes(supabase, companyId.data, typeIds);
+
     revalidateCompanyViews(companyId.data);
     return { ok: true, companyId: companyId.data };
   } catch (error) {
@@ -144,7 +186,7 @@ export async function createCompany(input: unknown): Promise<ActionResult<{ comp
   const v = parsed.data;
   try {
     const { supabase, member } = await getCurrentMember();
-    const typeId = await resolveCompanyType(supabase, member.id, v.typeId, v.newTypeLabel);
+    const typeIds = await resolveCompanyTypes(supabase, member.id, v.typeIds, v.newTypeLabel);
 
     const { data, error } = await supabase
       .from("companies")
@@ -159,13 +201,13 @@ export async function createCompany(input: unknown): Promise<ActionResult<{ comp
         state: v.state,
         postal_code: v.postalCode,
         country: canonicalCountry(v.country),
-        type_id: typeId,
         created_by: member.id,
       })
       .select("id")
       .single();
 
     if (error) throw error;
+    await syncCompanyTypes(supabase, data.id, typeIds);
 
     revalidateCompanyViews(data.id);
     return { ok: true, companyId: data.id };

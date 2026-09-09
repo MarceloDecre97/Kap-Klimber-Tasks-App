@@ -11,7 +11,8 @@ import {
 } from "@/components/contacts/delete-contact-dialog";
 import { blockingTasksFor, restoreContact } from "@/app/contacts/actions";
 import { Avatar } from "@/components/ui/avatar";
-import { CategoryBadge } from "@/components/contacts/category-badge";
+import { ChipRow } from "@/components/contacts/chip-picker";
+import { DEFAULT_RELATIONSHIP_ICON, RELATIONSHIP_ICONS } from "@/lib/companies-view";
 import {
   avatarColor,
   describeChange,
@@ -210,9 +211,16 @@ export function ContactDetail({
                   <p className="text-[18px] leading-7 text-sub text-pretty wrap-anywhere">{role}</p>
                 )
               )}
-              {contact.category && (
-                <span>
-                  <CategoryBadge category={contact.category} />
+              {/* What this person is to us — not what their company does,
+                  which lives on the company below. */}
+              {contact.relationships.length > 0 && (
+                <span className="flex flex-wrap items-center gap-2">
+                  <ChipRow
+                    items={contact.relationships}
+                    icons={RELATIONSHIP_ICONS}
+                    fallbackIcon={DEFAULT_RELATIONSHIP_ICON}
+                    max={6}
+                  />
                 </span>
               )}
             </div>
@@ -282,6 +290,10 @@ export function ContactDetail({
                 value={company.name}
                 href={onOpenCompany ? null : `/companies/${company.id}`}
                 onClick={onOpenCompany ? () => onOpenCompany(company.id) : undefined}
+              />
+              <Row
+                label={company.types.length === 1 ? "Type" : "Types"}
+                value={company.types.map((t) => t.label).join(" · ") || null}
               />
               <Row label="What they do" value={company.about} />
               <Row

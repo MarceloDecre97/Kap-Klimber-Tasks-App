@@ -34,7 +34,9 @@ export async function GET(request: NextRequest) {
 
   const body = rows.map((c) => [
     c.name,
-    c.type?.label ?? "",
+    // Several types, joined — a trailer dealer that also upfits is both, and
+    // a spreadsheet column that could only hold one would lose the second.
+    c.types.map((t) => t.label).join(", "),
     // Text, like every other cell here — the writer stores everything as
     // inline strings so phone numbers and ZIPs survive, and one numeric
     // column would be the exception nobody remembers.

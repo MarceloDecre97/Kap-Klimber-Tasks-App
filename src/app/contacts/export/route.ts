@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     ...EMPTY_CONTACT_FILTERS,
     query: params.get("q") ?? "",
     company: params.get("company"),
-    categoryId: params.get("category"),
+    relationshipId: params.get("relationship"),
   };
   const rows = contacts.filter((contact) => matchesContact(contact, filters));
 
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
   const headers = [
     "First name", "Last name", "Job title",
     "Company", "Company main line", "Company website", "Company address",
-    "Category",
+    "Relationship to us",
     "Mobile", "Office phone", "Email", "Second email", "Website",
     "Street", "Suite / unit", "City", "State", "ZIP", "Country", "Address",
     "Where they came from", "Notes", "Added by", "Added on",
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     c.company_record?.company_number ?? "",
     c.company_record?.website ?? "",
     (c.company_record ? formatAddress(c.company_record) : null) ?? "",
-    c.category?.label ?? "",
+    c.relationships.map((r) => r.label).join(", "),
     c.mobile ?? "",
     c.office_phone ?? "",
     c.email ?? "",

@@ -8,6 +8,7 @@ import {
   companyPeopleLine,
   type CompanySummary,
 } from "@/lib/companies-view";
+import { ChipRow } from "@/components/contacts/chip-picker";
 import { formatAddress } from "@/lib/contacts-view";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +31,7 @@ export function CompanyRow({
   onSelect?: () => void;
   selected?: boolean;
 }) {
-  const Icon = COMPANY_TYPE_ICONS[company.type?.icon ?? ""] ?? DEFAULT_COMPANY_TYPE_ICON;
+  const Icon = COMPANY_TYPE_ICONS[company.types[0]?.icon ?? ""] ?? DEFAULT_COMPANY_TYPE_ICON;
   const address = formatAddress(company);
 
   const rowClass = cn(
@@ -53,12 +54,11 @@ export function CompanyRow({
         <span className="text-card-title text-fg text-pretty wrap-anywhere">{company.name}</span>
 
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          {company.type && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-border px-2.5 py-1 text-timestamp text-sub">
-              <Icon aria-hidden className="size-[18px] shrink-0" strokeWidth={1.75} />
-              {company.type.label}
-            </span>
-          )}
+          <ChipRow
+            items={company.types}
+            icons={COMPANY_TYPE_ICONS}
+            fallbackIcon={DEFAULT_COMPANY_TYPE_ICON}
+          />
           <span className="text-timestamp text-sub">
             {companyPeopleLine(company.contact_count ?? 0)}
           </span>

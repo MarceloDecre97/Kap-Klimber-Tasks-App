@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus } from "lucide-react";
 import { Input, Textarea } from "@/components/ui/input";
+import { ChipPicker } from "@/components/contacts/chip-picker";
 import { CountryField } from "@/components/ui/country-field";
 import { Field } from "@/components/contacts/form-field";
 import {
@@ -11,7 +10,7 @@ import {
   type CompanyType,
 } from "@/lib/companies-view";
 import { formatPhone } from "@/lib/phones";
-import { cn } from "@/lib/utils";
+
 
 /** Everything about a company except its name, which its owner supplies. */
 export interface CompanyDetails {
@@ -24,7 +23,8 @@ export interface CompanyDetails {
   state: string;
   postalCode: string;
   country: string;
-  typeId: string | null;
+  /** Several: a trailer dealer that also upfits is both. */
+  typeIds: string[];
   /** Set when "New type" is open and a name is being typed. */
   newTypeLabel: string;
 }
@@ -32,7 +32,7 @@ export interface CompanyDetails {
 export const EMPTY_COMPANY_DETAILS: CompanyDetails = {
   about: "", website: "", companyNumber: "",
   street: "", suite: "", city: "", state: "", postalCode: "", country: "",
-  typeId: null, newTypeLabel: "",
+  typeIds: [], newTypeLabel: "",
 };
 
 /**
@@ -52,75 +52,20 @@ export function CompanyFields({
   onChange: (patch: Partial<CompanyDetails>) => void;
   types: CompanyType[];
 }) {
-  const [otherOpen, setOtherOpen] = useState(false);
-
   return (
     <>
-      <div className="flex flex-col gap-2">
-        <span className="text-field-label text-fg">Type</span>
-        <div className="flex flex-wrap gap-2">
-          {types.map((type) => {
-            const Icon = COMPANY_TYPE_ICONS[type.icon] ?? DEFAULT_COMPANY_TYPE_ICON;
-            const on = value.typeId === type.id && !value.newTypeLabel;
-            return (
-              <button
-                key={type.id}
-                type="button"
-                aria-pressed={on}
-                // Pressing the chosen one again clears it. A type is
-                // optional, and without this there is no way back to none.
-                onClick={() => {
-                  setOtherOpen(false);
-                  onChange({ newTypeLabel: "", typeId: on ? null : type.id });
-                }}
-                className={cn(
-                  "inline-flex h-14 cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-4",
-                  "text-chip transition-transform duration-150 active:scale-[0.97]",
-                  on ? "border-btn bg-btn text-on-btn" : "border-border bg-card text-fg hover:bg-muted"
-                )}
-              >
-                <Icon aria-hidden className="size-5 shrink-0" strokeWidth={1.75} />
-                {type.label}
-              </button>
-            );
-          })}
-
-          {/* Type a kind nobody has needed yet and it becomes one everybody
-              can pick — the same as the contact categories. */}
-          <button
-            type="button"
-            aria-pressed={otherOpen}
-            onClick={() => {
-              if (otherOpen) {
-                setOtherOpen(false);
-                onChange({ newTypeLabel: "" });
-              } else {
-                setOtherOpen(true);
-                onChange({ typeId: null });
-              }
-            }}
-            className={cn(
-              "inline-flex h-14 cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-4",
-              "text-chip transition-transform duration-150 active:scale-[0.97]",
-              otherOpen ? "border-btn bg-btn text-on-btn" : "border-border bg-card text-fg hover:bg-muted"
-            )}
-          >
-            <Plus aria-hidden className="size-5 shrink-0" strokeWidth={2.5} />
-            New type
-          </button>
-        </div>
-
-        {otherOpen && (
-          <Input
-            value={value.newTypeLabel}
-            onChange={(e) => onChange({ newTypeLabel: e.target.value })}
-            placeholder="Dealer, Trailer rental, Testing…"
-            aria-label="New company type"
-            maxLength={60}
-            autoComplete="off"
-          />
-        )}
-      </div>
+      <ChipPicker
+        label="Type"
+        options={types}
+        icons={COMPANY_TYPE_ICONS}
+        fallbackIcon={DEFAULT_COMPANY_TYPE_ICON}
+        selected={value.typeIds}
+        onChange={(next) => onChange({ typeIds: next })}
+        newLabel={value.newTypeLabel}
+        onNewLabel={(next) => onChange({ newTypeLabel: next })}
+        newPlaceholder="Trailer rental, Testing, Logistics…"
+        newButtonLabel="New type"
+      />
 
       <Field label="What they do" hint="A sentence. It shows on the company's page.">
         <Textarea

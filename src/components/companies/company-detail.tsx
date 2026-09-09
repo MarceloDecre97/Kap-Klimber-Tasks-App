@@ -38,7 +38,7 @@ function draftFrom(c: CompanySummary): Draft {
     state: c.state ?? "",
     postalCode: c.postal_code ?? "",
     country: c.country ?? "",
-    typeId: c.type?.id ?? null,
+    typeIds: c.types.map((t) => t.id),
     newTypeLabel: "",
   };
 }
@@ -107,7 +107,7 @@ export function CompanyDetail({
 
   const address = formatAddress(company);
   const website = externalHref(company.website);
-  const Icon = COMPANY_TYPE_ICONS[company.type?.icon ?? ""] ?? DEFAULT_COMPANY_TYPE_ICON;
+  const Icon = COMPANY_TYPE_ICONS[company.types[0]?.icon ?? ""] ?? DEFAULT_COMPANY_TYPE_ICON;
 
   function patch(next: Partial<Draft>) {
     setDraft((d) => ({ ...d, ...next }));
@@ -199,8 +199,10 @@ export function CompanyDetail({
             </span>
             <div className="flex min-w-0 grow flex-col gap-1">
               <h1 className="text-screen-title text-fg text-pretty wrap-anywhere">{company.name}</h1>
-              <p className="text-[17px] leading-6 text-sub">
-                {company.type ? `${company.type.label} · ` : ""}
+              <p className="text-[17px] leading-6 text-sub text-pretty">
+                {company.types.length > 0
+                  ? `${company.types.map((t) => t.label).join(" · ")} · `
+                  : ""}
                 {companyPeopleLine(people.length)}
               </p>
             </div>
@@ -275,7 +277,10 @@ export function CompanyDetail({
               </div>
 
               <Section heading="Details">
-                <Row label="Type" value={company.type?.label ?? null} />
+                <Row
+                  label={company.types.length === 1 ? "Type" : "Types"}
+                  value={company.types.map((t) => t.label).join(" · ") || null}
+                />
                 <Row label="Main line" value={company.company_number} />
                 <Row label="Website" value={company.website} />
                 <Row label="Address" value={address} />

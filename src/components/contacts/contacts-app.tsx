@@ -30,7 +30,9 @@ import { CompanyDetail } from "@/components/companies/company-detail";
 import {
   COMPANY_TYPE_ICONS,
   DEFAULT_COMPANY_TYPE_ICON,
+  DEFAULT_RELATIONSHIP_ICON,
   EMPTY_COMPANY_FILTERS,
+  RELATIONSHIP_ICONS,
   countActiveCompanyFilters,
   countriesIn,
   groupCompanies,
@@ -38,11 +40,10 @@ import {
   type CompanyFilters,
   type CompanySummary,
   type CompanyType,
+  type ContactRelationship,
 } from "@/lib/companies-view";
 import { FilterDropdown, type FilterOption } from "@/components/tasks/filter-dropdown";
 import {
-  CATEGORY_ICONS,
-  DEFAULT_CATEGORY_ICON,
   DELETED_CONTACTS_VISIBLE_DAYS,
   EMPTY_CONTACT_FILTERS,
   avatarColor,
@@ -55,7 +56,7 @@ import {
   type ContactFilters,
 } from "@/lib/contacts-view";
 import { cn, formatDateGroup } from "@/lib/utils";
-import type { ContactCategory, ContactEvent, ContactSummary } from "@/lib/data/contacts";
+import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
 import type { NotificationFeed } from "@/lib/data/notifications";
 
 /** Which of the two books is open. */
@@ -80,7 +81,7 @@ export type Book = "contacts" | "companies";
 export function ContactsApp({
   contacts,
   deletedContacts,
-  categories,
+  relationships,
   companies,
   companyTypes,
   notifications,
@@ -89,7 +90,7 @@ export function ContactsApp({
   contacts: ContactSummary[];
   /** The bin, shared: it names who deleted each one, and anyone can act. */
   deletedContacts: ContactSummary[];
-  categories: ContactCategory[];
+  relationships: ContactRelationship[];
   companies: CompanySummary[];
   companyTypes: CompanyType[];
   notifications: NotificationFeed;
@@ -195,7 +196,10 @@ export function ContactsApp({
     });
   }
 
-  const companyNames = useMemo(() => companiesIn(contacts), [contacts]);
+  const companyNames = useMemo(
+    () => companiesIn(contacts.filter((c) => matchesContact(c, { ...filters, company: null }))),
+    [contacts, filters]
+  );
   const matching = useMemo(
     () => contacts.filter((c) => matchesContact(c, filters)),
     [contacts, filters]
@@ -208,14 +212,22 @@ export function ContactsApp({
     [companyNames]
   );
 
-  const categoryOptions: FilterOption<string>[] = useMemo(
-    () =>
-      categories.map((cat) => {
-        const Icon = CATEGORY_ICONS[cat.icon] ?? DEFAULT_CATEGORY_ICON;
-        return { value: cat.id, label: cat.label, icon: <Icon aria-hidden className="size-4" /> };
-      }),
-    [categories]
-  );
+  /*
+    Only relationships somebody in view actually carries, the same rule the
+    companies book follows. Both books, both filters, one behaviour.
+  */
+  const relationshipOptions: FilterOption<string>[] = useMemo(() => {
+    const inView = contacts.filter((c) =>
+      matchesContact(c, { ...filters, relationshipId: null })
+    );
+    const present = new Set(inView.flatMap((c) => c.relationships.map((r) => r.id)));
+    return relationships
+      .filter((r) => present.has(r.id))
+      .map((r) => {
+        const Icon = RELATIONSHIP_ICONS[r.icon] ?? DEFAULT_RELATIONSHIP_ICON;
+        return { value: r.id, label: r.label, icon: <Icon aria-hidden className="size-4" /> };
+      });
+  }, [contacts, filters, relationships]);
 
   const isEmptyBook = contacts.length === 0;
 
@@ -258,7 +270,7 @@ export function ContactsApp({
 
   const typeOptions: FilterOption<string>[] = useMemo(() => {
     const inView = companies.filter((c) => matchesCompany(c, { ...companyFilters, typeId: null }));
-    const present = new Set(inView.map((c) => c.type?.id).filter(Boolean));
+    const present = new Set(inView.flatMap((c) => c.types.map((t) => t.id)));
     return companyTypes
       .filter((type) => present.has(type.id))
       .map((type) => {
@@ -305,7 +317,7 @@ export function ContactsApp({
     const params = new URLSearchParams();
     if (filters.query.trim()) params.set("q", filters.query.trim());
     if (filters.company) params.set("company", filters.company);
-    if (filters.categoryId) params.set("category", filters.categoryId);
+    if (filters.relationshipId) params.set("relationship", filters.relationshipId);
     const query = params.toString();
     return query ? `?${query}` : "";
   }, [filters]);
@@ -542,19 +554,21 @@ export function ContactsApp({
                       setFilters((f) => ({ ...f, company: next[next.length - 1] ?? null }))
                     }
                   />
+                  {/* "Type" in both books, because it is the same question
+                      asked of two different things. */}
                   <FilterDropdown
-                    label="Category"
+                    label="Type"
                     icon={<Tag aria-hidden className="size-4" />}
-                    options={categoryOptions}
-                    selected={filters.categoryId ? [filters.categoryId] : []}
+                    options={relationshipOptions}
+                    selected={filters.relationshipId ? [filters.relationshipId] : []}
                     onChange={(next) =>
-                      setFilters((f) => ({ ...f, categoryId: next[next.length - 1] ?? null }))
+                      setFilters((f) => ({ ...f, relationshipId: next[next.length - 1] ?? null }))
                     }
                   />
                   {activeFilters > 0 && (
                     <button
                       type="button"
-                      onClick={() => setFilters((f) => ({ ...f, company: null, categoryId: null }))}
+                      onClick={() => setFilters((f) => ({ ...f, company: null, relationshipId: null }))}
                       className="inline-flex h-12 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[16px] leading-[22px] font-bold text-sub hover:text-fg"
                     >
                       <X aria-hidden className="size-4" />
