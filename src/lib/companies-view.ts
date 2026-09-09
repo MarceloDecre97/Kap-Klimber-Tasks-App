@@ -109,21 +109,65 @@ export function exactCompanyMatch<T extends { name: string }>(
 }
 
 /**
- * Companies that are probably the one being typed, but are not spelled the
- * same. Empty when there is an exact match — there is nothing to ask about
- * once the name is already right.
+ * Companies that are probably the one being typed.
+ *
+ * Three ways in, because the old rule only caught one of them and stayed
+ * silent on the two that actually happened:
+ *
+ *   exact     the name is already in the book, letter for letter
+ *   prefix    one name is the start of the other — "ADV Mobil" against
+ *             "ADV Mobil LLC", "ADV Mobil COR" against "ADV Mobil CORP"
+ *   reduced   the names differ only by punctuation or a legal suffix
+ *
+ * At least three characters, so it does not fire on the first keystroke; and
+ * because prefix matching stops the moment the names diverge, typing a
+ * genuinely new company warns for a moment and then goes quiet — "ADV"
+ * matches, "ADV T" does not.
  */
 export function nearCompanyMatches<T extends { name: string }>(
   name: string,
   companies: T[]
 ): T[] {
   const typed = name.trim();
-  if (!typed) return [];
-  if (exactCompanyMatch(typed, companies)) return [];
+  if (typed.length < MIN_DUPLICATE_CHARS) return [];
 
+  const q = fold(typed);
+  if (!q) return [];
   const key = normalizeCompanyName(typed);
-  if (!key) return [];
-  return companies.filter((c) => normalizeCompanyName(c.name) === key);
+
+  return companies.filter((c) => {
+    const other = fold(c.name);
+    if (other === q) return true;
+    if (other.startsWith(q) || q.startsWith(other)) return true;
+    return Boolean(key) && normalizeCompanyName(c.name) === key;
+  });
+}
+
+/**
+ * Whether what has been typed *is* one of these, letter for letter.
+ *
+ * Worth its own answer because the two cases need different words. A name
+ * that merely looks alike is a question — "did you mean that one?" — while a
+ * name that already exists is a statement, and the only way forward is to
+ * open the one that is there.
+ */
+export function exactCompanyDuplicate<T extends { name: string }>(
+  name: string,
+  companies: T[]
+): T | null {
+  return exactCompanyMatch(name, companies);
+}
+
+/** Below this many characters, everything looks like everything. */
+const MIN_DUPLICATE_CHARS = 3;
+
+/** Case- and accent-insensitive, for comparing two names as people read them. */
+function fold(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
 }
 
 /**

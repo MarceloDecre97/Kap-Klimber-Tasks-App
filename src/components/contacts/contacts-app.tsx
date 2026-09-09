@@ -20,6 +20,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/layout/app-header";
 import { useToast } from "@/components/ui/toast";
 import { DeleteContactDialog } from "@/components/contacts/delete-contact-dialog";
+import { ExportDialog } from "@/components/contacts/export-dialog";
 import { contactActivity, restoreContact } from "@/app/contacts/actions";
 import { ContactDetail } from "@/components/contacts/contact-detail";
 import { Avatar } from "@/components/ui/avatar";
@@ -100,6 +101,8 @@ export function ContactsApp({
   const [filters, setFilters] = useState<ContactFilters>(EMPTY_CONTACT_FILTERS);
   const [showBin, setShowBin] = useState(false);
   const [erasing, setErasing] = useState<ContactSummary | null>(null);
+  /* Export asks first — see ExportDialog for why. */
+  const [exporting, setExporting] = useState(false);
   const [, startTransition] = useTransition();
 
   /*
@@ -235,19 +238,34 @@ export function ContactsApp({
   const companyGroups = useMemo(() => groupCompanies(matchingCompanies), [matchingCompanies]);
   const activeCompanyFilters = countActiveCompanyFilters(companyFilters);
 
+  /*
+    Each dropdown offers only what the *other* one, and the search, leave
+    standing. Country was already derived from the data; Type came from the
+    whole table, so picking United States still offered every type in the
+    book including ones no American company had. Two filters side by side
+    behaving differently is the kind of thing nobody can name but everybody
+    feels.
+  */
   const countryOptions: FilterOption<string>[] = useMemo(
-    () => countriesIn(companies).map((name) => ({ value: name, label: name })),
-    [companies]
+    () =>
+      countriesIn(
+        companies.filter((c) =>
+          matchesCompany(c, { ...companyFilters, country: null })
+        )
+      ).map((name) => ({ value: name, label: name })),
+    [companies, companyFilters]
   );
 
-  const typeOptions: FilterOption<string>[] = useMemo(
-    () =>
-      companyTypes.map((type) => {
+  const typeOptions: FilterOption<string>[] = useMemo(() => {
+    const inView = companies.filter((c) => matchesCompany(c, { ...companyFilters, typeId: null }));
+    const present = new Set(inView.map((c) => c.type?.id).filter(Boolean));
+    return companyTypes
+      .filter((type) => present.has(type.id))
+      .map((type) => {
         const Icon = COMPANY_TYPE_ICONS[type.icon] ?? DEFAULT_COMPANY_TYPE_ICON;
         return { value: type.id, label: type.label, icon: <Icon aria-hidden className="size-4" /> };
-      }),
-    [companyTypes]
-  );
+      });
+  }, [companies, companyFilters, companyTypes]);
 
   const selectedCompany = useMemo(
     () => (selectedCompanyId ? companies.find((c) => c.id === selectedCompanyId) ?? null : null),
@@ -263,6 +281,15 @@ export function ContactsApp({
   const peopleAtSelectedCompany = useMemo(
     () => (selectedCompany ? contacts.filter((c) => c.company_id === selectedCompany.id) : []),
     [contacts, selectedCompany]
+  );
+
+  /* The bin is already loaded for Recently deleted, so this costs nothing. */
+  const binnedAtSelectedCompany = useMemo(
+    () =>
+      selectedCompany
+        ? deletedContacts.filter((c) => c.company_id === selectedCompany.id).length
+        : 0,
+    [deletedContacts, selectedCompany]
   );
 
   const showingCompanies = book === "companies";
@@ -371,17 +398,14 @@ export function ContactsApp({
               that quietly exported the other one would be worse than none.
             */}
             {(showingCompanies ? !isEmptyCompanyBook : !isEmptyBook) && (
-              <a
-                href={
-                  showingCompanies
-                    ? `/companies/export${companyExportQuery}`
-                    : `/contacts/export${exportQuery}`
-                }
-                className="inline-flex h-[60px] shrink-0 items-center justify-center gap-2 rounded-2xl border-[1.5px] border-fg bg-transparent px-4 text-[18px] leading-7 font-bold text-fg hover:bg-muted"
+              <button
+                type="button"
+                onClick={() => setExporting(true)}
+                className="inline-flex h-[60px] shrink-0 cursor-pointer items-center justify-center gap-2 rounded-2xl border-[1.5px] border-fg bg-transparent px-4 text-[18px] leading-7 font-bold text-fg hover:bg-muted"
               >
                 <Sheet aria-hidden className="size-5" strokeWidth={1.75} />
                 Export
-              </a>
+              </button>
             )}
           </div>
 
@@ -662,8 +686,11 @@ export function ContactsApp({
               company={selectedCompany}
               people={peopleAtSelectedCompany}
               types={companyTypes}
+              companies={companies}
+              binnedPeople={binnedAtSelectedCompany}
               embedded
               onGone={() => setSelectedCompanyId(null)}
+              onClose={() => setSelectedCompanyId(null)}
               /* Opening somebody flips back to the contacts book rather
                  than leaving the screen. Two books, one place. */
               onOpenContact={(contact) => {
@@ -689,6 +716,7 @@ export function ContactsApp({
             events={panelEvents}
             embedded
             onGone={() => setSelectedId(null)}
+            onClose={() => setSelectedId(null)}
             onOpenCompany={openCompany}
           />
         ) : (
@@ -700,6 +728,19 @@ export function ContactsApp({
         )}
       </aside>
       </div>
+
+      <ExportDialog
+        open={exporting}
+        onClose={() => setExporting(false)}
+        href={
+          showingCompanies
+            ? `/companies/export${companyExportQuery}`
+            : `/contacts/export${exportQuery}`
+        }
+        noun={showingCompanies ? "company" : "contact"}
+        showing={showingCompanies ? matchingCompanies.length : matching.length}
+        total={showingCompanies ? companies.length : contacts.length}
+      />
 
       <DeleteContactDialog
         contact={erasing}

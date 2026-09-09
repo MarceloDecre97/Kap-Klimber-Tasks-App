@@ -138,8 +138,8 @@ export function CompanyField({
   );
 
   const near = useMemo(
-    () => nearCompanyMatches(draft.company, companies),
-    [companies, draft.company]
+    () => nearCompanyMatches(draft.company, companies).filter((c) => c.id !== draft.companyId),
+    [companies, draft.company, draft.companyId]
   );
 
   const suggestions = useMemo(
@@ -149,7 +149,12 @@ export function CompanyField({
 
   const typed = draft.company.trim();
   const showSuggestions = focused && !linked && suggestions.length > 0;
-  const showNear = near.length > 0 && dismissed !== typed.toLowerCase();
+  /*
+    Only when nothing is linked. On this form an exact match is not a
+    collision — it links itself, which is the whole point — so warning about
+    it would be telling somebody off for the thing that just worked.
+  */
+  const showNear = !linked && near.length > 0 && dismissed !== typed.toLowerCase();
   const isNew = typed.length > 0 && !linked;
 
   /**

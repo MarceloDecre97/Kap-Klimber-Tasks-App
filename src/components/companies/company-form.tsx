@@ -14,7 +14,12 @@ import {
 } from "@/components/companies/company-fields";
 import { createCompany } from "@/app/companies/actions";
 import { countryUnmatched } from "@/components/ui/country-field";
-import { nearCompanyMatches, type CompanySummary, type CompanyType } from "@/lib/companies-view";
+import {
+  exactCompanyDuplicate,
+  nearCompanyMatches,
+  type CompanySummary,
+  type CompanyType,
+} from "@/lib/companies-view";
 
 type Draft = CompanyDetails & { name: string };
 
@@ -49,8 +54,15 @@ export function CompanyForm({
   }
 
   const typed = draft.name.trim();
-  const near = nearCompanyMatches(typed, companies);
-  const showNear = near.length > 0 && dismissed !== typed.toLowerCase();
+  /*
+    Two different answers, because they need different words. A name that
+    already exists letter for letter is a statement — there is nothing to
+    create, only something to open. A name that merely looks like one is a
+    question, and "create it separately" is a real answer to it.
+  */
+  const exact = exactCompanyDuplicate(typed, companies);
+  const near = nearCompanyMatches(typed, companies).filter((c) => c.id !== exact?.id);
+  const showNear = !exact && near.length > 0 && dismissed !== typed.toLowerCase();
 
   function save() {
     if (!typed) {
@@ -106,6 +118,24 @@ export function CompanyForm({
                 autoComplete="off"
               />
             </Field>
+
+            {exact && (
+              <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-danger bg-card px-4 py-3">
+                <span className="flex items-start gap-2 text-[17px] leading-6 text-fg text-pretty">
+                  <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-danger" strokeWidth={2} />
+                  <span>
+                    <span className="font-bold">{exact.name}</span> is already in the book. Saving
+                    this would not add a second one.
+                  </span>
+                </span>
+                <Link
+                  href={`/companies/${exact.id}`}
+                  className="inline-flex h-14 w-fit items-center gap-2 rounded-2xl bg-btn px-5 text-chip text-on-btn hover:bg-btn-hover"
+                >
+                  Open that one
+                </Link>
+              </div>
+            )}
 
             {showNear && (
               <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-brand bg-card px-4 py-3">

@@ -71,6 +71,27 @@ export async function getCompany(
   return { ...company, type: company.type ?? null };
 }
 
+/**
+ * How many of a company's people are in Recently deleted.
+ *
+ * They still hold the foreign key, so the company cannot be removed until
+ * they are erased. Asked of the database rather than worked out from a list,
+ * because the company page does not load the bin.
+ */
+export async function countBinnedAtCompany(
+  supabase: SupabaseClient<Database>,
+  companyId: string
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("contacts")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", companyId)
+    .not("deleted_at", "is", null);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
 /** The types, in the order the table says to show them. */
 export async function listCompanyTypes(
   supabase: SupabaseClient<Database>

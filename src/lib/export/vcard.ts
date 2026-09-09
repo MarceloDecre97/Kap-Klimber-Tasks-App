@@ -38,26 +38,34 @@ export function buildVCard(contact: ContactSummary): string {
   if (contact.website) lines.push(`URL:${esc(contact.website)}`);
 
   /*
-    The address on the card is the person's own if they have one, and the
-    company's otherwise.
+    Both addresses, kept apart.
 
-    Most people do not have their own — they work at the company address,
-    which is why it lives on the company. Without this fallback, saving such
-    a contact to a phone would produce a card with no address at all, and
-    the whole point of the company table would have made the vCard worse.
+    The company's is WORK and the person's own is HOME, which is how a phone
+    labels them — so a card saved from here shows "Work" and "Home" rather
+    than two unlabelled blocks. Emitting only one used to mean that somebody
+    with their own address lost the company's, and somebody without one had a
+    card that looked like it belonged to them personally.
+
+    ADR is seven parts: po;extended;street;locality;region;postcode;country.
+    The second slot is the extended address, which is exactly what a suite is.
   */
-  const hasOwn = Boolean(
-    contact.street || contact.city || contact.state || contact.postal_code || contact.country
-  );
-  const place = hasOwn ? contact : contact.company_record;
+  const adr = (place: {
+    suite: string | null; street: string | null; city: string | null;
+    state: string | null; postal_code: string | null; country: string | null;
+  }) =>
+    `;${esc(place.suite)};${esc(place.street)};${esc(place.city)};${esc(place.state)};${esc(place.postal_code)};${esc(place.country)}`;
 
-  // ADR is seven parts: po;extended;street;locality;region;postcode;country.
-  if (place && (place.street || place.city || place.state || place.postal_code || place.country)) {
-    // The second slot is "extended address", which is exactly what a suite
-    // or unit number is, and the last is the country.
-    lines.push(
-      `ADR;TYPE=WORK:;${esc(place.suite)};${esc(place.street)};${esc(place.city)};${esc(place.state)};${esc(place.postal_code)};${esc(place.country)}`
-    );
+  const hasAddress = (place: {
+    street: string | null; city: string | null; state: string | null;
+    postal_code: string | null; country: string | null;
+  } | null) =>
+    Boolean(place && (place.street || place.city || place.state || place.postal_code || place.country));
+
+  if (hasAddress(contact.company_record)) {
+    lines.push(`ADR;TYPE=WORK:${adr(contact.company_record!)}`);
+  }
+  if (hasAddress(contact)) {
+    lines.push(`ADR;TYPE=HOME:${adr(contact)}`);
   }
 
   /*

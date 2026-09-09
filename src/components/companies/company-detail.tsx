@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ExternalLink, Globe, Pencil, Phone, Trash2 } from "lucide-react";
+import { ChevronLeft, ExternalLink, Globe, Pencil, Phone, Trash2, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -16,6 +16,7 @@ import {
   COMPANY_TYPE_ICONS,
   DEFAULT_COMPANY_TYPE_ICON,
   companyPeopleLine,
+  nearCompanyMatches,
   type CompanySummary,
   type CompanyType,
 } from "@/lib/companies-view";
@@ -55,17 +56,30 @@ export function CompanyDetail({
   company,
   people,
   types,
+  companies = [],
+  binnedPeople = 0,
   embedded = false,
   onGone,
+  onClose,
   onOpenContact,
 }: {
   company: CompanySummary;
   people: ContactSummary[];
   types: CompanyType[];
+  /** The rest of the book, so a rename can be checked against it. */
+  companies?: CompanySummary[];
+  /**
+   * How many of this company's people are in Recently deleted. They still
+   * hold the foreign key, so the company cannot go until they are erased —
+   * which is what 0027 now says out loud instead of failing on a constraint.
+   */
+  binnedPeople?: number;
   /** True inside the desktop panel: no header, no going anywhere. */
   embedded?: boolean;
   /** Called instead of navigating when the company is removed. */
   onGone?: () => void;
+  /** Clears the panel. Only meaningful when embedded. */
+  onClose?: () => void;
   /** In the panel, opening a person switches books rather than navigating. */
   onOpenContact?: (contact: ContactSummary) => void;
 }) {
@@ -76,6 +90,20 @@ export function CompanyDetail({
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  /*
+    Renaming had no duplicate check at all — the two creation paths had one
+    and this did not, which is how a near-duplicate got into the book through
+    the edit screen. Itself excluded, or every company would clash with its
+    own name the moment you opened the form.
+  */
+  const renameClashes = useMemo(
+    () =>
+      editing
+        ? nearCompanyMatches(draft.name, companies).filter((c) => c.id !== company.id)
+        : [],
+    [companies, company.id, draft.name, editing]
+  );
 
   const address = formatAddress(company);
   const website = externalHref(company.website);
@@ -139,13 +167,24 @@ export function CompanyDetail({
       <div className={cn("flex-1 overflow-y-auto px-5", embedded ? "py-5" : "py-6")}>
         <div className={cn("mx-auto flex w-full flex-col gap-6", embedded ? "max-w-none" : "max-w-[640px]")}>
           {embedded && (
-            <Link
-              href={`/companies/${company.id}`}
-              className="inline-flex w-fit items-center gap-2 text-[17px] leading-6 font-bold text-brand"
-            >
-              <ExternalLink aria-hidden className="size-[18px]" strokeWidth={2} />
-              Open full page
-            </Link>
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                href={`/companies/${company.id}`}
+                className="inline-flex w-fit items-center gap-2 text-[17px] leading-6 font-bold text-brand"
+              >
+                <ExternalLink aria-hidden className="size-[18px]" strokeWidth={2} />
+                Open full page
+              </Link>
+              {/* The way back out — see the twin of this on the contact panel. */}
+              <button
+                type="button"
+                aria-label="Close this company"
+                onClick={onClose}
+                className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl text-sub hover:bg-muted hover:text-fg"
+              >
+                <X aria-hidden className="size-5" strokeWidth={2} />
+              </button>
+            </div>
           )}
 
           {error && (
@@ -176,6 +215,16 @@ export function CompanyDetail({
                 <Field label="Name" required>
                   <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} maxLength={120} autoComplete="off" />
                 </Field>
+
+                {renameClashes.length > 0 && (
+                  <div className="flex items-start gap-2 rounded-2xl border-[1.5px] border-brand bg-card px-4 py-3 text-[17px] leading-6 text-fg text-pretty">
+                    <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-brand" strokeWidth={2} />
+                    <span>
+                      <span className="font-bold">{renameClashes[0]!.name}</span> is already in the
+                      book. Renaming this one to something so close will leave you with two.
+                    </span>
+                  </div>
+                )}
                 <CompanyFields types={types} value={draft} onChange={patch} />
               </Group>
 
@@ -237,7 +286,9 @@ export function CompanyDetail({
           <Section heading="Who works there">
             {people.length === 0 ? (
               <p className="text-[17px] leading-6 text-sub text-pretty">
-                Nobody in the book works here yet. Add a contact and type this company on them.
+                {binnedPeople > 0
+                  ? `Nobody works here any more, but ${binnedPeople === 1 ? "somebody is" : `${binnedPeople} people are`} in Recently deleted. Erase ${binnedPeople === 1 ? "them" : "them all"} for good and this company can go too.`
+                  : "Nobody in the book works here yet. Add a contact and type this company on them."}
               </p>
             ) : (
               <ul className="flex flex-col gap-2.5">
@@ -277,7 +328,7 @@ export function CompanyDetail({
                 still here the button would produce nothing but a refusal,
                 and a button that always refuses is worse than no button.
               */}
-              {people.length === 0 && (
+              {people.length === 0 && binnedPeople === 0 && (
                 <button
                   type="button"
                   onClick={() => setConfirmingDelete(true)}

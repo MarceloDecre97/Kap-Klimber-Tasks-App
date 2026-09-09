@@ -225,7 +225,15 @@ export function formatAddress(c: {
   postal_code: string | null;
   country?: string | null;
 }): string | null {
-  const streetLine = [c.street?.trim(), c.suite?.trim()].filter(Boolean).join(", ");
+  /*
+    The suite carries a label. "199 Markham road, 11" reads as a typo — the
+    number could be anything — where "199 Markham road, Suite 11" is a place.
+    Left alone when somebody has already written what it is, so "Unit 4" and
+    "Floor 2" do not become "Suite Unit 4".
+  */
+  const suite = c.suite?.trim();
+  const labelled = suite && /^[\d\-\s]+$/.test(suite) ? `Suite ${suite}` : suite;
+  const streetLine = [c.street?.trim(), labelled].filter(Boolean).join(", ");
   const cityLine = [c.city, [c.state, c.postal_code].filter(Boolean).join(" ")]
     .filter((part) => part && part.trim())
     .join(", ");

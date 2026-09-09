@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, ExternalLink, Mail, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronLeft, Download, ExternalLink, Mail, Pencil, Phone, RotateCcw, Trash2, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import {
   DeleteContactDialog,
@@ -42,6 +42,7 @@ export function ContactDetail({
   fromTaskId,
   embedded = false,
   onGone,
+  onClose,
   onOpenCompany,
 }: {
   contact: ContactSummary;
@@ -52,6 +53,8 @@ export function ContactDetail({
   embedded?: boolean;
   /** Called instead of navigating when the contact is deleted or erased. */
   onGone?: () => void;
+  /** Clears the panel. Only meaningful when embedded. */
+  onClose?: () => void;
   /**
    * In the panel, the company flips the book beside it rather than
    * navigating. The two books are one place; leaving it to look at a
@@ -140,13 +143,29 @@ export function ContactDetail({
           className={cn("mx-auto flex w-full flex-col gap-6", embedded ? "max-w-none" : "max-w-[640px]")}
         >
           {embedded && (
-            <Link
-              href={`/contacts/${contact.id}`}
-              className="inline-flex w-fit items-center gap-2 text-[17px] leading-6 font-bold text-brand"
-            >
-              <ExternalLink aria-hidden className="size-[18px]" strokeWidth={2} />
-              Open full page
-            </Link>
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                href={`/contacts/${contact.id}`}
+                className="inline-flex w-fit items-center gap-2 text-[17px] leading-6 font-bold text-brand"
+              >
+                <ExternalLink aria-hidden className="size-[18px]" strokeWidth={2} />
+                Open full page
+              </Link>
+              {/*
+                There was no way back out of the panel. Once somebody was
+                open they stayed open — you could replace them, never clear
+                them — so the screen kept showing a person you had finished
+                with.
+              */}
+              <button
+                type="button"
+                aria-label="Close this contact"
+                onClick={onClose}
+                className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl text-sub hover:bg-muted hover:text-fg"
+              >
+                <X aria-hidden className="size-5" strokeWidth={2} />
+              </button>
+            </div>
           )}
           {contact.deleted_at && (
             <p className="rounded-2xl border-[1.5px] border-danger bg-card px-4 py-3 text-[17px] leading-6 text-danger text-pretty">
