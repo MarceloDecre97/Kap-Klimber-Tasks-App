@@ -86,11 +86,22 @@ export function formatPhone(value: string | null | undefined): string {
   if (raw.startsWith("+")) {
     for (const code of CALLING_CODES) {
       if (!digits.startsWith(code)) continue;
-      const national = groupNational(digits.slice(code.length), false);
+      const rest = digits.slice(code.length);
+      const national = groupNational(rest, false);
       if (national) return `+${code} ${national}`;
-      // The code matched but the rest is not a shape we know. Longer codes
-      // were tried first, so there is nothing better coming — leave it.
-      break;
+      /*
+        The code matched but the rest is not a shape we know — a nine-digit
+        Swiss mobile, say. We still will not invent a grouping for it, but a
+        run of eleven digits with no break at all ("+41793573300") is not a
+        phone number anybody can read, so the country code is separated and
+        the rest left exactly as it is.
+
+        Only when nothing was spaced to begin with. Somebody who typed
+        "+41 79 357 3300" has already said how they want it read, and
+        rewriting that would be the mangling this whole branch avoids.
+        Longer codes were tried first, so nothing better is coming.
+      */
+      return /\s/.test(raw) ? raw : `+${code} ${rest}`;
     }
     return raw;
   }
