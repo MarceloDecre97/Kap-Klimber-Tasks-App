@@ -141,6 +141,64 @@ Marcelo will have **two migrations to run**, 0027 then 0028, in that order.
 
 ---
 
-## Still open
+## 9 · Chips: what a company is, what a person is to us
 
-One further change, not yet described. To be added here before work starts.
+The defect: `contact_categories` (Fleets, Partners, Suppliers, Industry,
+Investors) described *organisations*, not people. Tagging Mike Morrison meant
+classifying a human being with a vocabulary built for businesses — and the answer
+was always guessable from his company, so the chip carried nothing.
+
+The test that settles it: **can you guess the chip from the company?** The old list
+failed. The new one passes — nothing about Royal Truck & Utility Trailer says
+whether Mike is our client contact or our consultant.
+
+**Two axes, neither derivable from the other.**
+
+- **Company type** — what this business is in the industry. Multi-select, because
+  Royal genuinely is a Trailer Dealer *and* a Parts Dealer *and* an Upfitter, and a
+  single `type_id` makes the book lie about companies like it.
+  Fleet · OEM Manufacturer · Trailer Dealer · Parts Dealer · Upfitter · Installer ·
+  Service · Supplier · Institution · Other
+- **Contact relationship** — what this person is to Opus Kap. Also multi-select, for
+  one mechanic rather than two.
+  Investor · Consultant · Lawyer · Partner · Client · Private installer · Other
+
+Both still extend by typing, as now. "Client or KAM" became **Client**: KAM is a job
+title, and job titles are already typed in full. **Installer** stays on the company
+list so Corebridge does not need retagging — a company that installs and a person who
+installs privately are both real.
+
+**Where each chip appears** — one set per row, or the list turns to confetti:
+
+| Surface | Shows |
+|---|---|
+| Contact row | the person's relationship chips, on line 4 beside the phone |
+| Company row | the company's type chips, capped at 2 + "+n" |
+| Contact page / panel | relationship at the top; the company's types under *Where they work* |
+
+**The collapsed contact row** becomes three lines plus chips, which also fixes the
+title wrapping that orphaned the company name:
+
+```
+Mike Morrison
+Royal Truck & Utility Trailer
+Vice President of Aftermarket Sales and Operations
+Client                          (313)-304-0028
+```
+
+**Migration 0029.** Company types go many-to-many. Contact categories are replaced by
+relationships, mapped: Partners → Partner, Investors → Investor. **Fleets** and
+**Suppliers** describe companies, so they move onto the contact's company as a type
+and the person's chip is left blank rather than inventing a relationship Marcelo never
+chose. The contacts filter is renamed from "Category" to "Type" so both books use one
+word.
+
+Executed **last**, as its own commit: it is larger than 1–8 combined and rewrites the
+same files as items 3 and 5. Fixing first and redesigning second means each half can
+be tested for what it is.
+
+---
+
+## Migrations, in order
+
+**0027** company delete vs the bin · **0028** phone backfill · **0029** chips

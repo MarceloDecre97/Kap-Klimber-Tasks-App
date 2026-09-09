@@ -13,6 +13,7 @@ import {
   type CompanyDetails,
 } from "@/components/companies/company-fields";
 import { createCompany } from "@/app/companies/actions";
+import { countryUnmatched } from "@/components/ui/country-field";
 import { nearCompanyMatches, type CompanySummary, type CompanyType } from "@/lib/companies-view";
 
 type Draft = CompanyDetails & { name: string };
@@ -54,6 +55,10 @@ export function CompanyForm({
   function save() {
     if (!typed) {
       setError("A company needs a name.");
+      return;
+    }
+    if (countryUnmatched(draft.country)) {
+      setError("Pick a country from the list, or clear the box.");
       return;
     }
     startTransition(async () => {

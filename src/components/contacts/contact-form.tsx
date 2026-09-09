@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
+import { CountryField, countryUnmatched } from "@/components/ui/country-field";
 import { DuplicateDialog } from "@/components/contacts/duplicate-dialog";
 import { Field, Group } from "@/components/contacts/form-field";
 import { CompanyField, type CompanyDraft } from "@/components/contacts/company-field";
@@ -18,13 +19,14 @@ import {
 import { CATEGORY_ICONS, DEFAULT_CATEGORY_ICON } from "@/lib/contacts-view";
 import {
   FIELD_LABELS,
-  emailLooksWrong,
+  emailProblem,
   errorSummary,
-  phoneLooksWrong,
+  phoneProblem,
   validateContact,
   type ContactErrors,
   type ContactField,
 } from "@/lib/contact-form";
+import { formatPhone } from "@/lib/phones";
 import { cn } from "@/lib/utils";
 import type { CompanySummary, CompanyType } from "@/lib/companies-view";
 import type { ContactCategory, ContactSummary } from "@/lib/data/contacts";
@@ -142,15 +144,22 @@ export function ContactForm({
     setTouched((t) => ({ ...t, [field]: true }));
   }
 
+  /*
+    Formatting happens when you leave the box, not as you type — rewriting a
+    number under a moving cursor is how a field fights the person using it.
+    The server formats again on save, so a number that arrives by any other
+    route is written the same way.
+  */
+  function leavePhone(field: "mobile" | "officePhone") {
+    leave(field);
+    setDraft((d) => ({ ...d, [field]: formatPhone(d[field]) }));
+  }
+
   /** The live shape checks, which only ever run on a field you have left. */
   const liveError = (field: ContactField): string | undefined => {
     if (!touched[field]) return undefined;
-    if ((field === "email" || field === "email2") && emailLooksWrong(draft[field])) {
-      return "That email is missing something after the dot.";
-    }
-    if ((field === "mobile" || field === "officePhone") && phoneLooksWrong(draft[field])) {
-      return "That looks too short for a phone number.";
-    }
+    if (field === "email" || field === "email2") return emailProblem(draft[field]) ?? undefined;
+    if (field === "mobile" || field === "officePhone") return phoneProblem(field, draft[field]) ?? undefined;
     return undefined;
   };
 
@@ -169,6 +178,19 @@ export function ContactForm({
       action would refuse.
     */
     const found = validateContact(draft);
+    /*
+      A country box holding text that is not a country. The server drops such
+      a value rather than storing a second spelling of somewhere, so the save
+      has to stop here — otherwise the country quietly disappears and nobody
+      finds out until they look.
+    */
+    if (countryUnmatched(draft.country)) {
+      found.country = "Pick a country from the list, or clear the box.";
+    }
+    if (countryUnmatched(draft.companyCountry)) {
+      setError("Pick the company's country from the list, or clear the box.");
+      return;
+    }
     if (Object.keys(found).length > 0) {
       setErrors(found);
       setTouched((t) => ({ ...t, ...Object.fromEntries(Object.keys(found).map((k) => [k, true])) }));
@@ -269,10 +291,10 @@ export function ContactForm({
 
           <Group heading="How to reach them" hint="A phone or an email — one of the two is enough.">
             <Field label="Mobile" error={shown.mobile}>
-              <Input value={draft.mobile} onChange={(e) => set("mobile", e.target.value)} onBlur={() => leave("mobile")} inputMode="tel" autoComplete="off" />
+              <Input value={draft.mobile} onChange={(e) => set("mobile", e.target.value)} onBlur={() => leavePhone("mobile")} inputMode="tel" autoComplete="off" />
             </Field>
             <Field label="Office phone" error={shown.officePhone}>
-              <Input value={draft.officePhone} onChange={(e) => set("officePhone", e.target.value)} onBlur={() => leave("officePhone")} inputMode="tel" autoComplete="off" />
+              <Input value={draft.officePhone} onChange={(e) => set("officePhone", e.target.value)} onBlur={() => leavePhone("officePhone")} inputMode="tel" autoComplete="off" />
             </Field>
             <Field label="Email" error={shown.email}>
               <Input value={draft.email} onChange={(e) => set("email", e.target.value)} onBlur={() => leave("email")} inputMode="email" autoComplete="off" />
@@ -311,8 +333,18 @@ export function ContactForm({
                 <Input value={draft.postalCode} onChange={(e) => set("postalCode", e.target.value)} autoComplete="off" />
               </Field>
             </div>
-            <Field label="Country">
-              <Input value={draft.country} onChange={(e) => set("country", e.target.value)} autoComplete="off" />
+            {/*
+              Picked, not typed free — the same control the company address
+              uses. It was built for the company block and never wired up
+              here, which is why one address had a picker and the other did
+              not.
+            */}
+            <Field label="Country" hint="Type a few letters and pick it from the list.">
+              <CountryField
+                value={draft.country}
+                onChange={(next) => set("country", next)}
+                ariaLabel="Their country"
+              />
             </Field>
           </Group>
 

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Field, Group } from "@/components/contacts/form-field";
 import { CompanyFields, type CompanyDetails as Details } from "@/components/companies/company-fields";
+import { countryUnmatched } from "@/components/ui/country-field";
 import { ContactRow } from "@/components/contacts/contact-row";
 import { deleteCompany, updateCompany } from "@/app/companies/actions";
 import {
@@ -88,6 +89,10 @@ export function CompanyDetail({
   function save() {
     if (!draft.name.trim()) {
       setError("A company needs a name.");
+      return;
+    }
+    if (countryUnmatched(draft.country)) {
+      setError("Pick a country from the list, or clear the box.");
       return;
     }
     startTransition(async () => {

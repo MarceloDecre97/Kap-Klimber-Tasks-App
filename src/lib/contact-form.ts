@@ -1,4 +1,5 @@
 import { contactInputSchema } from "@/lib/validation";
+import { phoneTooShort, phoneTooShortMessage } from "@/lib/phones";
 
 /**
  * What the contact form knows about being wrong.
@@ -55,27 +56,48 @@ export function validateContact(draft: unknown): ContactErrors {
    catch a shape that is definitely wrong, never one that is merely unusual.
    ------------------------------------------------------------------------- */
 
-/** something@something.tld — the shape, not a guarantee it exists. */
+/**
+ * What is wrong with an email, in the words of the thing that is wrong.
+ *
+ * One message used to cover every failure, so "marcelo.dg97gmail.com" — no @
+ * at all — was reported as "missing something after the dot". Being told to
+ * fix the wrong end of an address is worse than being told nothing.
+ *
+ * Returns null when the shape is fine, or when the box is still empty.
+ */
+export function emailProblem(value: string): string | null {
+  const v = value.trim();
+  if (!v) return null;
+
+  if (/\s/.test(v)) return "An email address can't have a space in it.";
+
+  const at = v.split("@");
+  if (at.length === 1) return "That email is missing its @.";
+  if (at.length > 2) return "That email has more than one @.";
+
+  const [local, domain] = at as [string, string];
+  if (!local) return "That email is missing the part before the @.";
+  if (!domain) return "That email is missing the part after the @.";
+  if (!domain.includes(".")) return "That email is missing the dot — .com, .org, and so on.";
+  if (!/\.[^.]{2,}$/.test(domain)) return "That email is missing something after the dot.";
+  return null;
+}
+
+/** Kept as the yes/no form of the above, for callers that only need that. */
 export function emailLooksWrong(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed);
+  return emailProblem(value) !== null;
 }
 
 /**
- * A phone that is too short to be one.
+ * A phone that is too short for the field it is in.
  *
- * Seven digits, not ten. A ten-digit rule is a US rule, and this book
- * already holds +41 79 357 3300 and +52 818 080 6605 — eleven and twelve
- * digits — while a US number written +1 312 555 0143 is also eleven.
- * Marking real numbers red teaches people to ignore the colour.
+ * Three answers rather than one: a mobile is a full number or it is not a
+ * mobile, while an office line is routinely the local seven. The rule itself
+ * lives in phones.ts — this only decides which of the three applies here.
  */
-const MIN_PHONE_DIGITS = 7;
-
-export function phoneLooksWrong(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return trimmed.replace(/\D/g, "").length < MIN_PHONE_DIGITS;
+export function phoneProblem(field: ContactField, value: string): string | null {
+  const kind = field === "mobile" ? "mobile" : "office";
+  return phoneTooShort(value, kind) ? phoneTooShortMessage(kind) : null;
 }
 
 /** "2 things need fixing" — the count, worded. */

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { visibleLength } from "@/lib/mentions";
+import { formatPhone, phoneTooShort, phoneTooShortMessage, type PhoneKind } from "@/lib/phones";
 
 export const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email address.");
 
@@ -145,6 +146,25 @@ const optionalEmail = z
     message: "That email is missing something after the dot.",
   });
 
+/**
+ * A phone number: formatted on the way in, and long enough to be one.
+ *
+ * Formatting happens here rather than in the form, so every route to the
+ * column — the contact form, the company form, the company block inside the
+ * contact form — writes the same shape. The minimum differs by field: a
+ * mobile is a full number or it is not a mobile, while an office line and a
+ * switchboard are routinely written as the local seven.
+ */
+const phoneField = (kind: PhoneKind, max = 40) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .refine((v) => !phoneTooShort(v, kind), { message: phoneTooShortMessage(kind) })
+    .transform((v) => (v && v.length > 0 ? formatPhone(v) : null))
+    .nullable();
+
 export const contactInputSchema = z
   .object({
     /*
@@ -165,8 +185,8 @@ export const contactInputSchema = z
       .max(80),
     jobTitle: optionalText(120),
     company: optionalText(120),
-    mobile: optionalText(40),
-    officePhone: optionalText(40),
+    mobile: phoneField("mobile"),
+    officePhone: phoneField("office"),
     email: optionalEmail,
     email2: optionalEmail,
     website: optionalText(300),
@@ -194,7 +214,7 @@ export const contactInputSchema = z
     companyId: z.string().uuid().nullable().optional(),
     companyAbout: optionalText(600),
     companyWebsite: optionalText(300),
-    companyNumber: optionalText(40),
+    companyNumber: phoneField("companyLine"),
     companyStreet: optionalText(200),
     companySuite: optionalText(100),
     companyCity: optionalText(100),
@@ -237,7 +257,7 @@ export const companyInputSchema = z.object({
     .max(120),
   about: optionalText(600),
   website: optionalText(300),
-  companyNumber: optionalText(40),
+  companyNumber: phoneField("companyLine"),
   street: optionalText(200),
   suite: optionalText(100),
   city: optionalText(100),

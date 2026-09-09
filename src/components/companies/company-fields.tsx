@@ -10,6 +10,7 @@ import {
   DEFAULT_COMPANY_TYPE_ICON,
   type CompanyType,
 } from "@/lib/companies-view";
+import { formatPhone } from "@/lib/phones";
 import { cn } from "@/lib/utils";
 
 /** Everything about a company except its name, which its owner supplies. */
@@ -147,6 +148,8 @@ export function CompanyFields({
         <Input
           value={value.companyNumber}
           onChange={(e) => onChange({ companyNumber: e.target.value })}
+          // Formatted on leaving the box, never under a moving cursor.
+          onBlur={() => onChange({ companyNumber: formatPhone(value.companyNumber) })}
           inputMode="tel"
           autoComplete="off"
         />
