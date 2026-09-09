@@ -82,7 +82,6 @@ export function CompanyFields({
           onChange={(e) => onChange({ website: e.target.value })}
           inputMode="url"
           autoComplete="off"
-          placeholder="multimatic.com"
         />
       </Field>
       {/*

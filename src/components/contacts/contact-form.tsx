@@ -246,36 +246,6 @@ export function ContactForm({
         <div className="mx-auto flex w-full max-w-[640px] flex-col gap-6">
           <h1 className="text-screen-title text-fg">{editing ? "Edit contact" : "New contact"}</h1>
 
-          {error && (
-            <p className="rounded-2xl border-[1.5px] border-danger bg-danger-hover-bg px-4 py-3 text-[17px] leading-6 text-danger text-pretty">
-              {error}
-            </p>
-          )}
-
-          {/*
-            The summary, which the old form did not have. One sentence at the
-            top of a long form told you something was wrong and nothing about
-            where — you had to scroll and guess. This counts them and names
-            them, and the fields themselves are outlined below.
-          */}
-          {summary && (
-            <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-danger bg-danger-hover-bg px-4 py-3">
-              <span className="flex items-center gap-2 text-[17px] leading-6 font-bold text-danger">
-                <TriangleAlert aria-hidden className="size-5 shrink-0" strokeWidth={2} />
-                {summary}
-              </span>
-              <ul className="flex flex-col gap-0.5">
-                {(Object.keys(shown) as ContactField[])
-                  .filter((field) => shown[field])
-                  .map((field) => (
-                    <li key={field} className="text-[16px] leading-6 text-danger text-pretty">
-                      <span className="font-bold">{FIELD_LABELS[field]}</span> — {shown[field]}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
-
           <Group heading="Who they are">
             <Field label="First name" required error={shown.firstName}>
               <Input value={draft.firstName} onChange={(e) => set("firstName", e.target.value)} onBlur={() => leave("firstName")} autoComplete="off" />
@@ -306,7 +276,7 @@ export function ContactForm({
               <Input value={draft.email2} onChange={(e) => set("email2", e.target.value)} onBlur={() => leave("email2")} inputMode="email" autoComplete="off" />
             </Field>
             <Field label="Website">
-              <Input value={draft.website} onChange={(e) => set("website", e.target.value)} inputMode="url" autoComplete="off" placeholder="kapklimber.com" />
+              <Input value={draft.website} onChange={(e) => set("website", e.target.value)} inputMode="url" autoComplete="off" />
             </Field>
           </Group>
 
@@ -383,6 +353,44 @@ export function ContactForm({
               />
             </Field>
           </Group>
+
+          {/*
+            The complaint sits with the button, not at the top of the form.
+
+            On a form this long, pressing Save scrolled nothing and the
+            message appeared somewhere above the fold — so the button looked
+            like it had simply done nothing. The named fields below still
+            tell you where to go; this tells you that you have to.
+          */}
+          {error && (
+            <p className="rounded-2xl border-[1.5px] border-danger bg-danger-hover-bg px-4 py-3 text-[17px] leading-6 text-danger text-pretty">
+              {error}
+            </p>
+          )}
+
+          {/*
+            The summary, which the old form did not have. One sentence at the
+            top of a long form told you something was wrong and nothing about
+            where — you had to scroll and guess. This counts them and names
+            them, and the fields themselves are outlined below.
+          */}
+          {summary && (
+            <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-danger bg-danger-hover-bg px-4 py-3">
+              <span className="flex items-center gap-2 text-[17px] leading-6 font-bold text-danger">
+                <TriangleAlert aria-hidden className="size-5 shrink-0" strokeWidth={2} />
+                {summary}
+              </span>
+              <ul className="flex flex-col gap-0.5">
+                {(Object.keys(shown) as ContactField[])
+                  .filter((field) => shown[field])
+                  .map((field) => (
+                    <li key={field} className="text-[16px] leading-6 text-danger text-pretty">
+                      <span className="font-bold">{FIELD_LABELS[field]}</span> — {shown[field]}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
 
           <div className="flex flex-col gap-3 pb-4">
             <Button variant="primary" onClick={() => save(false)} disabled={isPending}>

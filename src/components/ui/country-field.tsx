@@ -35,7 +35,16 @@ export function CountryField({
 
   const typed = value.trim();
   const chosen = canonicalCountry(typed);
-  const matches = useMemo(() => suggestCountries(chosen ? "" : typed), [chosen, typed]);
+  /*
+    Always what is typed, never a reset to the head of the list.
+
+    This used to pass "" once the text resolved to a country, so typing
+    "DRC" — which is an alias — replaced the suggestions with United States,
+    Canada, Mexico. The alias matched perfectly and the list looked like it
+    had ignored you. Reopening a chosen value clears it first, so the empty
+    query still gets the default head where it is wanted.
+  */
+  const matches = useMemo(() => suggestCountries(typed), [typed]);
 
   if (chosen && !open) {
     return (

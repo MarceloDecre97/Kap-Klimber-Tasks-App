@@ -17,6 +17,10 @@
   --color-on-prim: #ffffff;
   --color-brand: #87252b;
   --color-accent: #a16207;
+  /* Type and relationship chips. Brand red on white; amber on the dark
+     ground, where the dark brand pink sits too close to the body text for a
+     chip — and a "+1" beside it — to be picked out at a glance. */
+  --color-tag: #87252b;
   --color-danger: #dc2626;
   /* Labels for text sitting ON a solid brand/accent/danger fill. All three
      fills invert lightness between themes, so a hardcoded white would fail
@@ -63,6 +67,7 @@
   --color-on-prim: #0b1220;
   --color-brand: #e8969c;
   --color-accent: #fbbf5c;
+  --color-tag: #fbbf5c;
   --color-danger: #f87171;
   /* Dark mode lightens all three fills, so their labels go dark. */
   --color-on-brand: #0b1220;
@@ -133,6 +138,7 @@
   --color-on-brand: var(--color-on-brand);
   --color-accent: var(--color-accent);
   --color-on-accent: var(--color-on-accent);
+  --color-tag: var(--color-tag);
   --color-danger: var(--color-danger);
   --color-on-danger: var(--color-on-danger);
   --color-line: var(--color-line);

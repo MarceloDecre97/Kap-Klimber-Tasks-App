@@ -140,7 +140,7 @@ function toContact(row: RawContact): ContactSummary {
 /**
  * The book itself — everything except the bin.
  *
- * Ordered by surname in SQL as well as grouped by it in the view, so the
+ * Ordered by first name in SQL as well as grouped by it in the view, so the
  * first paint is already right rather than reshuffling once the client
  * takes over.
  */
@@ -151,8 +151,8 @@ export async function listContacts(
     .from("contacts")
     .select(CONTACT_SELECT)
     .is("deleted_at", null)
-    .order("last_name", { ascending: true })
-    .order("first_name", { ascending: true });
+    .order("first_name", { ascending: true })
+    .order("last_name", { ascending: true });
 
   if (error) throw error;
   return ((data ?? []) as unknown as RawContact[]).map(toContact);
@@ -212,8 +212,8 @@ export async function listContactsAtCompany(
     .select(CONTACT_SELECT)
     .eq("company_id", companyId)
     .is("deleted_at", null)
-    .order("last_name", { ascending: true })
-    .order("first_name", { ascending: true });
+    .order("first_name", { ascending: true })
+    .order("last_name", { ascending: true });
 
   if (error) throw error;
   return ((data ?? []) as unknown as RawContact[]).map(toContact);

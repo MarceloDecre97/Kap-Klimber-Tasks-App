@@ -125,26 +125,32 @@ export interface ContactGroup {
 }
 
 /**
- * Grouped by the first letter of the surname, which is what the book sorts
- * by and what somebody scanning it is looking for. Anything not starting
- * with a letter — a surname in another script, a company standing in for a
- * person — collects under "#" at the end rather than inventing a letter.
+ * Grouped by the first letter of the *first* name.
+ *
+ * It was the surname, on the reasoning that address books are filed that
+ * way. In practice nobody here thinks of Eric Housman as "Housman" — they
+ * think "Eric", look under E, and do not find him. Marcelo's call, and the
+ * right one: this is a book of people you know, not a directory.
+ *
+ * Anything not starting with a letter — a name in another script, a company
+ * standing in for a person — collects under "#" at the end rather than
+ * inventing a letter.
  */
 export function groupContacts(contacts: ContactSummary[]): ContactGroup[] {
   const sorted = contacts.slice().sort((a, b) => {
-    const last = a.last_name.localeCompare(b.last_name, undefined, { sensitivity: "base" });
-    return last !== 0 ? last : a.first_name.localeCompare(b.first_name, undefined, { sensitivity: "base" });
+    const first = a.first_name.localeCompare(b.first_name, undefined, { sensitivity: "base" });
+    return first !== 0 ? first : a.last_name.localeCompare(b.last_name, undefined, { sensitivity: "base" });
   });
 
   const groups: ContactGroup[] = [];
   for (const c of sorted) {
     /*
-      Accents are stripped before the letter is chosen, so Álvarez files
-      under A. Without this it landed in "#" with the numerals — which is
-      where a surname goes to be un-findable, and exactly the kind of name
-      a logistics book is full of.
+      Accents are stripped before the letter is chosen, so Ángela files
+      under A. Without this she landed in "#" with the numerals — which is
+      where a name goes to be un-findable, and exactly the kind of name a
+      book like this is full of.
     */
-    const first = c.last_name.trim().normalize("NFD").replace(/\p{Diacritic}/gu, "")[0]?.toUpperCase() ?? "#";
+    const first = c.first_name.trim().normalize("NFD").replace(/\p{Diacritic}/gu, "")[0]?.toUpperCase() ?? "#";
     const letter = /[A-Z]/.test(first) ? first : "#";
     const last = groups[groups.length - 1];
     if (last && last.letter === letter) last.people.push(c);
@@ -171,6 +177,28 @@ export function groupContacts(contacts: ContactSummary[]): ContactGroup[] {
  * splitting it into its own field would force one convention on both and be
  * wrong somewhere.
  */
+/**
+ * The words a suite line might already start with.
+ *
+ * Anything else gets "Suite" put in front of it. The first rule only added
+ * the word for a bare number, so "A-501" came through as "199 Markham road,
+ * A-501" — which reads as a second street number rather than a unit. Saying
+ * what it is matters more than the handful of characters it costs.
+ */
+const SUITE_WORDS = [
+  "suite", "ste", "unit", "apt", "apartment", "floor", "fl", "room", "rm",
+  "building", "bldg", "block", "office", "level", "#", "no", "no.", "lote",
+  "piso", "depto", "departamento",
+];
+
+function labelSuite(suite: string): string {
+  const first = suite
+    .toLowerCase()
+    .replace(/^[#]/, "# ")
+    .split(/[\s.,]+/)[0]!;
+  return SUITE_WORDS.includes(first) ? suite : `Suite ${suite}`;
+}
+
 export function formatAddress(c: {
   street: string | null;
   suite?: string | null;
@@ -179,14 +207,8 @@ export function formatAddress(c: {
   postal_code: string | null;
   country?: string | null;
 }): string | null {
-  /*
-    The suite carries a label. "199 Markham road, 11" reads as a typo — the
-    number could be anything — where "199 Markham road, Suite 11" is a place.
-    Left alone when somebody has already written what it is, so "Unit 4" and
-    "Floor 2" do not become "Suite Unit 4".
-  */
   const suite = c.suite?.trim();
-  const labelled = suite && /^[\d\-\s]+$/.test(suite) ? `Suite ${suite}` : suite;
+  const labelled = suite ? labelSuite(suite) : suite;
   const streetLine = [c.street?.trim(), labelled].filter(Boolean).join(", ");
   const cityLine = [c.city, [c.state, c.postal_code].filter(Boolean).join(" ")]
     .filter((part) => part && part.trim())

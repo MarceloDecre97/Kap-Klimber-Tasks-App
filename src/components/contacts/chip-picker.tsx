@@ -134,7 +134,12 @@ export function ChipRow<T extends { id: string; label: string; icon: string }>({
         return (
           <span
             key={item.id}
-            className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-border px-2.5 py-1 text-timestamp text-sub"
+            /*
+              Brand red on white, amber on the dark ground. They were the
+              same grey as everything else on the row, so the "+1" beside
+              them read as part of the sentence rather than as a count.
+            */
+            className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-tag px-2.5 py-1 text-timestamp font-bold text-tag"
           >
             <Icon aria-hidden className="size-[18px] shrink-0" strokeWidth={1.75} />
             {item.label}
@@ -142,7 +147,7 @@ export function ChipRow<T extends { id: string; label: string; icon: string }>({
         );
       })}
       {more > 0 && (
-        <span className="text-timestamp text-sub tabular-nums">+{more}</span>
+        <span className="text-timestamp font-bold text-tag tabular-nums">+{more}</span>
       )}
     </>
   );

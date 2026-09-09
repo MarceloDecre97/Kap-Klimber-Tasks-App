@@ -200,9 +200,14 @@ export function CompanyDetail({
             <div className="flex min-w-0 grow flex-col gap-1">
               <h1 className="text-screen-title text-fg text-pretty wrap-anywhere">{company.name}</h1>
               <p className="text-[17px] leading-6 text-sub text-pretty">
-                {company.types.length > 0
-                  ? `${company.types.map((t) => t.label).join(" · ")} · `
-                  : ""}
+                {company.types.length > 0 && (
+                  <>
+                    <span className="font-bold text-tag">
+                      {company.types.map((t) => t.label).join(" · ")}
+                    </span>
+                    {" · "}
+                  </>
+                )}
                 {companyPeopleLine(people.length)}
               </p>
             </div>
@@ -280,6 +285,7 @@ export function CompanyDetail({
                 <Row
                   label={company.types.length === 1 ? "Type" : "Types"}
                   value={company.types.map((t) => t.label).join(" · ") || null}
+                  tinted
                 />
                 <Row label="Main line" value={company.company_number} />
                 <Row label="Website" value={company.website} />
@@ -378,12 +384,28 @@ function Section({ heading, children }: { heading: string; children: React.React
 }
 
 /** One read-only line. Renders nothing when there is nothing to say. */
-function Row({ label, value }: { label: string; value: string | null }) {
+function Row({
+  label,
+  value,
+  tinted,
+}: {
+  label: string;
+  value: string | null;
+  /** The chip colour, for the row that is really a set of chips. */
+  tinted?: boolean;
+}) {
   if (!value || !value.trim()) return null;
   return (
     <div className="flex flex-col gap-0.5 border-b-[1.5px] border-border pb-3 last:border-b-0 last:pb-0">
       <span className="text-timestamp text-sub">{label}</span>
-      <span className="text-[18px] leading-7 text-fg text-pretty wrap-anywhere">{value}</span>
+      <span
+        className={cn(
+          "text-[18px] leading-7 text-pretty wrap-anywhere",
+          tinted ? "font-bold text-tag" : "text-fg"
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }
