@@ -1,230 +1,242 @@
 # Task Banner — Plan, Phase 2
 
-Drafted 2026-09-10. Two changes that arrived together and are worth naming
-apart, because only one of them is about reminders.
+Agreed 2026-09-10 after two rounds of questions. Two changes that arrived
+together, shipped as **two rounds**, B first.
 
-**A. Reminders become per-person.** Today a reminder is a property of the
-task — one `reminder_at`, one dismissal, fired at everyone assigned. It
-becomes an appointment with a named recipient.
+- **Round B — permissions.** Creator and assignee stop being the same
+  thing. Smaller, testable in minutes, touches nothing that sends mail.
+- **Round A — reminders.** A reminder stops being a property of the task
+  and becomes an appointment with a named recipient.
 
-**B. A permission model.** Creator and assignee stop being the same thing.
-This was not in the original Phase 2 sketch and is the larger half.
-
-Not executed. Awaiting answers to the questions at the end, then approval.
-
----
-
-## What already exists
-
-Worth stating before anything is built, because two of the requests are
-partly done and one is done entirely.
-
-**Delete is already creator-only.** 0014 built the whole flow: the creator
-deletes, everyone else sees **Request delete**, and the creator approves or
-declines with a reason that lands in the task's history. Nothing to change
-unless the request path should go too — see question 1.
-
-**`can_decide_task_deletion` already handles the orphan case.** If the
-creator has been deactivated, anyone may decide. Without that, a task
-created by someone who has left is undeletable forever. The same hole
-applies to editing, so the new rule has to inherit the same escape hatch.
-
-**Column pinning is an established pattern here.** 0014 notes that RLS
-"decides which rows may be updated and cannot restrict which columns", and
-guards the deletion columns with a BEFORE UPDATE trigger that pins them
-unless a transaction-local setting says the write came from a sanctioned
-function. The edit restriction in B is the same shape, and pinning beats
-raising for the same reason given there: an ordinary save sends every
-column, and rejecting would turn a harmless no-op into a failed save.
+They are independent. B first means A lands on a banner whose permissions
+are already settled, and two short test rounds instead of one long one.
 
 ---
 
-## A. Reminders
+## Already true, and staying that way
 
-### The model
+**Delete is already creator-only.** 0014 built it: the creator deletes,
+everyone else sees **Request delete**, the creator approves or declines
+with a reason that lands in the task's history. Confirmed as keeping.
 
-New table `task_reminders`:
+**A deactivated creator hands their powers to everyone.**
+`can_decide_task_deletion` already does this, so a task belonging to
+someone who has left is not frozen. The new edit rule inherits the same
+escape hatch. Noted as an interim answer: this becomes an admin-panel
+concern later, and is deliberately not designed for that here.
 
-| column | |
-|---|---|
-| `id` | |
-| `task_id` | cascades with the task |
-| `member_id` | **whose reminder it is** — the person notified |
-| `remind_at` | |
-| `created_by` | who set it: themselves, or the creator |
-| `dismissed_at`, `dismissed_by` | handled, per person |
-| `created_at` | |
+**Pinning columns is how this codebase restricts writes.** 0014 says it
+outright — RLS "decides which rows may be updated and cannot restrict which
+columns" — and guards the deletion columns with a BEFORE UPDATE trigger
+that pins them unless a transaction-local setting marks the write as
+sanctioned. Round B is the same shape.
+
+---
+
+# Round B — Permissions
+
+## The rule
+
+| | creator | assignee |
+|---|---|---|
+| Edit title, description, priority, category, due date | ✅ | ❌ |
+| Add or remove assignees | ✅ | ❌ |
+| Delete | ✅ | asks — unchanged |
+| Change status (the three pills) | ✅ | ✅ |
+| Mark complete / not complete | ✅ | ✅ |
+| Add, edit, remove links | ✅ | ✅ |
+| Notes: write, edit own, delete own, like, reply | ✅ | ✅ |
+| Set / change / dismiss own reminder | ✅ | ✅ |
+| See and manage everyone's reminders | ✅ | ❌ |
+
+A creator who is also an assignee is simply both.
+
+## Two guards, not one
+
+**`can_edit_task(p_task_id)`** — a `SECURITY DEFINER` mirror of
+`can_decide_task_deletion`: true for the creator, or for anyone when the
+creator is inactive.
+
+**1. The content columns, on `tasks`.** A BEFORE UPDATE trigger pins
+`title`, `description`, `category_id`, `priority`, `due_date` and
+`reminder_at` to their old values unless `can_edit_task`.
+
+It deliberately does **not** touch `status`, `completed_at`,
+`completed_by`, or any of the deletion columns:
+
+- status and completion are exactly what an assignee is allowed to change;
+- the deletion columns already have `guard_task_deletion`, and
+  `request_task_deletion` is *by definition* a non-creator writing to the
+  task. A guard that pinned everything would silently break the request
+  path — the two triggers stay in separate lanes so they cannot fight.
+
+Pinned rather than rejected, following 0014's reasoning: an ordinary save
+sends every column, and raising would turn a harmless no-op into a failed
+save.
+
+**2. The assignee list, on `task_assignees`.** This is the one that would
+be missed by looking only at the Edit button. `task_assignees_insert` and
+`task_assignees_delete` in 0002 admit any team member, so hiding the Edit
+page would leave reassignment reachable straight through PostgREST —
+including adding yourself to a task. Both policies are narrowed to
+`can_edit_task(task_id)`.
+
+`task_links` stays open to every member, because assignees are meant to add
+links.
+
+## The banner
+
+- **"Created by"** — a new row with avatar, directly above **Assigned to**.
+  Once who created a task decides what you may do to it, it stops being
+  trivia.
+- **Edit task** is hidden for non-creators. Delete / Request delete
+  unchanged.
+- **Links move into the banner.** Assignees may add links but will no
+  longer be able to open the form, so External Links gains **Add link** and
+  a remove control for everyone. The form keeps its copy so the creator can
+  still create a task with its links in one pass.
+
+## Round B, verified
+
+- The guard proved on a local Postgres from both sides: a non-creator's
+  attempt to change the title is pinned while their status change goes
+  through, and `request_task_deletion` still works for a non-creator with
+  the new trigger in place.
+- A non-creator attempting to insert into `task_assignees` refused by RLS.
+- A task whose creator is deactivated fully editable by everyone.
+- 390px screenshots of both views: creator and assignee.
+
+---
+
+# Round A — Reminders
+
+## The table
+
+`task_reminders`: `id`, `task_id` (cascade), `member_id` (**whose it is**),
+`remind_at`, `created_by`, `dismissed_at`, `dismissed_by`, `nudged_at`,
+`created_at`.
 
 **One live reminder per person per task**, enforced by a partial unique
-index on `(task_id, member_id) where dismissed_at is null`. "Live" means
-not yet dismissed: dismissing frees the slot, so a second nudge after the
-first is handled is fine, and the cap is never a dead end.
+index on `(task_id, member_id) where dismissed_at is null`. Dismissing
+frees the slot, so the cap is never a dead end. Setting one when a live one
+exists **replaces** it — that is what editing a reminder means.
 
-Setting a reminder when one already exists **replaces** it rather than
-being refused — that is what "edit my reminder" means, and it matches how
-`reminder_at` behaves today.
+`member_id` must be an assignee of that task, checked in the database.
 
-### Who may do what
+## Who may do what
 
-- An **assignee** sets, changes and dismisses **their own** reminder.
-- The **creator** sets, changes, dismisses and removes a reminder for **any
-  assignee**, and is the only person who can see the whole set.
-- Nobody may set a reminder for a person who is not assigned to the task.
-  Enforced in the database, not only in the form.
+All of it through `SECURITY DEFINER` functions, because "the creator, or
+yourself, and only for an assignee" is a sentence about three tables and
+does not fit a `with check`.
 
-All of it in a `SECURITY DEFINER` function rather than table policies: the
-rule is "creator, or yourself, and only for an assignee", which is a
-sentence about three tables and does not fit a `with check`.
+- **Assignee** — set, change, dismiss **their own**.
+- **Creator** — set, change, dismiss, remove, and **nudge** for anyone
+  assigned; the only person who sees the whole set.
 
-### What each person sees
+## Nudge
 
-- **Everyone** keeps what they have now: their own reminder as the chip on
-  the card, the amber line under it, and the click-to-dismiss behaviour —
-  except it is now *their* reminder rather than the task's.
-- **The creator** additionally gets a **Reminders** section listing every
-  assignee and their reminder, or "none set". Their own reminder appears
-  there too, so the list is the whole picture.
-- **A non-creator sees no trace** of anybody else's reminder. Not a count,
-  not a hint.
+Only on a reminder that has **fired and not been dismissed**. There is
+nothing to chase before that, so nudging an upcoming one is refused.
 
-### Notifications — unchanged, but narrower
+It re-sends the "your reminder is due" notification to its owner. This
+needs a **new notification kind** rather than re-firing the old one: the
+existing dedupe key is `reminder_due:<task>:<at>`, which by design admits
+exactly one row per reminder, so a repeat of the original would be
+swallowed. `reminder_nudge` carries the nudge's own timestamp in its key.
 
-The existing rules stay exactly as they are: one at twelve hours out, one
-when it fires, nothing after it is dismissed or the task is complete. The
-only change is the audience — `notify_task_audience` gives way to the
-reminder's own recipient. No notification at set-time (question 2 answered:
-you tell them on the call).
+**One nudge per reminder per hour**, enforced by `nudged_at` in the
+database, and **recorded in Task Activity** — "Marcelo nudged Dee's
+reminder" — so chasing somebody is visible rather than silent. That needs a
+new `task_events.kind`; the constraint is a plain
+`check (kind in (...))` that 0011 and 0014 have each already widened, so
+this follows the same pattern.
+
+## What each person sees
+
+- **Everyone** keeps exactly what they have now — the chip on the card, the
+  amber line beneath it, click-to-dismiss — except it is now *their*
+  reminder rather than the task's. No change in behaviour, and the
+  creator's own works the same as everyone's.
+- **The creator** additionally gets a **Reminders** section: every assignee,
+  their reminder or "none set", and for each one a set / change / dismiss /
+  nudge control. Their own is listed there too, so the list is the whole
+  picture.
+  - **Fired and not dismissed shows in red**, upcoming in amber, handled in
+    muted grey — the colours `reminderState` already uses, so the section
+    inherits the app's existing language rather than inventing one. Red is
+    how the creator spots what needs a nudge.
+- **A non-creator sees no trace** of anyone else's. Not a count, not a hint.
+
+## Notifications — unchanged, only narrower
+
+Twelve hours out, and again when it fires. Nothing after it is dismissed.
+Nothing at set-time — you tell people on the call. The only change is the
+audience: `notify_task_audience` gives way to the reminder's own owner, so
+you are never buzzed for a reminder you set for Dee.
+
+**No notification to the creator when a reminder goes undismissed.**
+Decided explicitly: the red row in the Reminders section is how you find
+out, which means nudging is something you do when you look. Recorded here
+because it is the one place the answers pulled against each other.
 
 The dedupe key gains the reminder's id, so two people's reminders on the
 same task at the same minute cannot collide.
 
-### Migrating the 5 live reminders
+## Reminders that should stop existing
 
-Each becomes **one row per assignee** on that task, keeping `remind_at`,
-`dismissed_at` and `reminder_set_by` as `created_by`. Everyone who is
-notified today is still notified tomorrow; nothing changes under your feet.
+- **Completing a task deletes every reminder on it** — fired-but-undismissed
+  ones included. Reopening starts clean; new reminders must be set. This
+  replaces the current behaviour, where the cron merely skips completed
+  tasks and a reminder waits quietly for the task to come back.
+- **Removing an assignee deletes their reminder**, silently. A reminder
+  that fires at somebody about a task they are no longer on is worse than
+  no reminder.
 
-`tasks.reminder_at` is **left in place and stops being read**. It is not
-dropped in the same migration that replaces it — that column was declared
-deprecated in 0005 and brought back in 0011, and the cost of keeping a dead
-column for a few weeks is nothing against the cost of being wrong.
+## The five live reminders
 
-### Everything downstream
+Each becomes **one row per assignee** on its task, keeping `remind_at`,
+`dismissed_at`, and `reminder_set_by` as `created_by`. Everyone notified
+today is notified tomorrow.
 
-`reminder` appears in 17 files. Each has to change from "does this task have
-a reminder?" to "do I have one?":
+`tasks.reminder_at` is **left in place and stops being read**. Not dropped
+in the same migration that replaces it: that column was declared deprecated
+in 0005 and brought back in 0011, and a dead column for a few weeks costs
+nothing next to being wrong. Its form field is removed — the banner becomes
+the only place a reminder is set.
 
-- `reminders.ts` — `reminderState` takes a reminder row, not a task
-- `task-pill.tsx` — chip, amber line, dismissal, and the creator's section
-- `dashboard-stats.ts` — 46 references; every reminder statistic becomes the
-  viewer's own
-- `notification-bell.tsx` — the attention count
-- `email/render.ts`, `notifications-view.ts`, `notification-prefs.ts`
-- `data/tasks.ts` — a `reminders` relation, plus `myReminder` for the viewer
-- `task-timeline.ts` — a reminder event now names whose it was
-- `validation.ts`, `actions.ts` — the new set/dismiss/clear actions
-- `0018_scheduled_notifications.sql` — both reminder rules rewritten
+## The 17 files
 
----
+Each changes from "does this task have a reminder?" to "do I have one?":
 
-## B. Permissions
+`reminders.ts` (takes a row, not a task) · `task-pill.tsx` (chip, amber
+line, dismissal, plus the creator's section) · `dashboard-stats.ts` (46
+references — every statistic becomes the viewer's own) ·
+`notification-bell.tsx` (attention count) · `email/render.ts` ·
+`notifications-view.ts` · `notification-prefs.ts` · `data/tasks.ts` (a
+`reminders` relation plus `myReminder`) · `task-timeline.ts` (a reminder
+event names whose it was) · `validation.ts` · `actions.ts` ·
+`0018_scheduled_notifications.sql` (both reminder rules rewritten).
 
-### The rule
+## Round A, verified
 
-| | creator | assignee |
-|---|---|---|
-| Edit task (title, description, priority, category, assignees, due date) | ✅ | ❌ |
-| Delete task | ✅ | asks — already built |
-| Change status / Mark complete | ✅ | ✅ |
-| Add and remove links | ✅ | ✅ |
-| Add notes, like, reply | ✅ | ✅ |
-| Set own reminder | ✅ | ✅ |
-| See and set everyone's reminders | ✅ | ❌ |
-
-A creator who is also an assignee is simply both; nothing special is needed.
-
-If the creator is **deactivated**, everyone gets the creator's powers —
-the same escape hatch `can_decide_task_deletion` already uses. A task
-belonging to someone who has left must not become frozen.
-
-### Enforced where it counts
-
-Hiding the Edit button is not the rule; it is the signpost. The rule is a
-BEFORE UPDATE trigger on `tasks`, modelled on `guard_task_deletion`: unless
-the writer is the creator (or the creator is inactive), every column except
-`status`, `completed_at` and `completed_by` is pinned to its old value.
-So an assignee's status change goes through, and a crafted request that
-tries to rename the task quietly does nothing.
-
-### Links move to the banner
-
-This one follows from the rule rather than being asked for directly.
-Assignees may add links, but links are edited on the **task form**, which
-assignees will no longer be able to open. So the banner's External Links
-section gains **Add link** and a remove control, available to everyone.
-
-The form keeps its copy for the creator, so a task can still be created
-with its links in one pass.
-
-### "Created by"
-
-A new row above **Assigned to**, showing the creator with their avatar.
-Once who-created-it decides what you may do, it stops being trivia and
-belongs on the face of the card rather than only in the history.
+- Migrations applied to a clean local Postgres and in sequence.
+- The partial unique index proved: a second live reminder for the same
+  person refused, and accepted once the first is dismissed.
+- A reminder for a non-assignee refused; an assignee setting one for
+  somebody else refused; the creator setting one for an assignee accepted.
+- Nudge refused on an upcoming reminder, accepted on a fired one, refused
+  twice within the hour.
+- Completing a task and removing an assignee each shown to clear the right
+  rows and no others.
+- The data migration run against a copy of the real five, with the
+  before/after audience compared row by row.
+- The cron's two reminder rules exercised against fixed clock values.
+- 390px screenshots, both themes, of the creator's Reminders section with a
+  red fired row, an amber upcoming one and a handled one.
 
 ---
 
-## Complexity
+## Order
 
-Roughly **three times Phase 1**, and the two halves are separable.
-
-- **A** — new table, RLS, a definer function, a data migration, the cron
-  rewrite, and 17 files following the change.
-- **B** — one guard trigger, the banner's buttons, the links control moving,
-  and the "Created by" row.
-
-They are independent: B does not need A, and A does not need B.
-
----
-
-## Questions
-
-1. **The delete request path.** You said Edit and Delete should be
-   creator-only. Delete already is — an assignee sees "Request delete" and
-   you approve or decline. Does that stay, or should an assignee have no
-   delete-shaped button at all? I would keep it: it is how somebody tells
-   you a task is dead without being able to act on it.
-
-2. **Editing when you are not the creator.** With the Edit button gone, an
-   assignee who spots a wrong due date has no way to say so except a note.
-   Fine, or would you rather they could ask, the way they can for deletion?
-   My call: leave it — a note is enough for four people, and a second
-   request-and-approve flow is a lot of machinery for a typo.
-
-3. **"Nudge".** You said the creator can dismiss *or nudge* another
-   assignee's reminder. I read nudge as "send their reminder notification
-   now, ahead of its time, without moving it". Right? Or did you mean push
-   the reminder later?
-
-4. **Whose reminders can the creator dismiss?** Any reminder on the task,
-   including one an assignee set for themselves — or only ones the creator
-   set? I would say any: you can see them all, and a half-owned list is
-   confusing.
-
-5. **Removing an assignee who has a reminder.** Their reminder goes with
-   them, silently. Agreed? The alternative is a reminder that fires at
-   somebody about a task they are no longer on.
-
-6. **The creator's own reminder.** It shows as the normal chip *and* in the
-   Reminders section. Correct, or would you rather it were listed once?
-
-7. **A completed task.** The cron already skips completed tasks, so
-   reminders on one go quiet without being deleted — and come back if it is
-   reopened. Keep that, or should completing a task clear its reminders
-   outright?
-
-8. **Order of work.** A and B are independent. I would ship **B first**: it
-   is much smaller, it is a visible change you can test in a few minutes,
-   and it does not touch the notification path. A then lands on a banner
-   whose permissions are already settled. Two rounds of tests instead of one
-   large one. Your call — the alternative is one round with everything in it.
+**B, tested and deployed. Then A.** Each round ends with a numbered test
+list here in the chat, as before.
