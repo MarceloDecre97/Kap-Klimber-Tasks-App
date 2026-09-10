@@ -74,16 +74,30 @@ export interface TaskLink {
   position: number;
 }
 
+/**
+ * One person's reminder on a task.
+ *
+ * Since 0034 a reminder has an owner. What arrives here is filtered by RLS
+ * rather than by this query: you see your own on every task, and every one
+ * on a task you created. A non-creator is handed nothing of anybody else's,
+ * so `reminders` below is safe to render as-is.
+ */
+export interface TaskReminder {
+  id: string;
+  member_id: string;
+  remind_at: string;
+  created_by: string | null;
+  dismissed_at: string | null;
+  dismissed_by: string | null;
+  nudged_at: string | null;
+}
+
 export interface TaskWithRelations {
   id: string;
   title: string;
   description: string | null;
   priority: Priority;
   status: TaskStatus;
-  reminder_at: string | null;
-  reminder_dismissed_at: string | null;
-  /** Who set the current reminder. Follows reminder_at, not the row. */
-  reminder_set_by: string | null;
   /**
    * Set while somebody who did not create this task is waiting on its
    * creator to approve deleting it. The task carries on working normally
@@ -115,6 +129,18 @@ export interface TaskWithRelations {
    * render exactly as it did before links existed.
    */
   links: TaskLink[];
+  /**
+   * Every reminder the signed-in member is allowed to see on this task:
+   * their own, plus everybody's if they created it. Ordered by whose it is
+   * so the creator's list does not reshuffle between refreshes.
+   */
+  reminders: TaskReminder[];
+  /**
+   * The signed-in member's own reminder, or null. Pulled out because almost
+   * everything — the chip, the amber line, the dashboard — wants exactly
+   * this and should not have to search a list for it.
+   */
+  my_reminder: TaskReminder | null;
   /** Status and due-date changes, oldest first. Empty until 0007 is applied. */
   events: TaskEvent[];
   /**
@@ -125,7 +151,7 @@ export interface TaskWithRelations {
 }
 
 const TASK_SELECT = `
-  id, title, description, priority, status, reminder_at, reminder_dismissed_at, reminder_set_by,
+  id, title, description, priority, status,
   deletion_requested_by, deletion_requested_at, deletion_reason, deleted_at,
   due_date, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
@@ -133,6 +159,7 @@ const TASK_SELECT = `
   events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
   links:task_links(id, label, url, position),
+  reminders:task_reminders(id, member_id, remind_at, created_by, dismissed_at, dismissed_by, nudged_at),
   contacts:task_contacts(contact:contacts(id, first_name, last_name, job_title, company, mobile, office_phone, deleted_at)),
   notes:task_notes(id, body, created_at, edited_at, parent_note_id, deleted_at, member:members!task_notes_member_id_fkey(id, display_name, initials, color), likes:task_note_likes(member_id))
 `;
@@ -154,9 +181,6 @@ type RawTask = {
   description: string | null;
   priority: Priority;
   status: TaskStatus;
-  reminder_at: string | null;
-  reminder_dismissed_at: string | null;
-  reminder_set_by: string | null;
   deletion_requested_by: string | null;
   deletion_requested_at: string | null;
   deletion_reason: string | null;
@@ -170,6 +194,7 @@ type RawTask = {
   assignees: { member: MemberSummary | null }[] | null;
   contacts: { contact: TaskContact | null }[] | null;
   links: TaskLink[] | null;
+  reminders: TaskReminder[] | null;
   notes: RawTaskNote[] | null;
   reads: { last_read_at: string }[] | null;
   events: RawTaskEvent[] | null;
@@ -226,9 +251,19 @@ function nestNotes(rows: RawTaskNote[]): TaskNote[] {
   return top.filter((note) => !note.deleted || note.replies.length > 0).sort(byCreated);
 }
 
-function mapTask(row: RawTask): TaskWithRelations {
+function mapTask(row: RawTask, meId: string): TaskWithRelations {
+  const reminders = (row.reminders ?? [])
+    .slice()
+    .sort((a, b) => a.member_id.localeCompare(b.member_id));
+
   return {
     ...row,
+    reminders,
+    /*
+      Found rather than assumed: RLS hands a creator everybody's rows, so the
+      first one in the list is not necessarily theirs.
+    */
+    my_reminder: reminders.find((r) => r.member_id === meId) ?? null,
     assignees: (row.assignees ?? []).map((a) => a.member).filter((m): m is MemberSummary => !!m),
     /*
       Ordered by surname so two pills on one task keep a stable order rather
@@ -251,7 +286,10 @@ function mapTask(row: RawTask): TaskWithRelations {
   };
 }
 
-export async function listTasks(supabase: SupabaseClient<Database>): Promise<TaskWithRelations[]> {
+export async function listTasks(
+  supabase: SupabaseClient<Database>,
+  meId: string
+): Promise<TaskWithRelations[]> {
   const { data, error } = await supabase
     .from("tasks")
     .select(TASK_SELECT)
@@ -259,12 +297,13 @@ export async function listTasks(supabase: SupabaseClient<Database>): Promise<Tas
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return ((data ?? []) as unknown as RawTask[]).map(mapTask);
+  return ((data ?? []) as unknown as RawTask[]).map((row) => mapTask(row, meId));
 }
 
 export async function getTask(
   supabase: SupabaseClient<Database>,
-  taskId: string
+  taskId: string,
+  meId: string
 ): Promise<TaskWithRelations | null> {
   const { data, error } = await supabase
     .from("tasks")
@@ -274,7 +313,7 @@ export async function getTask(
     .maybeSingle();
 
   if (error) throw error;
-  return data ? mapTask(data as unknown as RawTask) : null;
+  return data ? mapTask(data as unknown as RawTask, meId) : null;
 }
 
 /**
@@ -303,7 +342,7 @@ export async function listDeletedTasks(
     .order("deleted_at", { ascending: false });
 
   if (error) throw error;
-  return ((data ?? []) as unknown as RawTask[]).map(mapTask);
+  return ((data ?? []) as unknown as RawTask[]).map((row) => mapTask(row, memberId));
 }
 
 export async function listRoster(supabase: SupabaseClient<Database>): Promise<MemberSummary[]> {

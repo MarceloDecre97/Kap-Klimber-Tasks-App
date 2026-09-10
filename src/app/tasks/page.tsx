@@ -18,7 +18,7 @@ export default async function TasksPage({
 
   const [{ task }, tasks, roster, categories, notifications, deletedTasks] = await Promise.all([
     searchParams,
-    listTasks(supabase),
+    listTasks(supabase, member.id),
     listRoster(supabase),
     listCategories(supabase),
     listNotifications(supabase),

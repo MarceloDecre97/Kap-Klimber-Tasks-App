@@ -34,17 +34,30 @@ import {
   formatCalendarDate,
   formatDateGroup,
   formatTimestamp,
+  toZonedDateInput,
+  toZonedTimeInput,
   zonedDateKey,
+  zonedWallClockToIso,
 } from "@/lib/utils";
 import {
   addNote,
   addTaskLink,
+  clearTaskReminder,
   deleteNote,
   editNote,
+  nudgeTaskReminder,
   removeTaskLink,
+  setReminderDismissed,
+  setTaskReminder,
   toggleNoteLike,
 } from "@/app/tasks/actions";
-import type { MemberSummary, TaskLink, TaskNote, TaskWithRelations } from "@/lib/data/tasks";
+import type {
+  MemberSummary,
+  TaskLink,
+  TaskNote,
+  TaskReminder,
+  TaskWithRelations,
+} from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
 /** Both match 0032_task_links.sql, which is what actually enforces them. */
@@ -115,7 +128,13 @@ export function TaskPill({
   const [isPending, startTransition] = useTransition();
   // Amber while a reminder is still ahead of you, red once it has fired and
   // nobody has dealt with it, muted once handled.
-  const rState = reminderState(task);
+  /*
+    The viewer's own reminder, and only theirs. Since 0034 a task can carry
+    one per person; the chip, the amber line and the dismiss gesture have
+    always been about "my reminder" and now say so.
+  */
+  const myReminder = task.my_reminder;
+  const rState = reminderState(myReminder);
   const dismissed = rState === "handled";
   /*
     Whole days a still-open task is past its due date. A finished task is
@@ -353,7 +372,7 @@ export function TaskPill({
           Dismissal is shared across the team and never changes the task's
           status, dates, or dashboard bucket.
         */}
-        {task.reminder_at && (
+        {myReminder && (
           <button
             type="button"
             onClick={() => onToggleReminder?.()}
@@ -361,8 +380,8 @@ export function TaskPill({
             aria-pressed={dismissed}
             title={
               dismissed
-                ? `Reminder handled — ${formatTimestamp(task.reminder_at)}. Click to un-dismiss.`
-                : `Reminder set for ${formatTimestamp(task.reminder_at)}. Click once handled.`
+                ? `Reminder handled — ${formatTimestamp(myReminder.remind_at)}. Click to un-dismiss.`
+                : `Reminder set for ${formatTimestamp(myReminder.remind_at)}. Click once handled.`
             }
             className={cn(
               "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-2.5",
@@ -379,7 +398,7 @@ export function TaskPill({
               <Bell aria-hidden className="size-3.5 shrink-0" strokeWidth={2.5} />
             )}
             <span className="sr-only">{dismissed ? "Reminder handled, was set for " : "Reminder set for "}</span>
-            <span className={cn(dismissed && "line-through")}>{formatTimestamp(task.reminder_at)}</span>
+            <span className={cn(dismissed && "line-through")}>{formatTimestamp(myReminder.remind_at)}</span>
           </button>
         )}
       </div>
@@ -566,6 +585,13 @@ export function TaskPill({
             that permission would exist on paper and nowhere else.
           */}
           <TaskLinks taskId={task.id} links={task.links} />
+
+          {/*
+            Everyone gets a way to set their own reminder; the creator also
+            gets everybody else's. Below the links and above the status
+            buttons, because it is about the work rather than about the task.
+          */}
+          <TaskReminders task={task} meId={meId} canManageAll={canEdit} />
 
           <div className="flex flex-col gap-2">
             <div className="text-section-heading">Change Task&apos;s Status To:</div>
@@ -819,6 +845,212 @@ export function TaskPill({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Reminders on a task.
+ *
+ * What you see depends on who you are, and that is the whole feature:
+ *
+ *   Anybody assigned  — their own reminder, and a way to set or change it.
+ *   The creator       — every assignee's, with set / change / clear / nudge,
+ *                       because chasing people is what the section is for.
+ *
+ * Nothing here decides permission. RLS on task_reminders already refuses to
+ * hand a non-creator anybody else's row, and the four functions in 0034
+ * refuse the writes; this arranges what came back.
+ */
+function TaskReminders({
+  task,
+  meId,
+  canManageAll,
+}: {
+  task: TaskWithRelations;
+  meId: string;
+  canManageAll: boolean;
+}) {
+  const [editingFor, setEditingFor] = useState<string | null>(null);
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("09:00");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  /*
+    The creator sees a row per assignee, whether or not they have a reminder
+    — "none set" is the information they came for. Everyone else sees only
+    themselves, and only if they are actually on the task.
+  */
+  const people = canManageAll
+    ? task.assignees
+    : task.assignees.filter((person) => person.id === meId);
+
+  if (people.length === 0) return null;
+
+  function open(memberId: string, existing: TaskReminder | null) {
+    setError(null);
+    setEditingFor(memberId);
+    setDate(existing ? toZonedDateInput(existing.remind_at) : "");
+    setTime(existing ? toZonedTimeInput(existing.remind_at) : "09:00");
+  }
+
+  function save(memberId: string) {
+    if (!date) {
+      setError("Pick a day for the reminder.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      // Chicago wall-clock, never the browser's zone — the same rule the
+      // due date has always followed.
+      const result = await setTaskReminder({
+        taskId: task.id,
+        memberId,
+        remindAt: zonedWallClockToIso(date, time || "09:00"),
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setEditingFor(null);
+    });
+  }
+
+  function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) setError(result.error);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-section-heading">Reminders</div>
+
+      {people.map((person) => {
+        const reminder = task.reminders.find((r) => r.member_id === person.id) ?? null;
+        const state = reminderState(reminder);
+        const mine = person.id === meId;
+        const editing = editingFor === person.id;
+
+        return (
+          <div key={person.id} className="flex flex-col gap-1.5 rounded-2xl border-[1.5px] border-border bg-card p-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Avatar initials={person.initials} color={person.color} size={24} />
+              <span className="min-w-0 break-words text-[18px] leading-7 font-bold text-fg">
+                {mine ? "You" : person.display_name}
+              </span>
+            </div>
+
+            {/*
+              Red once it has fired and nobody has dealt with it, amber while
+              it is still ahead, struck through and muted once handled — the
+              same three tones reminderState has always meant, so this section
+              reads in the app's existing language rather than a new one.
+
+              Red is also the creator's cue: it is the only thing on the card
+              that says somebody needs chasing.
+            */}
+            <div
+              className={cn(
+                "text-[16px] leading-6",
+                state === "due" && "font-bold text-danger",
+                state === "upcoming" && "text-accent",
+                state === "handled" && "text-sub line-through",
+                state === "none" && "text-sub"
+              )}
+            >
+              {reminder ? formatTimestamp(reminder.remind_at) : "None set"}
+              {state === "due" && " — not dealt with"}
+            </div>
+
+            {editing ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    aria-label="Reminder date"
+                    value={date}
+                    onChange={(event) => setDate(event.target.value)}
+                    className="h-12 min-w-0 flex-1 rounded-xl border-[1.5px] border-border bg-card px-3 text-[16px] text-fg tabular-nums"
+                  />
+                  <input
+                    type="time"
+                    aria-label="Reminder time"
+                    value={time}
+                    onChange={(event) => setTime(event.target.value)}
+                    className="h-12 min-w-0 flex-1 rounded-xl border-[1.5px] border-border bg-card px-3 text-[16px] text-fg tabular-nums"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <Button variant="ghost" size="md" className="w-auto px-3" disabled={isPending} onClick={() => setEditingFor(null)}>
+                    Cancel
+                  </Button>
+                  <Button variant="secondary" size="md" className="w-auto px-3" disabled={isPending} onClick={() => save(person.id)}>
+                    Save
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <button
+                  type="button"
+                  onClick={() => open(person.id, reminder)}
+                  disabled={isPending}
+                  className="text-[16px] leading-[22px] font-bold text-brand cursor-pointer bg-transparent border-none p-0"
+                >
+                  {reminder ? "Change" : "Set a reminder"}
+                </button>
+
+                {reminder && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      run(() => setReminderDismissed(task.id, reminder.id, reminder.dismissed_at === null))
+                    }
+                    disabled={isPending}
+                    className="text-[16px] leading-[22px] font-bold text-brand cursor-pointer bg-transparent border-none p-0"
+                  >
+                    {reminder.dismissed_at ? "Un-dismiss" : "Mark handled"}
+                  </button>
+                )}
+
+                {/*
+                  Nudge is the creator's alone, and only on a reminder that
+                  has fired and gone undealt-with. Anywhere else there is
+                  nothing to chase, so the button is not drawn rather than
+                  drawn and refused.
+                */}
+                {canManageAll && !mine && state === "due" && (
+                  <button
+                    type="button"
+                    onClick={() => run(() => nudgeTaskReminder(task.id, reminder!.id))}
+                    disabled={isPending}
+                    className="text-[16px] leading-[22px] font-bold text-danger cursor-pointer bg-transparent border-none p-0"
+                  >
+                    Nudge
+                  </button>
+                )}
+
+                {reminder && (
+                  <button
+                    type="button"
+                    onClick={() => run(() => clearTaskReminder(task.id, reminder.id))}
+                    disabled={isPending}
+                    className="text-[16px] leading-[22px] font-bold text-sub cursor-pointer bg-transparent border-none p-0"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {error && <p className="text-[16px] leading-[22px] font-bold text-danger">{error}</p>}
     </div>
   );
 }

@@ -60,6 +60,16 @@ export function describeEvent(event: TaskEvent): string | null {
       return `${who} moved the reminder from ${formatTimestamp(event.from_value)} to ${to}`;
     }
     /*
+      Chasing somebody, written down. The nudge notification is private to
+      the person being chased; this line is what makes it visible on the
+      task, so a reminder poked three times reads as three pokes rather than
+      as silence.
+    */
+    case "reminder_nudge":
+      return event.to_value
+        ? `${who} nudged ${event.to_value} about their reminder`
+        : `${who} sent a nudge about a reminder`;
+    /*
       The deletion story, kept on the task rather than only in the
       notifications that announced it — a notification gets dismissed, and
       then nobody can say why something was or was not removed.

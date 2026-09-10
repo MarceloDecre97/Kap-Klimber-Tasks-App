@@ -155,6 +155,18 @@ export function describeNotification(item: NotificationItem): NotificationCopy {
     }
     case "reminder_due":
       return { headline: `Reminder: ${task}`, detail: null };
+    /*
+      The one reminder notification that does have an actor: somebody
+      deliberately chased this. Naming them is the point — an anonymous
+      second buzz about a reminder you already ignored reads as a bug.
+    */
+    case "reminder_nudge": {
+      const at = typeof item.payload.at === "string" ? formatTimestamp(item.payload.at) : null;
+      return {
+        headline: `${who} nudged you about ${task}`,
+        detail: at ? `Your reminder was set for ${at}` : "Your reminder is still waiting",
+      };
+    }
     case "due_soon": {
       const due = dateLabel(item.payload.due);
       return { headline: `${task} is due soon`, detail: due ? `Due ${due}` : null };

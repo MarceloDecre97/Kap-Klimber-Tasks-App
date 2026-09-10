@@ -9,7 +9,7 @@ export default async function DashboardPage() {
   const { supabase, member } = await getCurrentMember();
 
   const [tasks, roster, notifications] = await Promise.all([
-    listTasks(supabase),
+    listTasks(supabase, member.id),
     listRoster(supabase),
     listNotifications(supabase),
   ]);

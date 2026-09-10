@@ -2,17 +2,16 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bell, Calendar, Link as LinkIcon } from "lucide-react";
+import { AlertTriangle, Calendar, Link as LinkIcon } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { PRIORITIES, PRIORITY_ORDER, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { ContactPicker } from "@/components/contacts/contact-picker";
 import { createTask, updateTask } from "@/app/tasks/actions";
-import { cn, toZonedDateInput, toZonedTimeInput, zonedWallClockToIso } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 /** Matches the cap enforced in validation and in the database. */
 const TITLE_MAX = 200;
@@ -36,9 +35,6 @@ interface FormState {
   assigneeIds: string[];
   contactIds: string[];
   dueDate: string;
-  reminderEnabled: boolean;
-  reminderDate: string;
-  reminderTime: string;
   links: { label: string; url: string }[];
 }
 
@@ -54,9 +50,6 @@ function initialState(task?: TaskWithRelations): FormState {
     assigneeIds: task?.assignees.map((a) => a.id) ?? [],
     contactIds: task?.contacts.map((c) => c.id) ?? [],
     dueDate: task?.due_date ?? "",
-    reminderEnabled: !!task?.reminder_at,
-    reminderDate: task?.reminder_at ? toZonedDateInput(task.reminder_at) : "",
-    reminderTime: task?.reminder_at ? toZonedTimeInput(task.reminder_at) : "09:00",
     links: task?.links.map((link) => ({ label: link.label, url: link.url })) ?? [],
   };
 }
@@ -103,11 +96,6 @@ export function TaskForm({
     if (!canSave) return;
     setError(null);
 
-    // Interpreted as Chicago wall-clock time, never the browser's zone.
-    const reminderAt =
-      form.reminderEnabled && form.reminderDate
-        ? zonedWallClockToIso(form.reminderDate, form.reminderTime || "09:00")
-        : null;
 
     const input = {
       title: form.title,
@@ -119,7 +107,6 @@ export function TaskForm({
       assigneeIds: form.assigneeIds,
       contactIds: form.contactIds,
       dueDate: form.dueDate || null,
-      reminderAt,
       /*
         A half-filled row is dropped rather than refused. Somebody who taps
         "Add link" and then thinks better of it has an empty pair on screen,
@@ -295,48 +282,15 @@ export function TaskForm({
           <p className="text-[16px] leading-[22px] text-sub">Optional — leave blank if there&apos;s no deadline yet.</p>
         </Field>
 
-        <Field label="">
-          <div className="flex items-center justify-between gap-4 rounded-2xl border-[1.5px] border-border bg-card p-4">
-            <span className="text-field-label">Set a reminder</span>
-            <Switch checked={form.reminderEnabled} onCheckedChange={(v) => update("reminderEnabled", v)} label="Set a reminder" />
-          </div>
-          {form.reminderEnabled && (
-            <div className="flex gap-3">
-              <div className="flex flex-1 flex-col gap-2">
-                <label htmlFor="reminder-date" className="text-field-label">
-                  Date
-                </label>
-                <div className="relative">
-                  <Calendar aria-hidden className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-sub" />
-                  <input
-                    id="reminder-date"
-                    type="date"
-                    value={form.reminderDate}
-                    onChange={(event) => update("reminderDate", event.target.value)}
-                    className="h-[60px] w-full rounded-2xl border-[1.5px] border-border bg-card pl-11 pr-3 text-[18px] text-fg tabular-nums"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-1 flex-col gap-2">
-                <label htmlFor="reminder-time" className="text-field-label">
-                  Time
-                </label>
-                <input
-                  id="reminder-time"
-                  type="time"
-                  value={form.reminderTime}
-                  onChange={(event) => update("reminderTime", event.target.value)}
-                  className="h-[60px] w-full rounded-2xl border-[1.5px] border-border bg-card px-3 text-[18px] text-fg tabular-nums"
-                />
-              </div>
-            </div>
-          )}
-          {form.reminderEnabled && (
-            <div className="flex items-center gap-2 text-[16px] leading-[22px] text-sub">
-              <Bell aria-hidden className="size-4" />A reminder will be saved on the task.
-            </div>
-          )}
-        </Field>
+        {/*
+          The reminder field used to live here.
+
+          Since 0034 a reminder belongs to a person rather than to the task,
+          so a single switch on this form has no answer to "whose?". Setting
+          one moved to the Reminders section on the expanded card, where the
+          person is part of the gesture — and where an assignee can reach it,
+          which since 0033 they cannot do here.
+        */}
 
         <Field label="Description">
           <Textarea

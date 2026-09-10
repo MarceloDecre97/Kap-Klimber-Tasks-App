@@ -81,6 +81,21 @@ export const taskLinkSchema = z.object({
 
 export type TaskLinkInput = z.infer<typeof taskLinkSchema>;
 
+/**
+ * A reminder set for a named person.
+ *
+ * `memberId` is explicit rather than implied by the caller, because setting
+ * one for somebody else is the point of the feature. Who is *allowed* to is
+ * decided by set_task_reminder in 0034 — this only checks the shape.
+ */
+export const reminderInputSchema = z.object({
+  taskId: z.string().uuid(),
+  memberId: z.string().uuid(),
+  remindAt: z.string().datetime({ offset: true }),
+});
+
+export type ReminderInput = z.infer<typeof reminderInputSchema>;
+
 export const taskInputSchema = z.object({
   title: z.string().trim().min(1, "Give the task a title so people know what it is.").max(200),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
@@ -109,7 +124,11 @@ export const taskInputSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid due date.")
     .nullable()
     .optional(),
-  reminderAt: z.string().datetime({ offset: true }).nullable().optional(),
+  /*
+    reminderAt is gone from here as of 0034. A reminder belongs to a person,
+    so it is set through set_task_reminder with the person named — see
+    reminderInputSchema above — and never as a property of the task.
+  */
 });
 
 export type TaskInput = z.infer<typeof taskInputSchema>;

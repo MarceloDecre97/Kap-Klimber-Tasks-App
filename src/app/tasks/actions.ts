@@ -8,6 +8,7 @@ import {
   noteEditSchema,
   noteInputSchema,
   statusEnum,
+  reminderInputSchema,
   taskInputSchema,
   taskLinkSchema,
   type TaskLinkInput,
@@ -207,7 +208,6 @@ export async function createTask(input: unknown): Promise<ActionResult> {
         priority: data.priority,
         status: data.status,
         due_date: data.dueDate ?? null,
-        reminder_at: data.reminderAt ?? null,
         created_by: member.id,
       })
       .select("id")
@@ -256,7 +256,6 @@ export async function updateTask(taskIdInput: string, input: unknown): Promise<A
         priority: data.priority,
         status: data.status,
         due_date: data.dueDate ?? null,
-        reminder_at: data.reminderAt ?? null,
         ...(data.status === "complete" ? { completed_at: new Date().toISOString(), completed_by: member.id } : { completed_at: null, completed_by: null }),
       })
       .eq("id", taskId.data);
@@ -424,42 +423,130 @@ export async function setTaskStatus(taskIdInput: string, statusInput: unknown): 
  *
  * The reminder itself is read back from the row rather than trusted from
  * the client, so a stale page can't dismiss a reminder that has since been
- * changed. Editing reminder_at clears the dismissal via a database trigger.
+ * changed.
  */
-export async function toggleReminderDismissal(
-  taskIdInput: string
-): Promise<ActionResult<{ taskId: string; dismissed: boolean }>> {
-  const taskId = taskIdSchema.safeParse(taskIdInput);
-  if (!taskId.success) return { ok: false, error: "Invalid task." };
+/* -------------------------------------------------------------------------
+   Reminders
+
+   Every one of these is a call into a SECURITY DEFINER function, for the
+   same reason deleting a task is: the rule — "yourself, or anyone assigned
+   if you created the task" — is a sentence about three tables, and there is
+   deliberately no insert, update or delete policy on task_reminders for a
+   caller to route around it with.
+
+   So these actions carry no permission logic of their own. They translate a
+   raise() into a sentence a person can act on, and nothing else.
+   ------------------------------------------------------------------------- */
+
+/** Postgres raises with the message we wrote; show that rather than a generic. */
+function reminderError(error: unknown, fallback: string): string {
+  const message = (error as { message?: string })?.message;
+  return typeof message === "string" && message.length > 0 && message.length < 200
+    ? message
+    : fallback;
+}
+
+export async function setTaskReminder(input: unknown): Promise<ActionResult> {
+  const parsed = reminderInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "That reminder isn't valid." };
+  }
 
   try {
-    const { supabase, member } = await getCurrentMember();
-
-    const { data: task, error: lookupError } = await supabase
-      .from("tasks")
-      .select("reminder_at, reminder_dismissed_at")
-      .eq("id", taskId.data)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (lookupError) throw lookupError;
-    if (!task) return { ok: false, error: "That task no longer exists." };
-    if (!task.reminder_at) return { ok: false, error: "That task has no reminder." };
-
-    const dismissing = !task.reminder_dismissed_at;
-    const { error } = await supabase
-      .from("tasks")
-      .update({
-        reminder_dismissed_at: dismissing ? new Date().toISOString() : null,
-        reminder_dismissed_by: dismissing ? member.id : null,
-      })
-      .eq("id", taskId.data);
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase.rpc("set_task_reminder", {
+      p_task_id: parsed.data.taskId,
+      p_member_id: parsed.data.memberId,
+      p_remind_at: parsed.data.remindAt,
+    });
     if (error) throw error;
 
     revalidateTaskViews();
-    return { ok: true, taskId: taskId.data, dismissed: dismissing };
+    return { ok: true, taskId: parsed.data.taskId };
   } catch (error) {
-    console.error("toggleReminderDismissal failed", error);
-    return { ok: false, error: "Couldn't update that reminder. Try again." };
+    console.error("setTaskReminder failed", error);
+    return { ok: false, error: reminderError(error, "Couldn't set that reminder. Try again.") };
+  }
+}
+
+/**
+ * Handled, or back to waiting.
+ *
+ * A toggle, matching the chip that has always worked this way. The task id
+ * comes along only so the right views are refreshed — the function decides
+ * everything else from the reminder itself.
+ */
+export async function setReminderDismissed(
+  taskIdInput: string,
+  reminderIdInput: string,
+  dismissed: boolean
+): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  const reminderId = taskIdSchema.safeParse(reminderIdInput);
+  if (!taskId.success || !reminderId.success) return { ok: false, error: "Invalid reminder." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase.rpc("set_reminder_dismissed", {
+      p_reminder_id: reminderId.data,
+      p_dismissed: dismissed,
+    });
+    if (error) throw error;
+
+    revalidateTaskViews();
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("setReminderDismissed failed", error);
+    return { ok: false, error: reminderError(error, "Couldn't update that reminder. Try again.") };
+  }
+}
+
+export async function clearTaskReminder(
+  taskIdInput: string,
+  reminderIdInput: string
+): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  const reminderId = taskIdSchema.safeParse(reminderIdInput);
+  if (!taskId.success || !reminderId.success) return { ok: false, error: "Invalid reminder." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase.rpc("clear_task_reminder", { p_reminder_id: reminderId.data });
+    if (error) throw error;
+
+    revalidateTaskViews();
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("clearTaskReminder failed", error);
+    return { ok: false, error: reminderError(error, "Couldn't remove that reminder. Try again.") };
+  }
+}
+
+/**
+ * Chase somebody about a reminder that fired and was never dealt with.
+ *
+ * The creator's alone, at most once an hour, and refused outright on a
+ * reminder that has not fired or has already been handled — all decided in
+ * the database, which is why this reads as thin as it does.
+ */
+export async function nudgeTaskReminder(
+  taskIdInput: string,
+  reminderIdInput: string
+): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  const reminderId = taskIdSchema.safeParse(reminderIdInput);
+  if (!taskId.success || !reminderId.success) return { ok: false, error: "Invalid reminder." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase.rpc("nudge_task_reminder", { p_reminder_id: reminderId.data });
+    if (error) throw error;
+
+    revalidateTaskViews();
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("nudgeTaskReminder failed", error);
+    return { ok: false, error: reminderError(error, "Couldn't send that nudge. Try again.") };
   }
 }
 

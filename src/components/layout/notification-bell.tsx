@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  BellRing,
   AlertTriangle,
   Bell,
   CalendarClock,
@@ -44,6 +45,8 @@ const KIND_ICON: Record<NotificationKind, LucideIcon> = {
   restored: RotateCcw,
   reminder_upcoming: Bell,
   reminder_due: Bell,
+  /* A person poking you, not the clock going off. */
+  reminder_nudge: BellRing,
   /* The address book's own icon, so it does not read as a deleted task. */
   contact_erased: UserRoundX,
   due_soon: CalendarClock,

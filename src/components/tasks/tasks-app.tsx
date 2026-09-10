@@ -21,7 +21,7 @@ import {
   resolveTaskDeletion,
   restoreTask,
   setTaskStatus,
-  toggleReminderDismissal,
+  setReminderDismissed,
 } from "@/app/tasks/actions";
 import { PRIORITIES, PRIORITY_ORDER } from "@/lib/constants";
 import {
@@ -207,9 +207,16 @@ export function TasksApp({
     });
   }
 
-  function handleToggleReminder(taskId: string) {
+  /*
+    The reminder being toggled is always the viewer's own — the chip only
+    ever draws theirs. Somebody else's is handled from the creator's
+    Reminders section on the expanded card, which calls the same action.
+  */
+  function handleToggleReminder(task: TaskWithRelations) {
+    const mine = task.my_reminder;
+    if (!mine) return;
     startTransition(async () => {
-      const result = await toggleReminderDismissal(taskId);
+      const result = await setReminderDismissed(task.id, mine.id, mine.dismissed_at === null);
       if (!result.ok) {
         showToast({ message: result.error });
         return;
@@ -469,7 +476,7 @@ export function TasksApp({
                         onRequestDelete={() => setDeleteTarget(task)}
                         onResolveDeletion={(approve) => handleResolveDeletion(task.id, approve)}
                         onCancelDeletion={() => handleCancelDeletion(task.id)}
-                        onToggleReminder={() => handleToggleReminder(task.id)}
+                        onToggleReminder={() => handleToggleReminder(task)}
                         roster={roster}
                         mentionsYou={mentionedTaskIds.has(task.id)}
                         lastActivityAt={getLastActivityAt(task)}
@@ -503,7 +510,7 @@ export function TasksApp({
                           onRequestDelete={() => setDeleteTarget(task)}
                         onResolveDeletion={(approve) => handleResolveDeletion(task.id, approve)}
                         onCancelDeletion={() => handleCancelDeletion(task.id)}
-                          onToggleReminder={() => handleToggleReminder(task.id)}
+                          onToggleReminder={() => handleToggleReminder(task)}
                           roster={roster}
                           mentionsYou={mentionedTaskIds.has(task.id)}
                         />

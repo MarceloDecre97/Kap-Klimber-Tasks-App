@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 
 export default async function EditTaskPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { supabase } = await getCurrentMember();
+  const { supabase, member } = await getCurrentMember();
   const [task, roster, categories, contacts] = await Promise.all([
-    getTask(supabase, id),
+    getTask(supabase, id, member.id),
     listRoster(supabase),
     listCategories(supabase),
     listContacts(supabase),

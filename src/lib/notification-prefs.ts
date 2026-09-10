@@ -72,8 +72,8 @@ export const PREF_GROUPS: PrefGroup[] = [
   {
     id: "reminders",
     label: "Reminders",
-    detail: "Twelve hours before, and when the reminder fires.",
-    kinds: ["reminder_upcoming", "reminder_due"],
+    detail: "Twelve hours before, when the reminder fires, and if you are nudged.",
+    kinds: ["reminder_upcoming", "reminder_due", "reminder_nudge"],
     email: true,
   },
   {

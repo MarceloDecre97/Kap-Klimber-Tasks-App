@@ -199,9 +199,15 @@ export function dueOffset(task: TaskWithRelations, todayKey: string): number | n
   return daysBetweenKeys(todayKey, task.due_date);
 }
 
-/** The calendar day a task's reminder falls on, in app time. */
+/**
+ * The calendar day the viewer's own reminder falls on, in app time.
+ *
+ * "The viewer's own" is the whole change here: since 0034 a task can carry a
+ * reminder for each person on it, and the Dashboard is one person's view of
+ * their day. Somebody else's reminder is none of this panel's business.
+ */
 function reminderKey(task: TaskWithRelations): string | null {
-  return task.reminder_at ? zonedDateKey(new Date(task.reminder_at)) : null;
+  return task.my_reminder ? zonedDateKey(new Date(task.my_reminder.remind_at)) : null;
 }
 
 /**
@@ -222,7 +228,7 @@ function reminderKey(task: TaskWithRelations): string | null {
  */
 function attentionKeyOf(task: TaskWithRelations, now: Date): string | null {
   const due = task.due_date ?? null;
-  const rem = reminderState(task, now) === "upcoming" ? reminderKey(task) : null;
+  const rem = reminderState(task.my_reminder, now) === "upcoming" ? reminderKey(task) : null;
 
   if (due && rem) return rem < due ? rem : due;
   return due ?? rem;
@@ -262,9 +268,9 @@ function toEntry(task: TaskWithRelations, todayKey: string, now: Date): BucketEn
   const due = task.due_date ?? null;
   const rem = reminderKey(task);
   const attentionKey = attentionKeyOf(task, now);
-  const remTime = task.reminder_at ? formatClockTime(new Date(task.reminder_at)) : null;
+  const remTime = task.my_reminder ? formatClockTime(new Date(task.my_reminder.remind_at)) : null;
 
-  const rState = reminderState(task, now);
+  const rState = reminderState(task.my_reminder, now);
   const reminderDismissed = rState === "handled";
   const reminderNeedsAttention = rState === "due";
 
@@ -292,7 +298,7 @@ function toEntry(task: TaskWithRelations, todayKey: string, now: Date): BucketEn
   return {
     task,
     attentionKey,
-    hasReminder: !!task.reminder_at,
+    hasReminder: !!task.my_reminder,
     reminderLabel,
     reminderTone,
     missedDeadline,

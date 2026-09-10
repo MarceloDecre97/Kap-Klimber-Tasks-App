@@ -15,7 +15,7 @@ import {
   resolveTaskDeletion,
   restoreTask,
   setTaskStatus,
-  toggleReminderDismissal,
+  setReminderDismissed,
 } from "@/app/tasks/actions";
 import {
   STALE_AFTER_DAYS,
@@ -97,9 +97,16 @@ export function DashboardApp({
     });
   }
 
-  function handleToggleReminder(taskId: string) {
+  /*
+    The reminder being toggled is always the viewer's own — the chip only
+    ever draws theirs. Somebody else's is handled from the creator's
+    Reminders section on the expanded card, which calls the same action.
+  */
+  function handleToggleReminder(task: TaskWithRelations) {
+    const mine = task.my_reminder;
+    if (!mine) return;
     startTransition(async () => {
-      const result = await toggleReminderDismissal(taskId);
+      const result = await setReminderDismissed(task.id, mine.id, mine.dismissed_at === null);
       if (!result.ok) {
         showToast({ message: result.error });
         return;
@@ -344,7 +351,7 @@ export function DashboardApp({
                             onRequestDelete={() => setDeleteTarget(entry.task)}
                             onResolveDeletion={(approve) => handleResolveDeletion(entry.task.id, approve)}
                             onCancelDeletion={() => handleCancelDeletion(entry.task.id)}
-                            onToggleReminder={() => handleToggleReminder(entry.task.id)}
+                            onToggleReminder={() => handleToggleReminder(entry.task)}
                             roster={roster}
                             mentionsYou={mentionedTaskIds.has(entry.task.id)}
                           />

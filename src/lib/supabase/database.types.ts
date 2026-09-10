@@ -19,6 +19,8 @@ export type NotificationKind =
   | "restored"
   | "reminder_upcoming"
   | "reminder_due"
+  /** The creator chasing an already-fired reminder. See 0034. */
+  | "reminder_nudge"
   | "due_soon"
   | "overdue"
   /** The one that is not about a task at all. See 0025_contact_erased.sql. */
@@ -37,7 +39,9 @@ export type TaskEventKind =
   | "delete_denied"
   | "delete_cancelled"
   | "deleted"
-  | "restored";
+  | "restored"
+  /** Recorded when the creator chases somebody's reminder. See 0034. */
+  | "reminder_nudge";
 
 /** Everything a contact's Activity can record. */
 export type ContactEventKind = "created" | "edited" | "deleted" | "restored";
@@ -315,6 +319,23 @@ export interface Database {
         >;
         Relationships: [];
       };
+      task_reminders: {
+        Row: {
+          id: string;
+          task_id: string;
+          member_id: string;
+          remind_at: string;
+          created_by: string | null;
+          dismissed_at: string | null;
+          dismissed_by: string | null;
+          nudged_at: string | null;
+          created_at: string;
+        };
+        /** Written only by the functions above — never directly. */
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       task_links: {
         Row: {
           id: string;
@@ -428,6 +449,14 @@ export interface Database {
       };
       /** The creator, or anybody once the creator is deactivated. 0033. */
       can_edit_task: { Args: { p_task_id: string }; Returns: boolean };
+      /* Reminders belong to a person, and only these may write them. 0034. */
+      set_task_reminder: {
+        Args: { p_task_id: string; p_member_id: string; p_remind_at: string };
+        Returns: string;
+      };
+      set_reminder_dismissed: { Args: { p_reminder_id: string; p_dismissed: boolean }; Returns: void };
+      clear_task_reminder: { Args: { p_reminder_id: string }; Returns: void };
+      nudge_task_reminder: { Args: { p_reminder_id: string }; Returns: void };
       request_task_deletion: { Args: { p_task_id: string; p_reason: string }; Returns: void };
       resolve_task_deletion: { Args: { p_task_id: string; p_approve: boolean }; Returns: void };
       cancel_task_deletion: { Args: { p_task_id: string }; Returns: void };
