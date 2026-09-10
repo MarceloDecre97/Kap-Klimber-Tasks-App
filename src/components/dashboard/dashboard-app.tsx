@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useRefreshOnReturn } from "@/lib/use-refresh-on-return";
 import { Bell, BellOff, ChevronDown } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
@@ -54,6 +55,12 @@ export function DashboardApp({
   notifications: NotificationFeed;
 }) {
   const router = useRouter();
+  /*
+    Someone else's change — a reminder set, a note added, a status moved —
+    reaches this screen when its owner comes back to it. Without this the
+    page shows the moment it was rendered until they reload by hand.
+  */
+  useRefreshOnReturn();
   const { showToast } = useToast();
   const [scope, setScope] = useState<PersonalScope>("assigned");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});

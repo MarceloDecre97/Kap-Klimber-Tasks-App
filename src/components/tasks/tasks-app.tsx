@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useRefreshOnReturn } from "@/lib/use-refresh-on-return";
 import { ChevronDown, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,12 @@ export function TasksApp({
   focusTaskId: string | null;
 }) {
   const router = useRouter();
+  /*
+    Someone else's change — a reminder set, a note added, a status moved —
+    reaches this screen when its owner comes back to it. Without this the
+    page shows the moment it was rendered until they reload by hand.
+  */
+  useRefreshOnReturn();
   const { showToast } = useToast();
   const [filters, setFilters] = useState<TaskFilters>(EMPTY_FILTERS);
   // null until the user picks one, so the button can read a plain "Sort".

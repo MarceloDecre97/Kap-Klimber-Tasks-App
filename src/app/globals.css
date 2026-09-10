@@ -27,6 +27,13 @@
     card is a button. 7.0:1 on the card background.
   */
   --color-link: #1d4ed8;
+  /*
+    Dismissing a reminder — a settling action, so it takes the Complete
+    status's green rather than the brand red every other control used to
+    share. This is the same #00531E that fills the Mark complete button,
+    so "done" reads as one colour across the card. 9.4:1 on the card.
+  */
+  --color-ok: #00531E;
   --color-danger: #dc2626;
   /* Labels for text sitting ON a solid brand/accent/danger fill. All three
      fills invert lightness between themes, so a hardcoded white would fail
@@ -76,6 +83,15 @@
   --color-tag: #fbbf5c;
   /* The same blue lifted for a dark ground — 8.1:1 on the dark card. */
   --color-link: #93c5fd;
+  /*
+    Lifted rather than deepened for the dark theme.
+
+    A darker green is what was asked for, and on a #020617 ground #00531E
+    comes out at about 1.9:1 — legible as a shape, not as words. This is the
+    Complete chip's own green, which the dark theme already relies on, at
+    12.8:1.
+  */
+  --color-ok: #88FFB1;
   --color-danger: #f87171;
   /* Dark mode lightens all three fills, so their labels go dark. */
   --color-on-brand: #0b1220;
@@ -148,6 +164,7 @@
   --color-on-accent: var(--color-on-accent);
   --color-tag: var(--color-tag);
   --color-link: var(--color-link);
+  --color-ok: var(--color-ok);
   --color-danger: var(--color-danger);
   --color-on-danger: var(--color-on-danger);
   --color-line: var(--color-line);

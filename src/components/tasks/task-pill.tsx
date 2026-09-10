@@ -849,6 +849,26 @@ export function TaskPill({
   );
 }
 
+/** Matches the cap nudge_task_reminder enforces in 0034. */
+const NUDGE_COOLDOWN_MS = 60 * 60 * 1000;
+
+/**
+ * Minutes still to wait before this reminder can be nudged again, or null
+ * when it can be nudged now. Never returns 0 — a wait of "0 minutes" is a
+ * wait that is over.
+ */
+function nudgeWaitMinutes(reminder: TaskReminder, now: number): number | null {
+  if (!reminder.nudged_at) return null;
+  const remaining = Date.parse(reminder.nudged_at) + NUDGE_COOLDOWN_MS - now;
+  return remaining > 0 ? Math.max(1, Math.ceil(remaining / 60_000)) : null;
+}
+
+/** "an hour" reads better than "60 minutes" and is the only round case. */
+function plainMinutes(minutes: number): string {
+  if (minutes >= 60) return "an hour";
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
 /**
  * Reminders on a task.
  *
@@ -876,6 +896,21 @@ function TaskReminders({
   const [time, setTime] = useState("09:00");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  /*
+    A clock, so a nudge cooldown expires on screen rather than on the next
+    reload. It ticks only while one is actually running — an idle card with
+    no cooldown sets no timer at all.
+  */
+  const [now, setNow] = useState(() => Date.now());
+  const cooling = task.reminders.some(
+    (r) => r.nudged_at !== null && Date.parse(r.nudged_at) + NUDGE_COOLDOWN_MS > now
+  );
+  useEffect(() => {
+    if (!cooling) return;
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, [cooling]);
 
   /*
     The creator sees a row per assignee, whether or not they have a reminder
@@ -994,55 +1029,84 @@ function TaskReminders({
                 </div>
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <button
-                  type="button"
-                  onClick={() => open(person.id, reminder)}
-                  disabled={isPending}
-                  className="text-[16px] leading-[22px] font-bold text-brand cursor-pointer bg-transparent border-none p-0"
-                >
-                  {reminder ? "Change" : "Set a reminder"}
-                </button>
-
-                {reminder && (
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {/*
+                    One colour per meaning, rather than brand red for
+                    everything: neutral to edit, green to settle, amber to
+                    reopen, red to chase, grey to delete. The row is read at a
+                    glance and the colours are what make it scannable.
+                  */}
                   <button
                     type="button"
-                    onClick={() =>
-                      run(() => setReminderDismissed(task.id, reminder.id, reminder.dismissed_at === null))
-                    }
+                    onClick={() => open(person.id, reminder)}
                     disabled={isPending}
-                    className="text-[16px] leading-[22px] font-bold text-brand cursor-pointer bg-transparent border-none p-0"
+                    className="text-[16px] leading-[22px] font-bold text-fg cursor-pointer bg-transparent border-none p-0"
                   >
-                    {reminder.dismissed_at ? "Un-dismiss" : "Mark handled"}
+                    {reminder ? "Change" : "Set a reminder"}
                   </button>
-                )}
 
-                {/*
-                  Nudge is the creator's alone, and only on a reminder that
-                  has fired and gone undealt-with. Anywhere else there is
-                  nothing to chase, so the button is not drawn rather than
-                  drawn and refused.
-                */}
-                {canManageAll && !mine && state === "due" && (
-                  <button
-                    type="button"
-                    onClick={() => run(() => nudgeTaskReminder(task.id, reminder!.id))}
-                    disabled={isPending}
-                    className="text-[16px] leading-[22px] font-bold text-danger cursor-pointer bg-transparent border-none p-0"
-                  >
-                    Nudge
-                  </button>
-                )}
+                  {reminder && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        run(() => setReminderDismissed(task.id, reminder.id, reminder.dismissed_at === null))
+                      }
+                      disabled={isPending}
+                      className={cn(
+                        "text-[16px] leading-[22px] font-bold cursor-pointer bg-transparent border-none p-0",
+                        reminder.dismissed_at ? "text-accent" : "text-ok"
+                      )}
+                    >
+                      {reminder.dismissed_at ? "Un-dismiss" : "Dismiss"}
+                    </button>
+                  )}
 
-                {reminder && (
-                  <button
-                    type="button"
-                    onClick={() => run(() => clearTaskReminder(task.id, reminder.id))}
-                    disabled={isPending}
-                    className="text-[16px] leading-[22px] font-bold text-sub cursor-pointer bg-transparent border-none p-0"
-                  >
-                    Remove
-                  </button>
+                  {/*
+                    Nudge is the creator's alone, and only on a reminder that
+                    has fired and gone undealt-with. Anywhere else there is
+                    nothing to chase, so the button is not drawn rather than
+                    drawn and refused.
+
+                    Within the hour after a nudge it stays visible but struck
+                    through and inert. Hiding it would read as the button
+                    having vanished; greyed and crossed out says "sent, wait"
+                    — which is the actual state, and the line below says how
+                    long. The database enforces the hour either way.
+                  */}
+                  {canManageAll && !mine && state === "due" && reminder && (
+                    <button
+                      type="button"
+                      onClick={() => run(() => nudgeTaskReminder(task.id, reminder.id))}
+                      disabled={isPending || nudgeWaitMinutes(reminder, now) !== null}
+                      className={cn(
+                        "text-[16px] leading-[22px] font-bold bg-transparent border-none p-0",
+                        nudgeWaitMinutes(reminder, now) !== null
+                          ? "text-sub line-through cursor-default"
+                          : "text-danger cursor-pointer"
+                      )}
+                    >
+                      Nudge
+                    </button>
+                  )}
+
+                  {reminder && (
+                    <button
+                      type="button"
+                      onClick={() => run(() => clearTaskReminder(task.id, reminder.id))}
+                      disabled={isPending}
+                      className="text-[16px] leading-[22px] font-bold text-sub cursor-pointer bg-transparent border-none p-0"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                {canManageAll && !mine && reminder && nudgeWaitMinutes(reminder, now) !== null && (
+                  <p className="text-[16px] leading-[22px] text-sub">
+                    You can nudge them again in {plainMinutes(nudgeWaitMinutes(reminder, now)!)}. Give
+                    them a moment.
+                  </p>
                 )}
               </div>
             )}
