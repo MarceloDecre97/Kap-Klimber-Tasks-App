@@ -4,14 +4,22 @@ import type { TaskStatus } from "@/lib/supabase/database.types";
 import { formatCalendarDate, formatTimestamp } from "@/lib/utils";
 
 /**
- * A task's history had been kept in two places that never met: notes, which
- * people wrote, and status changes, which only ever existed as the task's
- * current state. Reading "we're blocked on the supplier" without seeing that
- * the task moved to Waiting an hour earlier makes the note look like news
- * when it was a consequence.
+ * A task's history lives in two places: notes, which people write, and
+ * events, which record what changed.
  *
- * This merges the two into one chronological list. Notes keep their replies;
- * events are single lines with no interaction of their own.
+ * These were merged into one chronological list for a real reason — reading
+ * "we're blocked on the supplier" without seeing that the task moved to
+ * Waiting an hour earlier makes the note look like news when it was a
+ * consequence. The merged list is `buildTimeline`, and it is still correct.
+ *
+ * The banner no longer draws it. Merged, the two grew into a wall that was
+ * skipped rather than read, so the card now shows Team Chat (the notes) and
+ * Task Activity (the events, folded to the latest one) as neighbours. The
+ * connection above survives because they are adjacent and the newest event
+ * is always on screen; it is simply no longer interleaved.
+ *
+ * `buildEventLog` is the events half. Notes need no helper — they arrive
+ * nested and in order.
  */
 export type TimelineItem =
   | { kind: "note"; at: string; note: TaskNote }
@@ -108,4 +116,24 @@ export function buildTimeline(task: TaskWithRelations): TimelineItem[] {
     if (a.kind === b.kind) return 0;
     return a.kind === "event" ? -1 : 1;
   });
+}
+
+/** Just the events, oldest first, with the ones that have nothing to say dropped. */
+export type EventLogItem = Extract<TimelineItem, { kind: "event" }>;
+
+export function buildEventLog(task: TaskWithRelations): EventLogItem[] {
+  const items: EventLogItem[] = [];
+
+  for (const event of task.events) {
+    const label = describeEvent(event);
+    /*
+      describeEvent returns null for a kind this version does not know how to
+      phrase. Skipping it is deliberate: a blank line in the log is worse
+      than a missing one, and the row is still in the database if a later
+      version learns the words.
+    */
+    if (label) items.push({ kind: "event", at: event.created_at, event, label });
+  }
+
+  return items.sort((a, b) => a.at.localeCompare(b.at));
 }

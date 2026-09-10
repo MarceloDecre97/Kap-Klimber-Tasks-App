@@ -60,6 +60,20 @@ export interface TaskNote {
   replies: TaskNote[];
 }
 
+/**
+ * A named link on a task — a document in the shared Drive, most often.
+ *
+ * Only the label is ever drawn. That is the point of the table: a Drive URL
+ * is eighty unbroken characters, and putting one in the description is what
+ * made it overflow its card.
+ */
+export interface TaskLink {
+  id: string;
+  label: string;
+  url: string;
+  position: number;
+}
+
 export interface TaskWithRelations {
   id: string;
   title: string;
@@ -95,6 +109,12 @@ export interface TaskWithRelations {
    */
   contacts: TaskContact[];
   notes: TaskNote[];
+  /**
+   * Up to three, in the order they were added. Always an array for the same
+   * reason `contacts` is: a task with no links is the common case and has to
+   * render exactly as it did before links existed.
+   */
+  links: TaskLink[];
   /** Status and due-date changes, oldest first. Empty until 0007 is applied. */
   events: TaskEvent[];
   /**
@@ -112,6 +132,7 @@ const TASK_SELECT = `
   reads:task_reads(last_read_at),
   events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
+  links:task_links(id, label, url, position),
   contacts:task_contacts(contact:contacts(id, first_name, last_name, job_title, company, mobile, office_phone, deleted_at)),
   notes:task_notes(id, body, created_at, edited_at, parent_note_id, deleted_at, member:members!task_notes_member_id_fkey(id, display_name, initials, color), likes:task_note_likes(member_id))
 `;
@@ -148,6 +169,7 @@ type RawTask = {
   category: { id: string; label: string } | null;
   assignees: { member: MemberSummary | null }[] | null;
   contacts: { contact: TaskContact | null }[] | null;
+  links: TaskLink[] | null;
   notes: RawTaskNote[] | null;
   reads: { last_read_at: string }[] | null;
   events: RawTaskEvent[] | null;
@@ -217,6 +239,12 @@ function mapTask(row: RawTask): TaskWithRelations {
       .map((c) => c.contact)
       .filter((c): c is TaskContact => !!c)
       .sort((a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name)),
+    /*
+      Sorted here rather than trusted from the query: PostgREST does not
+      promise an order on an embedded table, and links that reshuffle between
+      refreshes read as somebody having changed them.
+    */
+    links: (row.links ?? []).slice().sort((a, b) => a.position - b.position),
     notes: nestNotes(row.notes ?? []),
     last_read_at: row.reads?.[0]?.last_read_at ?? null,
     events: (row.events ?? []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at)),

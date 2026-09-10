@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   AtSign,
@@ -10,6 +10,7 @@ import {
   GitCommitHorizontal,
   Hourglass,
   Contact,
+  Link as LinkIcon,
   MessageSquare,
   Pencil,
   ThumbsUp,
@@ -18,14 +19,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip";
 import { TaskContactPill } from "@/components/contacts/task-contact-pill";
 import { MentionTextarea } from "@/components/tasks/mention-textarea";
 import { NoteBody } from "@/components/tasks/note-body";
 import { PRIORITIES, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { toDisplayBody, toStorageBody, visibleLength } from "@/lib/mentions";
 import { reminderState } from "@/lib/reminders";
-import { buildTimeline } from "@/lib/task-timeline";
+import { buildEventLog } from "@/lib/task-timeline";
 import { countNotes, daysSince } from "@/lib/tasks-view";
 import {
   cn,
@@ -123,7 +123,45 @@ export function TaskPill({
   const creator = roster.find((m) => m.id === task.created_by) ?? null;
   const iRequested = task.deletion_requested_by === meId;
 
-  const timeline = buildTimeline(task);
+  /*
+    Two lists where there was one merged timeline: what people said, and what
+    changed. buildTimeline still merges them for anything that wants the old
+    single stream; these are the two halves the banner draws.
+  */
+  const notes = task.notes;
+  const events = buildEventLog(task);
+  const [activityOpen, setActivityOpen] = useState(false);
+
+  /*
+    The description's fold.
+
+    Whether six lines is a fold or the whole thing depends on the width of
+    the phone and the length of the words, so it is measured rather than
+    guessed at: scrollHeight is the full text, clientHeight is what the clamp
+    leaves visible. Re-measured on resize because rotating the phone changes
+    the answer.
+  */
+  const descriptionRef = useRef<HTMLParagraphElement | null>(null);
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const [descriptionOverflows, setDescriptionOverflows] = useState(false);
+
+  useEffect(() => {
+    const node = descriptionRef.current;
+    if (!node) {
+      setDescriptionOverflows(false);
+      return;
+    }
+    const measure = () => {
+      const el = descriptionRef.current;
+      if (!el) return;
+      // Only meaningful while clamped; once open the element is its full height.
+      if (descriptionOpen) return;
+      setDescriptionOverflows(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [task.description, descriptionOpen, expanded]);
   const noteCount = countNotes(task.notes);
   const contacts = task.contacts;
   const overdueDays =
@@ -418,46 +456,135 @@ export function TaskPill({
               <dt className="text-[16px] leading-7 font-bold text-sub">Category</dt>
               <dd className="min-w-0 break-words text-[18px] leading-7 text-fg">{task.category?.label ?? "None"}</dd>
             </div>
-            {task.due_date && (
-              <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
-                <dt className="text-[16px] leading-7 font-bold text-sub">Due date</dt>
-                <dd className="min-w-0 break-words text-[18px] leading-7 text-fg">
-                  {formatCalendarDate(task.due_date)}
-                </dd>
-              </div>
-            )}
-            {task.reminder_at && (
-              <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
-                <dt className="text-[16px] leading-7 font-bold text-sub">Reminder</dt>
-                <dd
-                  className={cn(
-                    "min-w-0 break-words text-[18px] leading-7",
-                    dismissed ? "text-sub line-through" : "text-fg"
-                  )}
-                >
-                  {formatTimestamp(task.reminder_at)}
-                </dd>
-              </div>
-            )}
+            {/*
+              The due date and the reminder used to be repeated here. Both are
+              already above — the due date in the "Due For …" header line, the
+              reminder as its own chip — and the second copy was most of what
+              made this block feel long.
+            */}
           </dl>
 
-          {task.description && <p className="text-[18px] leading-7 text-fg text-pretty">{task.description}</p>}
+          {task.description && (
+            <div className="flex flex-col gap-1.5">
+              {/*
+                `break-words` is the whole of the overflow fix.
+
+                The paragraph was never the problem. A Drive URL pasted into a
+                description is eighty characters with no spaces in it, so the
+                browser has nowhere to wrap and it runs off the side of the
+                card. A character limit would not have helped: 200 characters
+                of unbroken URL overflow exactly the same.
+              */}
+              <p
+                ref={descriptionRef}
+                className={cn(
+                  "text-[18px] leading-7 text-fg text-pretty break-words",
+                  !descriptionOpen && "line-clamp-6"
+                )}
+              >
+                {task.description}
+              </p>
+              {/*
+                Measured, not counted. The button appears when the text
+                actually overflows six lines at this phone's width, which a
+                character count cannot know.
+              */}
+              {descriptionOverflows && (
+                <button
+                  type="button"
+                  onClick={() => setDescriptionOpen((open) => !open)}
+                  className="self-start text-[16px] leading-[22px] font-bold text-brand cursor-pointer bg-transparent border-none p-0"
+                >
+                  {descriptionOpen ? "Show less" : "Show more"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/*
+            §3 — External links.
+
+            Hidden entirely when a task has none, which is most of them. Only
+            the label is drawn; the URL behind it is the reason this section
+            exists at all.
+          */}
+          {task.links.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="text-section-heading">
+                {task.links.length === 1 ? "External Link" : "External Links"}
+              </div>
+              <ul className="flex flex-col gap-1.5">
+                {task.links.map((link) => (
+                  <li key={link.id} className="flex min-w-0 items-baseline gap-2">
+                    <LinkIcon aria-hidden className="size-4 shrink-0 translate-y-0.5 text-sub" />
+                    {/*
+                      noreferrer alongside noopener: the first stops the opened
+                      page reaching back through window.opener, the second
+                      keeps the task's URL out of its referer header.
+                    */}
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={link.url}
+                      className="min-w-0 truncate text-[18px] leading-7 font-bold text-link underline underline-offset-2"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
-            <div className="text-field-label">Move status on</div>
-            <div className="flex flex-wrap gap-2">
+            <div className="text-field-label">Change Task&apos;s Status To:</div>
+            {/*
+              Always exactly three — five statuses less the current one, less
+              Complete, which has its own button at the foot of the card.
+
+              A three-column grid rather than a wrapping row: equal columns
+              keep them on one line at 390px and stop the widest label
+              ("Not started") from pushing the third one under.
+
+              Colours come from STATUSES as inline styles, not classes. The
+              tones are hex values in constants.ts rather than Tailwind
+              colour names, and routing them through className would hand
+              tailwind-merge classes it does not recognise — which it drops.
+            */}
+            <div className="grid grid-cols-3 gap-2">
               {STATUS_ORDER.filter((value) => value !== task.status && value !== "complete").map((value) => {
                 const spec = STATUSES[value];
                 const Icon = spec.icon;
                 return (
-                  <Chip
+                  <button
                     key={value}
-                    showCheckWhenSelected={false}
-                    icon={<Icon aria-hidden className="size-4" />}
+                    type="button"
                     onClick={() => onSetStatus(value)}
+                    disabled={isPending}
+                    style={{ backgroundColor: spec.bg, color: spec.fg, borderColor: spec.border }}
+                    className={cn(
+                      "flex min-w-0 items-center justify-center gap-1 rounded-full border-[1.5px] px-2 py-2",
+                      "text-[14px] leading-tight font-bold cursor-pointer",
+                      "transition-transform duration-150 ease-out active:scale-[0.97]"
+                    )}
                   >
-                    {spec.label}
-                  </Chip>
+                    <Icon aria-hidden className="size-4 shrink-0" />
+                    {/*
+                      Wraps rather than truncates. Measured: at 390px the card
+                      gives this row 320px, so a column is 101px and "Not
+                      started" at 15px needs 97px of it before the icon is
+                      even drawn. Truncating fit three pills on one line by
+                      clipping two of the three words, which is not what "on
+                      one line" was asking for.
+
+                      Letting the label take a second line inside its own pill
+                      keeps all three side by side, whole, from 360px up. At
+                      320px — an iPhone SE, nothing anyone here carries — the
+                      widest label would still clip.
+                    */}
+                    <span className="min-w-0 text-center">{spec.label}</span>
+                  </button>
                 );
               })}
             </div>
@@ -477,38 +604,34 @@ export function TaskPill({
           )}
 
           <div className="flex flex-col gap-3">
-            <div className="text-section-heading">Activity</div>
+            <div className="text-section-heading">Team Chat</div>
             {/*
-              Notes and status changes in one chronological list. Kept apart,
-              a note saying "blocked on the supplier" read as news when it was
-              really a consequence of the move to Waiting an hour earlier.
+              Notes only, and all of them.
+
+              These used to be merged with the status changes into one
+              chronological Activity list, so that "blocked on the supplier"
+              could be read next to the move to Waiting that caused it. That
+              reason still holds — what changed is that the merged list grew
+              into a wall nobody read. Task Activity sits directly below this
+              one and always shows the latest change, so the connection is
+              still on screen; it is just no longer interleaved.
+
+              No "show more": under two notes per task across the whole book,
+              a fold would be a control that only ever gets in the way.
             */}
-            {timeline.length === 0 && (
+            {notes.length === 0 && (
               <p className="text-[18px] leading-7 text-sub">Nothing here yet — add the first note.</p>
             )}
-            {timeline.map((item) =>
-              item.kind === "note" ? (
-                <NoteRow
-                  key={item.note.id}
-                  note={item.note}
-                  taskId={task.id}
-                  meId={meId}
-                  roster={roster}
-                  lastReadAt={task.last_read_at}
-                />
-              ) : (
-                <div
-                  key={item.event.id}
-                  className="flex items-baseline gap-2.5 px-1 text-[16px] leading-6 text-sub"
-                >
-                  <GitCommitHorizontal aria-hidden className="size-4 shrink-0 translate-y-0.5" />
-                  <span className="min-w-0 text-pretty">
-                    {item.label}
-                    <span className="text-timestamp"> · {formatTimestamp(item.event.created_at)}</span>
-                  </span>
-                </div>
-              )
-            )}
+            {notes.map((note) => (
+              <NoteRow
+                key={note.id}
+                note={note}
+                taskId={task.id}
+                meId={meId}
+                roster={roster}
+                lastReadAt={task.last_read_at}
+              />
+            ))}
             {/*
               A text box, not a single line. Enter now does what Enter should
               do in a box — start a new line — so one update with four points
@@ -555,12 +678,71 @@ export function TaskPill({
             {noteError && <p className="text-[16px] leading-[22px] font-bold text-danger">{noteError}</p>}
           </div>
 
+          {/*
+            §6 — Task Activity: the record of what changed, not what was said.
+
+            Collapsed to the single most recent entry. The full history is
+            worth keeping and worth reading occasionally; it is not worth
+            eight lines of every task, every time it is opened.
+          */}
+          {events.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="text-section-heading">Task Activity</div>
+              <div className="text-[16px] leading-[22px] font-bold text-brand">
+                {activityOpen ? "All updates" : "Latest"}
+              </div>
+              {(activityOpen ? events : events.slice(-1)).map((item) => (
+                <div
+                  key={item.event.id}
+                  className="flex items-baseline gap-2.5 px-1 text-[16px] leading-6 text-sub"
+                >
+                  <GitCommitHorizontal aria-hidden className="size-4 shrink-0 translate-y-0.5" />
+                  <span className="min-w-0 text-pretty">
+                    {item.label}
+                    <span className="text-timestamp"> · {formatTimestamp(item.event.created_at)}</span>
+                  </span>
+                </div>
+              ))}
+              {/*
+                Only offered when there is genuinely more than the one line
+                already on screen — a "Read more" that reveals nothing is
+                worse than no control at all.
+              */}
+              {events.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setActivityOpen((open) => !open)}
+                  className="self-start text-[16px] leading-[22px] font-bold text-brand cursor-pointer bg-transparent border-none p-0"
+                >
+                  {activityOpen ? "Show less" : "Read more....."}
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center justify-between gap-3 text-timestamp text-sub">
             <span>Updated {formatTimestamp(task.updated_at)}</span>
           </div>
 
           <div className="flex flex-col gap-3">
-            <Button onClick={() => onSetStatus(task.status === "complete" ? "not_started" : "complete")}>
+            {/*
+              The Complete status green rather than brand red, but its dark
+              shade, not the chip's pale background. A pale fill on a
+              full-width primary button leaves it lighter than the
+              red-outlined Delete beneath it, which reads as disabled.
+
+              Inline for the same reason the status pills are: these are hex
+              values in constants.ts, and tailwind-merge drops classes built
+              from names it does not know.
+            */}
+            <Button
+              onClick={() => onSetStatus(task.status === "complete" ? "not_started" : "complete")}
+              style={
+                task.status === "complete"
+                  ? undefined
+                  : { backgroundColor: STATUSES.complete.border, borderColor: STATUSES.complete.border }
+              }
+            >
               {task.status === "complete" ? "Mark not complete" : "Mark complete"}
             </Button>
             <Link href={`/tasks/${task.id}/edit`} className="block">

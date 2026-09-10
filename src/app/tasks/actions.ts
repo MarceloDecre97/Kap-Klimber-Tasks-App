@@ -9,6 +9,7 @@ import {
   noteInputSchema,
   statusEnum,
   taskInputSchema,
+  type TaskLinkInput,
 } from "@/lib/validation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
@@ -99,6 +100,76 @@ async function syncTaskContacts(
   }
 }
 
+/**
+ * Bring a task's links in line with what was submitted.
+ *
+ * Diffed on (label, url) rather than wiped and re-inserted, for the same
+ * reason the assignee list is: saving an unrelated edit should not rewrite
+ * rows that did not change. Here it costs less — nothing notifies off a link
+ * — but it keeps `created_by` pointing at whoever actually pasted the
+ * document instead of whoever last touched the title.
+ *
+ * Deletes run before inserts, so swapping all three links in one save never
+ * meets the three-link trigger on the way through.
+ */
+async function syncTaskLinks(
+  supabase: SupabaseClient<Database>,
+  taskId: string,
+  memberId: string,
+  links: TaskLinkInput[] | undefined
+): Promise<void> {
+  if (links === undefined) return;
+
+  const { data: current, error: readError } = await supabase
+    .from("task_links")
+    .select("id, label, url, position")
+    .eq("task_id", taskId);
+  if (readError) throw readError;
+
+  const key = (link: { label: string; url: string }) => `${link.label}\u0000${link.url}`;
+  const have = new Map((current ?? []).map((row) => [key(row), row]));
+  const want = new Map(links.map((link, index) => [key(link), { ...link, position: index }]));
+
+  const toRemove = (current ?? []).filter((row) => !want.has(key(row)));
+  if (toRemove.length > 0) {
+    const { error } = await supabase
+      .from("task_links")
+      .delete()
+      .in("id", toRemove.map((row) => row.id));
+    if (error) throw error;
+  }
+
+  const toAdd = [...want.values()].filter((link) => !have.has(key(link)));
+  if (toAdd.length > 0) {
+    const { error } = await supabase.from("task_links").insert(
+      toAdd.map((link) => ({
+        task_id: taskId,
+        label: link.label,
+        url: link.url,
+        position: link.position,
+        created_by: memberId,
+      }))
+    );
+    if (error) throw error;
+  }
+
+  /*
+    A link that survived can still have moved, because removing the first of
+    three shifts the two below it. Without this the order would be whatever
+    the positions used to be.
+  */
+  for (const link of want.values()) {
+    const existing = have.get(key(link));
+    if (existing && existing.position !== link.position) {
+      const { error } = await supabase
+        .from("task_links")
+        .update({ position: link.position })
+        .eq("id", existing.id);
+      if (error) throw error;
+    }
+  }
+}
+
 export async function createTask(input: unknown): Promise<ActionResult> {
   const parsed = taskInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That task isn't valid." };
@@ -131,6 +202,7 @@ export async function createTask(input: unknown): Promise<ActionResult> {
     if (assigneeError) throw assigneeError;
 
     await syncTaskContacts(supabase, task.id, member.id, data.contactIds);
+    await syncTaskLinks(supabase, task.id, member.id, data.links);
 
     revalidateTaskViews();
     return { ok: true, taskId: task.id };
@@ -202,6 +274,7 @@ export async function updateTask(taskIdInput: string, input: unknown): Promise<A
     }
 
     await syncTaskContacts(supabase, taskId.data, member.id, data.contactIds);
+    await syncTaskLinks(supabase, taskId.data, member.id, data.links);
 
     revalidateTaskViews();
     return { ok: true, taskId: taskId.data };

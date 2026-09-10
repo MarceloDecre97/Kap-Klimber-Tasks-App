@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bell, Calendar } from "lucide-react";
+import { AlertTriangle, Bell, Calendar, Link as LinkIcon } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -18,6 +18,9 @@ import { cn, toZonedDateInput, toZonedTimeInput, zonedWallClockToIso } from "@/l
 const TITLE_MAX = 200;
 /** Past this, the title will start getting clamped in the list on a phone. */
 const TITLE_LONG = 80;
+/** Both match 0032_task_links.sql, which is what actually enforces them. */
+const LINK_LABEL_MAX = 40;
+const MAX_LINKS = 3;
 import type { ContactSummary } from "@/lib/data/contacts";
 import type { MemberSummary, TaskWithRelations } from "@/lib/data/tasks";
 import type { Priority, TaskStatus } from "@/lib/supabase/database.types";
@@ -36,6 +39,7 @@ interface FormState {
   reminderEnabled: boolean;
   reminderDate: string;
   reminderTime: string;
+  links: { label: string; url: string }[];
 }
 
 function initialState(task?: TaskWithRelations): FormState {
@@ -53,6 +57,7 @@ function initialState(task?: TaskWithRelations): FormState {
     reminderEnabled: !!task?.reminder_at,
     reminderDate: task?.reminder_at ? toZonedDateInput(task.reminder_at) : "",
     reminderTime: task?.reminder_at ? toZonedTimeInput(task.reminder_at) : "09:00",
+    links: task?.links.map((link) => ({ label: link.label, url: link.url })) ?? [],
   };
 }
 
@@ -115,6 +120,16 @@ export function TaskForm({
       contactIds: form.contactIds,
       dueDate: form.dueDate || null,
       reminderAt,
+      /*
+        A half-filled row is dropped rather than refused. Somebody who taps
+        "Add link" and then thinks better of it has an empty pair on screen,
+        and refusing to save the task over it would be punishing them for
+        changing their mind. A row with only one side filled is the same
+        gesture left unfinished.
+      */
+      links: form.links
+        .map((link) => ({ label: link.label.trim(), url: link.url.trim() }))
+        .filter((link) => link.label.length > 0 && link.url.length > 0),
     };
 
     startTransition(async () => {
@@ -330,6 +345,70 @@ export function TaskForm({
             value={form.description}
             onChange={(event) => update("description", event.target.value)}
           />
+        </Field>
+
+        {/*
+          Up to three. Named, because a Drive URL is eighty unbroken
+          characters and pasting one into the description is what used to
+          push it off the side of the card.
+        */}
+        <Field label="Links">
+          <div className="flex flex-col gap-3">
+            {form.links.map((link, index) => (
+              <div key={index} className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-border bg-card p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-field-label">Link {index + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => update("links", form.links.filter((_, i) => i !== index))}
+                    className="h-9 px-2 text-[16px] leading-[22px] font-bold text-danger cursor-pointer bg-transparent border-none"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <Input
+                  placeholder="Name — e.g. JV Exec Summary"
+                  maxLength={LINK_LABEL_MAX}
+                  value={link.label}
+                  onChange={(event) =>
+                    update(
+                      "links",
+                      form.links.map((l, i) => (i === index ? { ...l, label: event.target.value } : l))
+                    )
+                  }
+                />
+                <Input
+                  placeholder="https://…"
+                  inputMode="url"
+                  maxLength={2048}
+                  value={link.url}
+                  onChange={(event) =>
+                    update(
+                      "links",
+                      form.links.map((l, i) => (i === index ? { ...l, url: event.target.value } : l))
+                    )
+                  }
+                />
+              </div>
+            ))}
+            {form.links.length < MAX_LINKS ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => update("links", [...form.links, { label: "", url: "" }])}
+              >
+                <LinkIcon aria-hidden className="size-5" />
+                Add link
+              </Button>
+            ) : (
+              <p className="text-[16px] leading-[22px] text-sub">
+                Three links is the most a task can carry. Remove one to add another.
+              </p>
+            )}
+          </div>
+          <p className="text-[16px] leading-[22px] text-sub">
+            Only the name shows on the task — tapping it opens the link.
+          </p>
         </Field>
 
         {error && (

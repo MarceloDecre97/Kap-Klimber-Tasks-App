@@ -35,6 +35,52 @@ const optionalLabel = (max: number) =>
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined));
 
+/**
+ * A named link on a task.
+ *
+ * The scheme is checked here and again as a check constraint in
+ * 0032_task_links.sql. That is not belt-and-braces for its own sake: this
+ * value ends up as an anchor's href, and `javascript:...` behind a name that
+ * reads "JV Exec Summary" is a script a teammate runs by tapping what looks
+ * like a document. Escaping does not help — the browser follows the scheme
+ * rather than reading the text — so it must never be stored.
+ *
+ * `new URL()` rather than a regular expression, because the parser is what
+ * the browser itself will use, and it agrees with nothing else. A bare
+ * "drive.google.com/x" is rejected: it has no scheme, and quietly prefixing
+ * https:// would be guessing at where somebody meant to go.
+ */
+const LINK_LABEL_MAX = 40;
+const LINK_URL_MAX = 2048;
+
+const linkUrl = z
+  .string()
+  .trim()
+  .min(1, "Paste the link.")
+  .max(LINK_URL_MAX, "That link is too long to store.")
+  .refine(
+    (value) => {
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === "http:" || parsed.protocol === "https:";
+      } catch {
+        return false;
+      }
+    },
+    { message: "A link has to start with http:// or https://" }
+  );
+
+export const taskLinkSchema = z.object({
+  label: z
+    .string()
+    .trim()
+    .min(1, "Give the link a name.")
+    .max(LINK_LABEL_MAX, `Keep the name under ${LINK_LABEL_MAX} characters so it fits on one line.`),
+  url: linkUrl,
+});
+
+export type TaskLinkInput = z.infer<typeof taskLinkSchema>;
+
 export const taskInputSchema = z.object({
   title: z.string().trim().min(1, "Give the task a title so people know what it is.").max(200),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
@@ -52,6 +98,12 @@ export const taskInputSchema = z.object({
     .array(z.string().uuid())
     .max(2, "Two contacts at most. Take one off to swap it.")
     .optional(),
+  /*
+    Three at most, the same cap the database enforces with a trigger. This
+    copy exists so the form can say so in words rather than letting somebody
+    add a fourth and meet a raise() on save.
+  */
+  links: z.array(taskLinkSchema).max(3, "Three links at most.").optional(),
   dueDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid due date.")

@@ -315,6 +315,26 @@ export interface Database {
         >;
         Relationships: [];
       };
+      task_links: {
+        Row: {
+          id: string;
+          task_id: string;
+          label: string;
+          url: string;
+          position: number;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          task_id: string;
+          label: string;
+          url: string;
+          position?: number;
+          created_by?: string | null;
+        };
+        Update: { label?: string; url?: string; position?: number };
+        Relationships: [];
+      };
       task_contacts: {
         Row: {
           task_id: string;
