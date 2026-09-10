@@ -130,6 +130,8 @@ export function TaskPill({
   */
   const notes = task.notes;
   const events = buildEventLog(task);
+  /* Oldest-first is the natural order to build; the card reads the other way. */
+  const newestFirst = events.slice().reverse();
   const [activityOpen, setActivityOpen] = useState(false);
 
   /*
@@ -538,7 +540,7 @@ export function TaskPill({
           )}
 
           <div className="flex flex-col gap-2">
-            <div className="text-field-label">Change Task&apos;s Status To:</div>
+            <div className="text-section-heading">Change Task&apos;s Status To:</div>
             {/*
               Always exactly three — five statuses less the current one, less
               Complete, which has its own button at the foot of the card.
@@ -555,7 +557,6 @@ export function TaskPill({
             <div className="grid grid-cols-3 gap-2">
               {STATUS_ORDER.filter((value) => value !== task.status && value !== "complete").map((value) => {
                 const spec = STATUSES[value];
-                const Icon = spec.icon;
                 return (
                   <button
                     key={value}
@@ -564,24 +565,26 @@ export function TaskPill({
                     disabled={isPending}
                     style={{ backgroundColor: spec.bg, color: spec.fg, borderColor: spec.border }}
                     className={cn(
-                      "flex min-w-0 items-center justify-center gap-1 rounded-full border-[1.5px] px-2 py-2",
+                      "flex min-w-0 items-center justify-center rounded-full border-[1.5px] px-1.5 py-2",
                       "text-[14px] leading-tight font-bold cursor-pointer",
                       "transition-transform duration-150 ease-out active:scale-[0.97]"
                     )}
                   >
-                    <Icon aria-hidden className="size-4 shrink-0" />
                     {/*
-                      Wraps rather than truncates. Measured: at 390px the card
-                      gives this row 320px, so a column is 101px and "Not
-                      started" at 15px needs 97px of it before the icon is
-                      even drawn. Truncating fit three pills on one line by
-                      clipping two of the three words, which is not what "on
-                      one line" was asking for.
+                      Wraps rather than truncates, and carries no icon.
 
-                      Letting the label take a second line inside its own pill
-                      keeps all three side by side, whole, from 360px up. At
-                      320px — an iPhone SE, nothing anyone here carries — the
-                      widest label would still clip.
+                      Measured: at 390px the card gives this row 320px, so a
+                      column is 101px. "In progress" is the widest of the five
+                      labels — wider than "Not started", which is the mistake
+                      the first cut of this made — and with an icon beside it
+                      the word "progress" overran its column by 7px even at
+                      390. Dropping the icon buys 20px and leaves 17px spare
+                      at 390, 7px at 360.
+
+                      The word still carries the meaning without the colour,
+                      which is the rule in constants.ts; the icon was the
+                      redundant half of that pair, and it is the half that
+                      does not fit.
                     */}
                     <span className="min-w-0 text-center">{spec.label}</span>
                   </button>
@@ -691,7 +694,14 @@ export function TaskPill({
               <div className="text-[16px] leading-[22px] font-bold text-brand">
                 {activityOpen ? "All updates" : "Latest"}
               </div>
-              {(activityOpen ? events : events.slice(-1)).map((item) => (
+              {/*
+                Newest first, both folded and open. Folded it has to be the
+                latest — that is what "Latest" means — and opening it should
+                extend the list downwards from there rather than turning it
+                upside down. Reading up from the bottom to find what just
+                happened is the thing this section was collapsed to avoid.
+              */}
+              {(activityOpen ? newestFirst : newestFirst.slice(0, 1)).map((item) => (
                 <div
                   key={item.event.id}
                   className="flex items-baseline gap-2.5 px-1 text-[16px] leading-6 text-sub"
@@ -740,7 +750,18 @@ export function TaskPill({
               style={
                 task.status === "complete"
                   ? undefined
-                  : { backgroundColor: STATUSES.complete.border, borderColor: STATUSES.complete.border }
+                  : {
+                      backgroundColor: STATUSES.complete.border,
+                      borderColor: STATUSES.complete.border,
+                      /*
+                        The label too, not only the ground. In dark mode the
+                        primary button is deliberately inverted — a white
+                        button with a brand-red label — so overriding the
+                        background alone left red text on dark green. White is
+                        10:1 on this fill in both themes.
+                      */
+                      color: "#ffffff",
+                    }
               }
             >
               {task.status === "complete" ? "Mark not complete" : "Mark complete"}
