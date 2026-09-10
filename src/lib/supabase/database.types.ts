@@ -426,6 +426,8 @@ export interface Database {
         Args: Record<string, never>;
         Returns: RosterEntry[];
       };
+      /** The creator, or anybody once the creator is deactivated. 0033. */
+      can_edit_task: { Args: { p_task_id: string }; Returns: boolean };
       request_task_deletion: { Args: { p_task_id: string; p_reason: string }; Returns: void };
       resolve_task_deletion: { Args: { p_task_id: string; p_approve: boolean }; Returns: void };
       cancel_task_deletion: { Args: { p_task_id: string }; Returns: void };

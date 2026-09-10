@@ -9,6 +9,7 @@ import {
   noteInputSchema,
   statusEnum,
   taskInputSchema,
+  taskLinkSchema,
   type TaskLinkInput,
 } from "@/lib/validation";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -170,6 +171,24 @@ async function syncTaskLinks(
   }
 }
 
+/**
+ * May the signed-in member change this task's content?
+ *
+ * The same rule as `can_edit_task` in 0033 — the creator, or anybody once
+ * the creator has been deactivated. Asked here as well as enforced there
+ * because the trigger *pins* rather than raises: without this check a
+ * non-creator's save would report success and change nothing, which is a
+ * worse answer than being told no.
+ */
+async function canEditTask(
+  supabase: SupabaseClient<Database>,
+  taskId: string
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc("can_edit_task", { p_task_id: taskId });
+  if (error) throw error;
+  return data === true;
+}
+
 export async function createTask(input: unknown): Promise<ActionResult> {
   const parsed = taskInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That task isn't valid." };
@@ -220,6 +239,11 @@ export async function updateTask(taskIdInput: string, input: unknown): Promise<A
 
   try {
     const { supabase, member } = await getCurrentMember();
+
+    if (!(await canEditTask(supabase, taskId.data))) {
+      return { ok: false, error: "Only the person who created this task can edit it." };
+    }
+
     const data = parsed.data;
     const categoryId = await resolveCategoryId(supabase, member.id, data.categoryId, data.newCategoryLabel);
 
@@ -281,6 +305,86 @@ export async function updateTask(taskIdInput: string, input: unknown): Promise<A
   } catch (error) {
     console.error("updateTask failed", error);
     return { ok: false, error: "Couldn't save that task. Try again." };
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Links, from the banner
+
+   Separate from updateTask because everyone assigned to a task may add a
+   link, while only its creator may edit the task itself. Since 0033 an
+   assignee cannot open the form at all, so without these two actions the
+   permission to add a link would exist on paper and nowhere else.
+   ------------------------------------------------------------------------- */
+
+export async function addTaskLink(taskIdInput: string, input: unknown): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  const parsed = taskLinkSchema.safeParse(input);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That link isn't valid." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+
+    /*
+      Appended after whatever is already there. Read first rather than
+      counting on a default, so a link added from the banner lands below the
+      ones added on the form instead of colliding with them at position 0.
+    */
+    const { data: existing, error: readError } = await supabase
+      .from("task_links")
+      .select("position")
+      .eq("task_id", taskId.data);
+    if (readError) throw readError;
+
+    if ((existing ?? []).length >= 3) {
+      return { ok: false, error: "A task can carry three links at most. Remove one to add another." };
+    }
+
+    const nextPosition = (existing ?? []).reduce((max, row) => Math.max(max, row.position), -1) + 1;
+
+    const { error } = await supabase.from("task_links").insert({
+      task_id: taskId.data,
+      label: parsed.data.label,
+      url: parsed.data.url,
+      position: nextPosition,
+      created_by: member.id,
+    });
+    if (error) throw error;
+
+    revalidateTaskViews();
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("addTaskLink failed", error);
+    return { ok: false, error: "Couldn't add that link. Try again." };
+  }
+}
+
+export async function removeTaskLink(taskIdInput: string, linkIdInput: string): Promise<ActionResult> {
+  const taskId = taskIdSchema.safeParse(taskIdInput);
+  const linkId = taskIdSchema.safeParse(linkIdInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+  if (!linkId.success) return { ok: false, error: "Invalid link." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    /*
+      Scoped to the task as well as the id. The id alone would be enough —
+      it is a primary key — but naming both means a mismatched pair removes
+      nothing rather than removing somebody else's link.
+    */
+    const { error } = await supabase
+      .from("task_links")
+      .delete()
+      .eq("id", linkId.data)
+      .eq("task_id", taskId.data);
+    if (error) throw error;
+
+    revalidateTaskViews();
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("removeTaskLink failed", error);
+    return { ok: false, error: "Couldn't remove that link. Try again." };
   }
 }
 

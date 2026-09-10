@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { TaskContactPill } from "@/components/contacts/task-contact-pill";
 import { MentionTextarea } from "@/components/tasks/mention-textarea";
 import { NoteBody } from "@/components/tasks/note-body";
@@ -35,9 +36,20 @@ import {
   formatTimestamp,
   zonedDateKey,
 } from "@/lib/utils";
-import { addNote, deleteNote, editNote, toggleNoteLike } from "@/app/tasks/actions";
-import type { MemberSummary, TaskNote, TaskWithRelations } from "@/lib/data/tasks";
+import {
+  addNote,
+  addTaskLink,
+  deleteNote,
+  editNote,
+  removeTaskLink,
+  toggleNoteLike,
+} from "@/app/tasks/actions";
+import type { MemberSummary, TaskLink, TaskNote, TaskWithRelations } from "@/lib/data/tasks";
 import type { TaskStatus } from "@/lib/supabase/database.types";
+
+/** Both match 0032_task_links.sql, which is what actually enforces them. */
+const MAX_TASK_LINKS = 3;
+const TASK_LINK_LABEL_MAX = 40;
 
 /**
  * Past this length a title steps down one size. Character count is a proxy
@@ -117,7 +129,18 @@ export function TaskPill({
     so a creator missing from it is one who has been switched off.
   */
   const creatorActive = roster.some((m) => m.id === task.created_by);
-  const canDecide = task.created_by === meId || !creatorActive;
+  /*
+    The creator, or anybody once the creator has been switched off.
+
+    Deciding a deletion and editing the task are separate permissions that
+    happen to share this rule, so they are named separately and computed
+    once. Both mirror can_edit_task / can_decide_task_deletion in the
+    database, which are what actually enforce them — this only decides which
+    buttons are worth showing.
+  */
+  const isCreatorOrOrphan = task.created_by === meId || !creatorActive;
+  const canDecide = isCreatorOrOrphan;
+  const canEdit = isCreatorOrOrphan;
   const pending = task.deletion_requested_at !== null;
   const requester = roster.find((m) => m.id === task.deletion_requested_by) ?? null;
   const creator = roster.find((m) => m.id === task.created_by) ?? null;
@@ -443,6 +466,31 @@ export function TaskPill({
             the wrappers again so the two-column grid sees dt/dd directly.
           */}
           <dl className="flex flex-col gap-3 sm:grid sm:grid-cols-[104px_minmax(0,1fr)] sm:gap-x-3 sm:gap-y-2 sm:items-baseline">
+            {/*
+              Created by, first.
+
+              It sat only in the history until now. Since 0033 it decides who
+              may change the task at all, so it belongs on the face of the
+              card rather than eight lines down in Task Activity.
+            */}
+            <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
+              <dt className="text-[16px] leading-7 font-bold text-sub">Created by</dt>
+              <dd className="flex min-w-0 items-center gap-1.5">
+                {creator ? (
+                  <>
+                    <Avatar initials={creator.initials} color={creator.color} size={24} />
+                    <span className="min-w-0 break-words text-[18px] leading-7 text-fg">
+                      {creator.display_name}
+                    </span>
+                  </>
+                ) : (
+                  /* Not on the roster any more — listRoster only returns active members. */
+                  <span className="min-w-0 break-words text-[18px] leading-7 text-sub">
+                    No longer with the team
+                  </span>
+                )}
+              </dd>
+            </div>
             <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
               <dt className="text-[16px] leading-7 font-bold text-sub">Assigned to</dt>
               <dd className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -510,34 +558,14 @@ export function TaskPill({
             the label is drawn; the URL behind it is the reason this section
             exists at all.
           */}
-          {task.links.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <div className="text-section-heading">
-                {task.links.length === 1 ? "External Link" : "External Links"}
-              </div>
-              <ul className="flex flex-col gap-1.5">
-                {task.links.map((link) => (
-                  <li key={link.id} className="flex min-w-0 items-baseline gap-2">
-                    <LinkIcon aria-hidden className="size-4 shrink-0 translate-y-0.5 text-sub" />
-                    {/*
-                      noreferrer alongside noopener: the first stops the opened
-                      page reaching back through window.opener, the second
-                      keeps the task's URL out of its referer header.
-                    */}
-                    <a
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={link.url}
-                      className="min-w-0 truncate text-[18px] leading-7 font-bold text-link underline underline-offset-2"
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/*
+            §3 — External links.
+
+            Everyone assigned may add and remove one, creator or not: since
+            0033 an assignee cannot open the form, so without a control here
+            that permission would exist on paper and nowhere else.
+          */}
+          <TaskLinks taskId={task.id} links={task.links} />
 
           <div className="flex flex-col gap-2">
             <div className="text-section-heading">Change Task&apos;s Status To:</div>
@@ -766,12 +794,20 @@ export function TaskPill({
             >
               {task.status === "complete" ? "Mark not complete" : "Mark complete"}
             </Button>
-            <Link href={`/tasks/${task.id}/edit`} className="block">
-              <Button variant="secondary" className="w-full">
-                <Pencil aria-hidden className="size-5" />
-                Edit task
-              </Button>
-            </Link>
+            {/*
+              Hidden rather than disabled for a non-creator: a greyed-out
+              button invites a tap and explains nothing. What an assignee can
+              still change — status, links, notes, their own reminder — is
+              all present above, so nothing here reads as missing.
+            */}
+            {canEdit && (
+              <Link href={`/tasks/${task.id}/edit`} className="block">
+                <Button variant="secondary" className="w-full">
+                  <Pencil aria-hidden className="size-5" />
+                  Edit task
+                </Button>
+              </Link>
+            )}
             {/*
               Only the creator deletes. Everyone else asks — and the label
               says so, rather than offering an action that would be refused.
@@ -783,6 +819,145 @@ export function TaskPill({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The links on a task, with the controls to change them.
+ *
+ * A section rather than a few lines inside the banner because it holds
+ * state — an open form, a pending save, an error — and folding that into a
+ * component already this size would make both harder to read.
+ *
+ * Deliberately not gated on who created the task. Adding the document a
+ * task refers to is part of doing the work, not part of owning it.
+ */
+function TaskLinks({ taskId, links }: { taskId: string; links: TaskLink[] }) {
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel] = useState("");
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const full = links.length >= MAX_TASK_LINKS;
+
+  function submit() {
+    setError(null);
+    startTransition(async () => {
+      const result = await addTaskLink(taskId, { label: label.trim(), url: url.trim() });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setLabel("");
+      setUrl("");
+      setAdding(false);
+    });
+  }
+
+  function remove(linkId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await removeTaskLink(taskId, linkId);
+      if (!result.ok) setError(result.error);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-section-heading">
+        {links.length === 1 ? "External Link" : "External Links"}
+      </div>
+
+      {links.length === 0 && !adding && (
+        <p className="text-[18px] leading-7 text-sub">Nothing linked yet.</p>
+      )}
+
+      <ul className="flex flex-col gap-1.5">
+        {links.map((link) => (
+          <li key={link.id} className="flex min-w-0 items-baseline gap-2">
+            <LinkIcon aria-hidden className="size-4 shrink-0 translate-y-0.5 text-sub" />
+            {/*
+              noreferrer alongside noopener: the first stops the opened page
+              reaching back through window.opener, the second keeps the
+              task's URL out of its referer header.
+            */}
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={link.url}
+              className="min-w-0 flex-1 truncate text-[18px] leading-7 font-bold text-link underline underline-offset-2"
+            >
+              {link.label}
+            </a>
+            <button
+              type="button"
+              onClick={() => remove(link.id)}
+              disabled={isPending}
+              aria-label={`Remove ${link.label}`}
+              className="shrink-0 px-1 text-[16px] leading-[22px] font-bold text-danger cursor-pointer bg-transparent border-none"
+            >
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {adding ? (
+        <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-border bg-card p-3">
+          <Input
+            placeholder="Name — e.g. JV Exec Summary"
+            maxLength={TASK_LINK_LABEL_MAX}
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+          />
+          <Input
+            placeholder="https://…"
+            inputMode="url"
+            maxLength={2048}
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+          />
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="md"
+              className="w-auto px-4"
+              disabled={isPending}
+              onClick={() => {
+                setAdding(false);
+                setLabel("");
+                setUrl("");
+                setError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              className="w-auto px-4"
+              disabled={isPending || !label.trim() || !url.trim()}
+              onClick={submit}
+            >
+              Save link
+            </Button>
+          </div>
+        </div>
+      ) : full ? (
+        <p className="text-[16px] leading-[22px] text-sub">
+          Three links is the most a task can carry. Remove one to add another.
+        </p>
+      ) : (
+        <Button variant="secondary" size="md" className="w-auto self-start px-4" onClick={() => setAdding(true)}>
+          <LinkIcon aria-hidden className="size-5" />
+          Add link
+        </Button>
+      )}
+
+      {error && <p className="text-[16px] leading-[22px] font-bold text-danger">{error}</p>}
     </div>
   );
 }
