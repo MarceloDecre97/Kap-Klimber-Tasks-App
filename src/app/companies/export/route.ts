@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const rows = companies.filter((company) => matchesCompany(company, filters));
 
   const headers = [
-    "Company", "Type", "People", "What they do", "Main line", "Website",
+    "Company", "Type", "People", "What they do", "Main line", "Email", "Website",
     "Street", "Suite / unit", "City", "State", "ZIP", "Country", "Address",
     "In the book since",
   ];
@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     String(c.contact_count ?? 0),
     c.about ?? "",
     c.company_number ?? "",
+    c.email ?? "",
     c.website ?? "",
     c.street ?? "",
     c.suite ?? "",

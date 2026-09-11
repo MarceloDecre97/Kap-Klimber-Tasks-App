@@ -17,6 +17,8 @@ export interface CompanyDetails {
   about: string;
   website: string;
   companyNumber: string;
+  /** The company's own inbox — info@, sales@ — not anybody's personal one. */
+  email: string;
   street: string;
   suite: string;
   city: string;
@@ -30,7 +32,7 @@ export interface CompanyDetails {
 }
 
 export const EMPTY_COMPANY_DETAILS: CompanyDetails = {
-  about: "", website: "", companyNumber: "",
+  about: "", website: "", companyNumber: "", email: "",
   street: "", suite: "", city: "", state: "", postalCode: "", country: "",
   typeIds: [], newTypeLabel: "",
 };
@@ -95,6 +97,18 @@ export function CompanyFields({
           // Formatted on leaving the box, never under a moving cursor.
           onBlur={() => onChange({ companyNumber: formatPhone(value.companyNumber) })}
           inputMode="tel"
+          autoComplete="off"
+        />
+      </Field>
+      {/*
+        Alongside the main line and for the same reason: it is the company's
+        way in, not a person's. Somebody's own address lives on them.
+      */}
+      <Field label="Company email" hint="The general inbox — info@, sales@ — not a person's.">
+        <Input
+          value={value.email}
+          onChange={(e) => onChange({ email: e.target.value })}
+          inputMode="email"
           autoComplete="off"
         />
       </Field>

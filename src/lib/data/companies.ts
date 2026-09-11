@@ -13,7 +13,7 @@ import type { Database } from "@/lib/supabase/database.types";
  */
 
 const COMPANY_SELECT = `
-  id, name, about, website, company_number,
+  id, name, about, website, company_number, email,
   street, suite, city, state, postal_code, country, created_at,
   type_links:company_type_links(type:company_types(id, label, icon))
 `;

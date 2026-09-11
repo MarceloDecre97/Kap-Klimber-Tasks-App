@@ -248,6 +248,8 @@ export interface Database {
           about: string | null;
           website: string | null;
           company_number: string | null;
+          /** The company's own inbox. citext — see 0036. */
+          email: string | null;
           street: string | null;
           suite: string | null;
           city: string | null;

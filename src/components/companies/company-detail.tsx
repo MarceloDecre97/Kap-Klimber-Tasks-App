@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ExternalLink, Globe, Pencil, Phone, Trash2, TriangleAlert, X } from "lucide-react";
+import { ChevronLeft, ExternalLink, Globe, Mail, Pencil, Phone, Trash2, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -32,6 +32,7 @@ function draftFrom(c: CompanySummary): Draft {
     about: c.about ?? "",
     website: c.website ?? "",
     companyNumber: c.company_number ?? "",
+    email: c.email ?? "",
     street: c.street ?? "",
     suite: c.suite ?? "",
     city: c.city ?? "",
@@ -268,6 +269,15 @@ export function CompanyDetail({
                     Main line
                   </a>
                 )}
+                {company.email && (
+                  <a
+                    href={`mailto:${company.email}`}
+                    className="inline-flex h-14 items-center gap-2 rounded-2xl border-[1.5px] border-border bg-card px-4 text-chip text-fg hover:bg-muted"
+                  >
+                    <Mail aria-hidden className="size-5" strokeWidth={1.75} />
+                    Email
+                  </a>
+                )}
                 {website && (
                   <a
                     href={website}
@@ -288,7 +298,16 @@ export function CompanyDetail({
                   tinted
                 />
                 <Row label="Main line" value={company.company_number} />
-                <Row label="Website" value={company.website} />
+                <Row
+                  label="Email"
+                  value={company.email}
+                  href={company.email ? `mailto:${company.email}` : null}
+                />
+                {/*
+                  Linked, the way the contact card's is. It was the one
+                  address in either book you could read but not tap.
+                */}
+                <Row label="Website" value={company.website} href={website} />
                 <Row label="Address" value={address} />
               </Section>
             </>
@@ -388,24 +407,42 @@ function Row({
   label,
   value,
   tinted,
+  href,
 }: {
   label: string;
   value: string | null;
   /** The chip colour, for the row that is really a set of chips. */
   tinted?: boolean;
+  /**
+   * Makes the value tappable. The contact card's rows have always had this;
+   * the company card's did not, which left the website the one address in
+   * either book you could read but not open.
+   */
+  href?: string | null;
 }) {
   if (!value || !value.trim()) return null;
   return (
     <div className="flex flex-col gap-0.5 border-b-[1.5px] border-border pb-3 last:border-b-0 last:pb-0">
       <span className="text-timestamp text-sub">{label}</span>
-      <span
-        className={cn(
-          "text-[18px] leading-7 text-pretty wrap-anywhere",
-          tinted ? "font-bold text-tag" : "text-fg"
-        )}
-      >
-        {value}
-      </span>
+      {href ? (
+        <a
+          href={href}
+          /* mailto: and tel: stay in place; a website opens away from the app. */
+          {...(href.startsWith("http") ? { target: "_blank", rel: "noreferrer noopener" } : {})}
+          className="text-[18px] leading-7 text-brand underline underline-offset-4 wrap-anywhere"
+        >
+          {value}
+        </a>
+      ) : (
+        <span
+          className={cn(
+            "text-[18px] leading-7 text-pretty wrap-anywhere",
+            tinted ? "font-bold text-tag" : "text-fg"
+          )}
+        >
+          {value}
+        </span>
+      )}
     </div>
   );
 }

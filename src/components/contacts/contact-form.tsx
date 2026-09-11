@@ -60,6 +60,7 @@ function draftFrom(contact: ContactSummary | null): Draft {
     companyAbout: contact?.company_record?.about ?? "",
     companyWebsite: contact?.company_record?.website ?? "",
     companyNumber: contact?.company_record?.company_number ?? "",
+    companyEmail: contact?.company_record?.email ?? "",
     companyStreet: contact?.company_record?.street ?? "",
     companySuite: contact?.company_record?.suite ?? "",
     companyCity: contact?.company_record?.city ?? "",

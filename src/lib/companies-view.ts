@@ -39,6 +39,8 @@ export interface CompanySummary {
   about: string | null;
   website: string | null;
   company_number: string | null;
+  /** The company's own inbox — info@, sales@ — not a person's. */
+  email: string | null;
   street: string | null;
   suite: string | null;
   city: string | null;
@@ -204,7 +206,7 @@ export function suggestCompanies<T extends { name: string }>(
 
 /** True when the company has nothing filled in beyond its name. */
 export function companyIsBare(c: CompanySummary): boolean {
-  return ![c.about, c.website, c.company_number, c.street, c.suite, c.city, c.state, c.postal_code, c.country]
+  return ![c.about, c.website, c.company_number, c.email, c.street, c.suite, c.city, c.state, c.postal_code, c.country]
     .some((v) => v && v.trim());
 }
 
@@ -268,7 +270,7 @@ export function matchesCompany(c: CompanySummary, filters: CompanyFilters): bool
   // The name, where it is, what it does, and its number — the four things
   // somebody has in mind when they come looking for a company.
   return [
-    c.name, c.city, c.state, c.country, c.about, c.website, c.company_number,
+    c.name, c.city, c.state, c.country, c.about, c.website, c.company_number, c.email,
     ...c.types.map((t) => t.label),
   ].some((field) => field && field.toLowerCase().includes(q));
 }

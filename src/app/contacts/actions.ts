@@ -200,6 +200,7 @@ async function resolveCompany(
     about: v.companyAbout,
     website: v.companyWebsite,
     company_number: v.companyNumber,
+    email: v.companyEmail,
     street: v.companyStreet,
     suite: v.companySuite,
     city: v.companyCity,

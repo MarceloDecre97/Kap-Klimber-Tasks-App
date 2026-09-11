@@ -291,6 +291,7 @@ export const contactInputSchema = z
     companyAbout: optionalText(600),
     companyWebsite: optionalText(300),
     companyNumber: phoneField("companyLine"),
+    companyEmail: optionalEmail,
     companyStreet: optionalText(200),
     companySuite: optionalText(100),
     companyCity: optionalText(100),
@@ -334,6 +335,8 @@ export const companyInputSchema = z.object({
   about: optionalText(600),
   website: optionalText(300),
   companyNumber: phoneField("companyLine"),
+  /* The company's own address, held to the same rule a person's is. */
+  email: optionalEmail,
   street: optionalText(200),
   suite: optionalText(100),
   city: optionalText(100),

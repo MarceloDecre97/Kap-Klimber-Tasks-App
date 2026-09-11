@@ -23,6 +23,7 @@ export interface CompanyDraft {
   companyAbout: string;
   companyWebsite: string;
   companyNumber: string;
+  companyEmail: string;
   companyStreet: string;
   companySuite: string;
   companyCity: string;
@@ -38,6 +39,7 @@ const BLANK_DETAILS = {
   companyAbout: "",
   companyWebsite: "",
   companyNumber: "",
+  companyEmail: "",
   companyStreet: "",
   companySuite: "",
   companyCity: "",
@@ -54,6 +56,7 @@ function detailsOf(c: CompanySummary | null) {
     companyAbout: c.about ?? "",
     companyWebsite: c.website ?? "",
     companyNumber: c.company_number ?? "",
+    companyEmail: c.email ?? "",
     companyStreet: c.street ?? "",
     companySuite: c.suite ?? "",
     companyCity: c.city ?? "",
@@ -76,6 +79,7 @@ function toDetails(d: CompanyDraft): CompanyDetails {
     about: d.companyAbout,
     website: d.companyWebsite,
     companyNumber: d.companyNumber,
+    email: d.companyEmail,
     street: d.companyStreet,
     suite: d.companySuite,
     city: d.companyCity,
@@ -92,6 +96,7 @@ function fromDetails(patch: Partial<CompanyDetails>): Partial<CompanyDraft> {
   if ("about" in patch) out.companyAbout = patch.about;
   if ("website" in patch) out.companyWebsite = patch.website;
   if ("companyNumber" in patch) out.companyNumber = patch.companyNumber;
+  if ("email" in patch) out.companyEmail = patch.email;
   if ("street" in patch) out.companyStreet = patch.street;
   if ("suite" in patch) out.companySuite = patch.suite;
   if ("city" in patch) out.companyCity = patch.city;

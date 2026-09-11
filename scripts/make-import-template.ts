@@ -155,6 +155,8 @@ const DELETE = "EXAMPLE — delete this row";
 
 const companyHeaders = [
   "Company name", "Company types", "What the company does", "Website", "Main line",
+  /* The general inbox, not a person's — see 0036. */
+  "Company email",
   "Street", "Suite", "City", "State / Province", "ZIP / Postal code", "Country",
   "Already in the book",
 ];
@@ -169,23 +171,32 @@ const companyHeaders = [
 */
 const existingCompanies: string[][] = [
   ["ADV Mobil", "Upfitter", "Overland vehicle builder company.", "https://www.advmobil.com/",
-    "(810)-818-1919", "1002 Packard Drive", "", "Howell", "Michigan", "48843", "United States", "yes"],
+    "(810)-818-1919", "", "1002 Packard Drive", "", "Howell", "Michigan", "48843", "United States", "yes"],
   ["Integrated Innovation Institute - Carnegie Mellon University", "Institution", "",
-    "https://www.cmu.edu/iii/index.html", "+1 (844)-629-0200", "311 S Craig St", "", "Pittsburgh",
+    "https://www.cmu.edu/iii/index.html", "+1 (844)-629-0200", "", "311 S Craig St", "", "Pittsburgh",
     "PA", "15213", "United States", "yes"],
-  ["Perfect Drive GmbH Fahrschule Strebel", "Institution", "", "", "",
+  ["Perfect Drive GmbH Fahrschule Strebel", "Institution", "", "", "", "",
     "Diessenhoferstrasse 21", "", "Feuerthalen", "Switzerland", "8245", "", "yes"],
   ["Royal Truck & Utility Trailer", "Parts Dealer, Trailer Dealer, Upfitter",
     "Full-service truck and trailer dealer providing trailer sales, parts, repair, custom fabrication, and upfitting services for commercial transportation equipment.",
-    "https://royaltrailersales.com/", "(313)-524-2529", "311 E. Cady St.", "", "Northville",
+    "https://royaltrailersales.com/", "(313)-524-2529", "", "311 E. Cady St.", "", "Northville",
     "Michigan", "48167", "United States", "yes"],
+];
+
+/* Added by the first import; here so its spelling can be pointed at. */
+const BRAZOS: string[] = [
+  "Brazos Trailers", "Parts Dealer, Trailer Dealer",
+  "They sell new and used trailers, trailers on consignment, and related trailer parts.",
+  "https://brazostrailers.com/", "+1 (430)-540-3400", "",
+  "22488 Interstate 20 N Access Rd", "", "Wills Point", "Texas", "75169", "United States", "yes",
 ];
 
 const companyExamples: string[][] = [
   [DELETE, "Fleet, Service", "Regional refrigerated carrier.", "example-fleet.com", "5195550177",
+    "info@example-fleet.com",
     "44 Wharncliffe Rd", "Unit 3", "London", "Ontario", "N6A 3K7", "Canada", ""],
   [DELETE, "Supplier", "A company nobody works at yet — a row here with no one on the Contacts tab is fine.",
-    "", "2485550100", "", "", "Livonia", "Michigan", "48150", "United States", ""],
+    "", "2485550100", "", "", "", "Livonia", "Michigan", "48150", "United States", ""],
 ];
 
 const contactHeaders = [
@@ -220,6 +231,7 @@ const EXISTING_PEOPLE = [
   "Mike Morrison — Royal Truck & Utility Trailer",
   "Jenny Hurst — Integrated Innovation Institute - Carnegie Mellon University",
   "Marcel Strebel — Perfect Drive GmbH Fahrschule Strebel",
+  "Mandy Pool — Brazos Trailers",
 ];
 
 const guide: string[][] = [
@@ -237,11 +249,13 @@ const guide: string[][] = [
   ["A company with nobody in it yet: put it on the Companies tab and on no contact row."],
   [],
   ["Already in the book"],
-  ["The first four rows of the Companies tab are in the book already. They are there so a person"],
+  ["The first five rows of the Companies tab are in the book already. They are there so a person"],
   ["can point at them without the name being retyped. Leave them as they are — or correct a detail"],
   ["and the record gets corrected too. Nothing is created twice: matching is done on the name."],
   [],
-  ["These six people are in the book already. Adding them again would make a second copy:"],
+  ["Company email is the general inbox — info@, sales@. A person's own address goes on their row."],
+  [],
+  ["These seven people are in the book already. Adding them again would make a second copy:"],
   ...EXISTING_PEOPLE.map((p) => ["", p]),
   [],
   ["Dropdowns"],
@@ -290,7 +304,7 @@ function inlineList(values: string[]): string {
 const bytes = buildWorkbook([
   {
     name: "Companies",
-    rows: [companyHeaders, ...existingCompanies, ...companyExamples],
+    rows: [companyHeaders, ...existingCompanies, BRAZOS, ...companyExamples],
     // Company types is column B.
     validations: [{ ref: `B2:B${DROPDOWN_ROWS}`, formula: inlineList(TYPES) }],
   },
