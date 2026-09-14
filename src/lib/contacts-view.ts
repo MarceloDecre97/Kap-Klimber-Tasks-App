@@ -63,12 +63,39 @@ export interface ContactFilters {
   company: string | null;
   /** What this person is to us. Replaced the old company-shaped category. */
   relationshipId: string | null;
+  /** A whole label — "MATS 2026" — not the show alone. See tradeShowLabel. */
+  tradeShow: string | null;
 }
 
-export const EMPTY_CONTACT_FILTERS: ContactFilters = { query: "", company: null, relationshipId: null };
+export const EMPTY_CONTACT_FILTERS: ContactFilters = {
+  query: "",
+  company: null,
+  relationshipId: null,
+  tradeShow: null,
+};
 
 export function countActiveContactFilters(f: ContactFilters): number {
-  return (f.company ? 1 : 0) + (f.relationshipId ? 1 : 0);
+  return (f.company ? 1 : 0) + (f.relationshipId ? 1 : 0) + (f.tradeShow ? 1 : 0);
+}
+
+/**
+ * "MATS 2026", or "MATS" when nobody wrote down which year.
+ *
+ * The two are stored apart so that MATS is one show across every year it has
+ * ever run — a single "MATS 2026" string makes 2025 and 2026 unrelated text.
+ * They are shown together because that is how somebody says it out loud.
+ *
+ * Mirrors trade_show_label() in 0039, which the activity log uses. Both
+ * exist because both have to agree: a log that spells a show differently to
+ * the screen is a log people stop trusting.
+ */
+export function tradeShowLabel(c: {
+  trade_show: string | null;
+  trade_show_year: number | null;
+}): string | null {
+  const show = c.trade_show?.trim();
+  if (!show) return null;
+  return c.trade_show_year ? `${show} ${c.trade_show_year}` : show;
 }
 
 /**
@@ -83,14 +110,23 @@ export function matchesContact(c: ContactSummary, filters: ContactFilters): bool
   if (filters.relationshipId && !c.relationships.some((r) => r.id === filters.relationshipId)) {
     return false;
   }
+  if (filters.tradeShow && tradeShowLabel(c) !== filters.tradeShow) return false;
 
   const q = filters.query.trim().toLowerCase();
   if (!q) return true;
 
   const digits = q.replace(/\D/g, "");
+  /*
+    Where somebody came from is in here twice over — the free-text box and
+    the show — because "MATS" is exactly the kind of half-memory this search
+    exists to serve. It also unblocks the contact picker in the task form,
+    which runs through this same function: without it, building a follow-up
+    task for everyone met at a show found nobody.
+  */
   const haystack = [
     c.first_name, c.last_name, c.job_title, c.company,
     c.email, c.email2, c.mobile, c.office_phone,
+    c.source, tradeShowLabel(c),
     ...c.relationships.map((r) => r.label),
   ]
     .filter(Boolean)
@@ -103,6 +139,32 @@ export function matchesContact(c: ContactSummary, filters: ContactFilters): bool
     if (phoneDigits.includes(digits)) return true;
   }
   return false;
+}
+
+/**
+ * Every show in view, newest first.
+ *
+ * Not alphabetical: the show you have just come back from is the one you
+ * filter by, and sorting MATS 2026 under M puts it below a dozen years of
+ * everything else. Shows with no year sit at the end — they are the ones
+ * nobody can date, so nobody is looking for them first.
+ */
+export function tradeShowsIn(contacts: ContactSummary[]): string[] {
+  const seen = new Map<string, number | null>();
+  for (const c of contacts) {
+    const label = tradeShowLabel(c);
+    if (label && !seen.has(label)) seen.set(label, c.trade_show_year);
+  }
+  return [...seen.entries()]
+    .sort(([aLabel, aYear], [bLabel, bYear]) => {
+      if (aYear !== bYear) {
+        if (aYear === null) return 1;
+        if (bYear === null) return -1;
+        return bYear - aYear;
+      }
+      return aLabel.localeCompare(bLabel);
+    })
+    .map(([label]) => label);
 }
 
 /** Every company in the book, for the filter, deduped and sorted. */

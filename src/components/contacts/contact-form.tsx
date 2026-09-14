@@ -32,6 +32,7 @@ import {
   type ContactField,
 } from "@/lib/contact-form";
 import { formatPhone } from "@/lib/phones";
+import { TradeShowField } from "@/components/ui/trade-show-field";
 import type { CompanySummary, CompanyType } from "@/lib/companies-view";
 import type { ContactSummary } from "@/lib/data/contacts";
 
@@ -41,6 +42,8 @@ type Draft = CompanyDraft & {
   mobile: string; officePhone: string; email: string; email2: string; website: string;
   street: string; suite: string; city: string; state: string; postalCode: string; country: string;
   relationshipIds: string[]; source: string; notes: string;
+  /** The show and its year, apart — see 0039. Both strings, inputs being inputs. */
+  tradeShow: string; tradeShowYear: string;
   /** Set when the "new relationship" box is open and a name is being typed. */
   newRelationshipLabel: string;
 };
@@ -83,6 +86,8 @@ function draftFrom(contact: ContactSummary | null): Draft {
     country: contact?.country ?? "",
     relationshipIds: contact?.relationships.map((r) => r.id) ?? [],
     source: contact?.source ?? "",
+    tradeShow: contact?.trade_show ?? "",
+    tradeShowYear: contact?.trade_show_year ? String(contact.trade_show_year) : "",
     notes: contact?.notes ?? "",
     newRelationshipLabel: "",
   };
@@ -104,6 +109,7 @@ export function ContactForm({
   relationships,
   companies,
   companyTypes,
+  tradeShows,
 }: {
   /** Null when adding. */
   contact: ContactSummary | null;
@@ -111,6 +117,8 @@ export function ContactForm({
   /** Everything already in the book, for the company box to match against. */
   companies: CompanySummary[];
   companyTypes: CompanyType[];
+  /** Shows already written down, so the same one keeps the same spelling. */
+  tradeShows: string[];
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(() => draftFrom(contact));
@@ -342,9 +350,50 @@ export function ContactForm({
               newButtonLabel="New relationship"
             />
 
-            <Field label="Where they came from" hint="Website form, a trade show, a referral.">
+            {/*
+              Two boxes for one question, and the hint on each says which is
+              which. The free-text one used to say "a trade show" — which
+              sent every show into the box that cannot be filtered, and is
+              exactly the habit the second box has to break.
+            */}
+            <Field label="Where they came from" hint="A website form, a referral, an introduction.">
               <Input value={draft.source} onChange={(e) => set("source", e.target.value)} autoComplete="off" />
             </Field>
+
+            <Field
+              label="Trade show"
+              hint="Only if you met them at one. Leave it empty otherwise."
+              error={errors.tradeShow}
+            >
+              <TradeShowField
+                value={draft.tradeShow}
+                onChange={(next) => {
+                  set("tradeShow", next);
+                  // The year goes with it. Left behind, it is a year with no
+                  // show — which the database refuses and nobody can see to
+                  // clear, the box having just disappeared.
+                  if (next.trim() === "") set("tradeShowYear", "");
+                }}
+                shows={tradeShows}
+              />
+            </Field>
+            {/*
+              The year only once there is a show to hang it on. On its own it
+              is not a fact about anybody, and both the schema and the
+              database refuse it — so rather than let somebody fill in a box
+              that is going to be rejected, it is not there yet.
+            */}
+            {draft.tradeShow.trim() !== "" && (
+              <Field label="Trade show year" hint="Four digits — 2026." error={errors.tradeShowYear}>
+                <Input
+                  value={draft.tradeShowYear}
+                  onChange={(e) => set("tradeShowYear", e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="max-w-[160px]"
+                />
+              </Field>
+            )}
             <Field label="Notes">
               <Textarea
                 value={draft.notes}

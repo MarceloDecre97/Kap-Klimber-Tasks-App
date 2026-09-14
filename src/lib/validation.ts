@@ -236,6 +236,30 @@ const phoneField = (kind: PhoneKind, max = 40) =>
     .transform((v) => (v && v.length > 0 ? formatPhone(v) : null))
     .nullable();
 
+/**
+ * A year, typed into a box.
+ *
+ * Arrives as text because that is what an input gives you, and leaves as a
+ * number or null. Four digits, because "26" is ambiguous and a pasted phone
+ * number is not a year — the range is there to catch the slip, not to have
+ * an opinion about history. The database holds the same rule; this exists so
+ * the form can say which field is wrong instead of handing over a constraint
+ * violation.
+ */
+const tradeShowYearField = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v && v.length > 0 ? v : null))
+  .nullable()
+  .refine((v) => v === null || /^\d{4}$/.test(v), {
+    message: "A year is four digits — 2026.",
+  })
+  .refine((v) => v === null || (Number(v) >= 1990 && Number(v) <= 2100), {
+    message: "That year looks wrong. Somewhere between 1990 and 2100.",
+  })
+  .transform((v) => (v === null ? null : Number(v)));
+
 export const contactInputSchema = z
   .object({
     /*
@@ -276,6 +300,15 @@ export const contactInputSchema = z
     /** Set when "New relationship" was opened and a name typed. */
     newRelationshipLabel: optionalLabel(60),
     source: optionalText(200),
+    /*
+      The show, split from its year on purpose.
+
+      Free text is fine in `source` because nothing depends on it. This one
+      is what the book is filtered by, so it is held to a shape: a show, and
+      optionally the year it ran. See 0039_trade_show.sql.
+    */
+    tradeShow: optionalText(120),
+    tradeShowYear: tradeShowYearField,
     notes: optionalText(4000),
 
     /*
@@ -316,7 +349,18 @@ export const contactInputSchema = z
       // the message lands where they are looking rather than at the top.
       path: ["mobile"],
     }
-  );
+  )
+  /*
+    A year with no show is not a fact about anybody, and the database refuses
+    it outright. Said here rather than letting the save fail — and said
+    rather than quietly dropping the year, because a form that discards what
+    somebody typed without telling them is how the country field used to
+    lose a country.
+  */
+  .refine((v) => v.tradeShowYear === null || v.tradeShow !== null, {
+    message: "Which show? A year on its own has nothing to hang on.",
+    path: ["tradeShow"],
+  });
 
 export type ContactInput = z.input<typeof contactInputSchema>;
 export type ContactValues = z.output<typeof contactInputSchema>;

@@ -202,21 +202,31 @@ const companyExamples: string[][] = [
 const contactHeaders = [
   "First name", "Last name", "Company",
   "Job title", "Mobile", "Office phone", "Email", "Second email", "Website",
-  "What they are to us", "Where they came from", "Notes",
+  "What they are to us", "Where they came from", "Trade show", "Trade show year", "Notes",
   "Their street", "Their suite", "Their city", "Their state / province",
   "Their ZIP / postal code", "Their country",
 ];
 
 const contactExamples: string[][] = [
+  /* Met at a show: the two show columns are filled and the free-text one is not. */
   [DELETE, "Morrison", "Royal Truck & Utility Trailer",
     "Vice President of Aftermarket Sales", "3133040028", "", "mike@royaltruck.com", "", "",
-    "Client", "Trade show", "Met at Work Truck Week.",
+    "Client", "", "Work Truck Week", "2026", "Wants a quote on a two-deck build.",
     "", "", "", "", "", ""],
+  /* Not from a show: the show columns stay empty and the story goes in the free-text one. */
   [DELETE, "Álvarez", "",
     "Program Manager", "+1 9055550110", "9055550100", "ana@multimatic.com", "", "",
-    "Partner, Consultant", "Referral", "No company — the Company column can be left blank.",
+    "Partner, Consultant", "Referral from Dee Kapur", "", "",
+    "No company — the Company column can be left blank.",
     "22 Mill Lane", "A-501", "Brighton", "Michigan", "48116", "United States"],
 ];
+
+/*
+  Shows already in the book, for the dropdown. One so far — and that is the
+  point of the arrow: MATS typed four different ways is four filter entries
+  holding a quarter of the people each.
+*/
+const SHOWS = ["MATS"];
 
 const RELATIONSHIPS = ["Client", "Competitor", "Consultant", "Investor", "Lawyer",
   "Partner", "Private installer", "Prospect", "Other"];
@@ -258,10 +268,19 @@ const guide: string[][] = [
   ["These seven people are in the book already. Adding them again would make a second copy:"],
   ...EXISTING_PEOPLE.map((p) => ["", p]),
   [],
+  ["Where they came from, and the two Trade show columns"],
+  ["Three columns for one question, and they do different jobs."],
+  ["Where they came from is free text — a referral, a website form, whatever the story is."],
+  ["Trade show and Trade show year are what the book is filtered by, so they hold a show and"],
+  ["nothing else. Met somebody at MATS: put MATS in the Trade show column and 2026 in the year."],
+  ["Both can be left empty. A year needs a show beside it — on its own it says nothing."],
+  ["Spell a show the same way on every row. MATS and Mats become two separate filters."],
+  ["The year is four digits, on its own: 2026, not MATS 2026."],
+  [],
   ["Dropdowns"],
-  ["Company types, What they are to us, and the Company column all have a dropdown arrow. Pick from"],
-  ["it and the spelling is right by construction. They do not refuse anything, so a second value can"],
-  ["still be typed after the first: Fleet, Service."],
+  ["Company types, What they are to us, Trade show, and the Company column all have a dropdown"],
+  ["arrow. Pick from it and the spelling is right by construction. They do not refuse anything, so a"],
+  ["second value can still be typed after the first: Fleet, Service — or a show nobody has been to yet."],
   [],
   ["What they are to us — what a person is to Opus Kap. Several are fine, separated by commas."],
   ...RELATIONSHIPS.map((r) => ["", r]),
@@ -321,6 +340,8 @@ const bytes = buildWorkbook([
       { ref: `C2:C${DROPDOWN_ROWS}`, formula: `Companies!$A$2:$A$${DROPDOWN_ROWS}` },
       // What they are to us is column J.
       { ref: `J2:J${DROPDOWN_ROWS}`, formula: inlineList(RELATIONSHIPS) },
+      // Trade show is column L.
+      { ref: `L2:L${DROPDOWN_ROWS}`, formula: inlineList(SHOWS) },
     ],
   },
   { name: "How to fill this in", rows: guide },

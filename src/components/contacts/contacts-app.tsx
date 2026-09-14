@@ -13,6 +13,7 @@ import {
   Sheet,
   Shapes,
   Tag,
+  Ticket,
   Trash2,
   X,
 } from "lucide-react";
@@ -53,6 +54,7 @@ import {
   groupContacts,
   initialsOf,
   matchesContact,
+  tradeShowsIn,
   type ContactFilters,
 } from "@/lib/contacts-view";
 import { cn, formatDateGroup } from "@/lib/utils";
@@ -229,6 +231,19 @@ export function ContactsApp({
       });
   }, [contacts, filters, relationships]);
 
+  /*
+    Shows carried by somebody currently in view, newest first — the same rule
+    the other two follow, so picking a company narrows the list of shows
+    rather than leaving entries that now find nobody.
+  */
+  const tradeShowOptions: FilterOption<string>[] = useMemo(
+    () =>
+      tradeShowsIn(contacts.filter((c) => matchesContact(c, { ...filters, tradeShow: null }))).map(
+        (label) => ({ value: label, label, icon: <Ticket aria-hidden className="size-4" /> })
+      ),
+    [contacts, filters]
+  );
+
   const isEmptyBook = contacts.length === 0;
 
   /*
@@ -308,7 +323,7 @@ export function ContactsApp({
   const isEmptyCompanyBook = companies.length === 0;
 
   /*
-    The same three values the list is filtered by, handed to the export route
+    The same values the list is filtered by, handed to the export route
     so the spreadsheet is exactly what is on screen. Built here rather than
     read from the URL because these filters live in component state — the
     list has never put them in the address bar.
@@ -318,6 +333,7 @@ export function ContactsApp({
     if (filters.query.trim()) params.set("q", filters.query.trim());
     if (filters.company) params.set("company", filters.company);
     if (filters.relationshipId) params.set("relationship", filters.relationshipId);
+    if (filters.tradeShow) params.set("show", filters.tradeShow);
     const query = params.toString();
     return query ? `?${query}` : "";
   }, [filters]);
@@ -565,10 +581,33 @@ export function ContactsApp({
                       setFilters((f) => ({ ...f, relationshipId: next[next.length - 1] ?? null }))
                     }
                   />
+                  {/*
+                    Only once somebody has been to one. An empty dropdown
+                    beside two full ones reads as broken rather than as
+                    nothing-to-show-yet.
+                  */}
+                  {tradeShowOptions.length > 0 && (
+                    <FilterDropdown
+                      label="Trade show"
+                      icon={<Ticket aria-hidden className="size-4" />}
+                      options={tradeShowOptions}
+                      selected={filters.tradeShow ? [filters.tradeShow] : []}
+                      onChange={(next) =>
+                        setFilters((f) => ({ ...f, tradeShow: next[next.length - 1] ?? null }))
+                      }
+                    />
+                  )}
                   {activeFilters > 0 && (
                     <button
                       type="button"
-                      onClick={() => setFilters((f) => ({ ...f, company: null, relationshipId: null }))}
+                      onClick={() =>
+                        setFilters((f) => ({
+                          ...f,
+                          company: null,
+                          relationshipId: null,
+                          tradeShow: null,
+                        }))
+                      }
                       className="inline-flex h-12 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[16px] leading-[22px] font-bold text-sub hover:text-fg"
                     >
                       <X aria-hidden className="size-4" />

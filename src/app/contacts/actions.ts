@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
-import { listContactEvents, type ContactEvent } from "@/lib/data/contacts";
+import { listContactEvents, listTradeShows, type ContactEvent } from "@/lib/data/contacts";
 import { contactInputSchema, type ContactValues } from "@/lib/validation";
 import { canonicalCountry } from "@/lib/countries";
 
@@ -35,6 +35,30 @@ function revalidateContactViews(contactId?: string) {
  * replaced a single category that described their *company* rather than them;
  * see 0029_chips.sql.
  */
+/**
+ * The show, snapped onto a spelling already in use.
+ *
+ * The form suggests what has been written down before, but suggesting is not
+ * enforcing — somebody in a hurry types "mats" and moves on. Since the book
+ * is filtered by this column, one stray spelling is a second filter entry
+ * holding half the people, so a typed name that differs from an existing one
+ * only in case or spacing becomes that existing one.
+ *
+ * A genuinely new show passes straight through. There is no list of trade
+ * shows to be on, and the first person to go to one has to be able to write
+ * it down.
+ */
+async function resolveTradeShow(
+  supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
+  typed: string | null
+): Promise<string | null> {
+  const name = typed?.replace(/\s+/g, " ").trim();
+  if (!name) return null;
+
+  const existing = await listTradeShows(supabase);
+  return existing.find((show) => show.toLowerCase() === name.toLowerCase()) ?? name;
+}
+
 async function resolveRelationships(
   supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
   memberId: string,
@@ -347,6 +371,7 @@ export async function createContact(input: unknown): Promise<ActionResult> {
       supabase, member.id, v.relationshipIds, v.newRelationshipLabel
     );
     const companyId = await resolveCompany(supabase, member.id, v);
+    const tradeShow = await resolveTradeShow(supabase, v.tradeShow);
 
     const { data: contact, error } = await supabase
       .from("contacts")
@@ -368,6 +393,10 @@ export async function createContact(input: unknown): Promise<ActionResult> {
         postal_code: v.postalCode,
         country: canonicalCountry(v.country),
         source: v.source,
+        trade_show: tradeShow,
+        /* A year with no show is refused by the database; the schema has
+           already said so in words, but nothing reaches here that way. */
+        trade_show_year: tradeShow ? v.tradeShowYear : null,
         notes: v.notes,
         created_by: member.id,
       })
@@ -411,6 +440,7 @@ export async function updateContact(
       supabase, member.id, v.relationshipIds, v.newRelationshipLabel
     );
     const companyId = await resolveCompany(supabase, member.id, v);
+    const tradeShow = await resolveTradeShow(supabase, v.tradeShow);
 
     const { error } = await supabase
       .from("contacts")
@@ -432,6 +462,8 @@ export async function updateContact(
         postal_code: v.postalCode,
         country: canonicalCountry(v.country),
         source: v.source,
+        trade_show: tradeShow,
+        trade_show_year: tradeShow ? v.tradeShowYear : null,
         notes: v.notes,
       })
       .eq("id", contactId.data);

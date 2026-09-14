@@ -21,6 +21,7 @@ import {
   groupContactEvents,
   initialsOf,
   roleLine,
+  tradeShowLabel,
 } from "@/lib/contacts-view";
 import { cn, formatTimestamp, formatTimestampWithYear } from "@/lib/utils";
 import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
@@ -317,6 +318,9 @@ export function ContactDetail({
 
           <Section heading="Details">
             <Row label="Where they came from" value={contact.source} />
+            {/* Shown as one line — "MATS 2026" — though it is stored as two.
+                Nobody says the year separately. */}
+            <Row label="Trade show" value={tradeShowLabel(contact)} />
             <Row label="Notes" value={contact.notes} />
           </Section>
 

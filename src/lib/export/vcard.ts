@@ -1,5 +1,5 @@
 import type { ContactSummary } from "@/lib/data/contacts";
-import { fullName } from "@/lib/contacts-view";
+import { fullName, tradeShowLabel } from "@/lib/contacts-view";
 
 /**
  * One contact, as a .vcf a phone will offer to save.
@@ -73,7 +73,12 @@ export function buildVCard(contact: ContactSummary): string {
     "quotes fast, call to confirm the install week" is the half of the
     contact that does not help anybody at 7am.
   */
-  const note = [contact.notes, contact.source ? `From: ${contact.source}` : null]
+  const show = tradeShowLabel(contact);
+  const note = [
+    contact.notes,
+    contact.source ? `From: ${contact.source}` : null,
+    show ? `Met at: ${show}` : null,
+  ]
     .filter(Boolean)
     .join("\n");
   if (note) lines.push(`NOTE:${esc(note)}`);

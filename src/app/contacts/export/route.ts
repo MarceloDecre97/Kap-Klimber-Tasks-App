@@ -6,6 +6,7 @@ import {
   EMPTY_CONTACT_FILTERS,
   formatAddress,
   matchesContact,
+  tradeShowLabel,
 } from "@/lib/contacts-view";
 
 /**
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
     query: params.get("q") ?? "",
     company: params.get("company"),
     relationshipId: params.get("relationship"),
+    tradeShow: params.get("show"),
   };
   const rows = contacts.filter((contact) => matchesContact(contact, filters));
 
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
     "Relationship to us",
     "Mobile", "Office phone", "Email", "Second email", "Website",
     "Street", "Suite / unit", "City", "State", "ZIP", "Country", "Address",
-    "Where they came from", "Notes", "Added by", "Added on",
+    "Where they came from", "Trade show", "Notes", "Added by", "Added on",
   ];
 
   const body = rows.map((c) => [
@@ -74,6 +76,7 @@ export async function GET(request: NextRequest) {
     // the other is for pasting into an email.
     formatAddress(c) ?? "",
     c.source ?? "",
+    tradeShowLabel(c) ?? "",
     c.notes ?? "",
     c.created_by?.display_name ?? "",
     c.created_at.slice(0, 10),

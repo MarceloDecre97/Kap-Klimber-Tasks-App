@@ -290,6 +290,9 @@ export interface Database {
           /** The company they belong to. `company` is kept in step by trigger. */
           company_id: string | null;
           source: string | null;
+          /** The filterable half of where they came from. See 0039. */
+          trade_show: string | null;
+          trade_show_year: number | null;
           notes: string | null;
           created_by: string;
           /** The bin. Set only through delete_contact, pinned otherwise. */

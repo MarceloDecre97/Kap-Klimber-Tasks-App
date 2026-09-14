@@ -41,6 +41,13 @@ export interface ContactSummary {
   postal_code: string | null;
   country: string | null;
   source: string | null;
+  /**
+   * The filterable half of where they came from. Free text stays free — this
+   * is the part the book is filtered by, so it is split from the year and
+   * spelled the same way every time. See 0039_trade_show.sql.
+   */
+  trade_show: string | null;
+  trade_show_year: number | null;
   notes: string | null;
   /**
    * What this person is to Opus Kap. Several, because somebody really can be
@@ -70,6 +77,7 @@ const CONTACT_SELECT = `
   id, first_name, last_name, job_title, company, company_id,
   mobile, office_phone, email, email2, website,
   street, suite, city, state, postal_code, country, source, notes,
+  trade_show, trade_show_year,
   created_at, deleted_at,
   relationship_links:contact_relationship_links(
     relationship:contact_relationships(id, label, icon)
@@ -244,6 +252,31 @@ export async function listContactEvents(
 
   if (error) throw error;
   return (data ?? []) as unknown as ContactEvent[];
+}
+
+/**
+ * Every trade show already written down, for the form to suggest.
+ *
+ * Distinct names rather than a table of shows: the list is whatever the team
+ * has actually been to, and a show nobody has typed yet has no business
+ * existing. Deleted contacts are included on purpose — a name that was good
+ * enough once should keep being offered rather than reappear as a second
+ * spelling once its only contact is binned.
+ */
+export async function listTradeShows(supabase: SupabaseClient<Database>): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("trade_show")
+    .not("trade_show", "is", null);
+
+  if (error) throw error;
+
+  const seen = new Set<string>();
+  for (const row of data ?? []) {
+    const name = row.trade_show?.trim();
+    if (name) seen.add(name);
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b));
 }
 
 /** The relationships, in the order the table says to show them. */
