@@ -31,6 +31,11 @@ export interface ContactSummary {
   company_record: CompanySummary | null;
   mobile: string | null;
   office_phone: string | null;
+  /**
+   * The extension on the office line. Its own column rather than part of the
+   * number, so the tel: link can dial it. See 0040_office_extension.sql.
+   */
+  office_phone_ext: string | null;
   email: string | null;
   email2: string | null;
   website: string | null;
@@ -75,7 +80,7 @@ export interface ContactEvent {
 
 const CONTACT_SELECT = `
   id, first_name, last_name, job_title, company, company_id,
-  mobile, office_phone, email, email2, website,
+  mobile, office_phone, office_phone_ext, email, email2, website,
   street, suite, city, state, postal_code, country, source, notes,
   trade_show, trade_show_year,
   created_at, deleted_at,

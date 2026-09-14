@@ -201,7 +201,8 @@ const companyExamples: string[][] = [
 
 const contactHeaders = [
   "First name", "Last name", "Company",
-  "Job title", "Mobile", "Office phone", "Email", "Second email", "Website",
+  "Job title", "Mobile", "Office phone", "Office phone extension",
+  "Email", "Second email", "Website",
   "What they are to us", "Where they came from", "Trade show", "Trade show year", "Notes",
   "Their street", "Their suite", "Their city", "Their state / province",
   "Their ZIP / postal code", "Their country",
@@ -210,12 +211,12 @@ const contactHeaders = [
 const contactExamples: string[][] = [
   /* Met at a show: the two show columns are filled and the free-text one is not. */
   [DELETE, "Morrison", "Royal Truck & Utility Trailer",
-    "Vice President of Aftermarket Sales", "3133040028", "", "mike@royaltruck.com", "", "",
+    "Vice President of Aftermarket Sales", "3133040028", "", "", "mike@royaltruck.com", "", "",
     "Client", "", "Work Truck Week", "2026", "Wants a quote on a two-deck build.",
     "", "", "", "", "", ""],
   /* Not from a show: the show columns stay empty and the story goes in the free-text one. */
   [DELETE, "Álvarez", "",
-    "Program Manager", "+1 9055550110", "9055550100", "ana@multimatic.com", "", "",
+    "Program Manager", "+1 9055550110", "9055550100", "204", "ana@multimatic.com", "", "",
     "Partner, Consultant", "Referral from Dee Kapur", "", "",
     "No company — the Company column can be left blank.",
     "22 Mill Lane", "A-501", "Brighton", "Michigan", "48116", "United States"],
@@ -294,6 +295,8 @@ const guide: string[][] = [
   ["Type them however you have them — they are reformatted on the way in, so 3133040028 becomes"],
   ["(313)-304-0028. A number outside North America needs its country code: +41 793573300."],
   ["A mobile needs 10 digits. An office line or a company main line needs 7."],
+  ["An extension goes in its own column, digits only: 228, not Ext. 228. It is dialled after the"],
+  ["number, so anything that is not a digit cannot be dialled. Leave it blank if there is none."],
   [],
   ["Countries"],
   ["Write the country in full — United States, Canada, Mexico, Germany. USA, UK and DRC are understood."],
@@ -338,10 +341,10 @@ const bytes = buildWorkbook([
         cannot be a company misspelled.
       */
       { ref: `C2:C${DROPDOWN_ROWS}`, formula: `Companies!$A$2:$A$${DROPDOWN_ROWS}` },
-      // What they are to us is column J.
-      { ref: `J2:J${DROPDOWN_ROWS}`, formula: inlineList(RELATIONSHIPS) },
-      // Trade show is column L.
-      { ref: `L2:L${DROPDOWN_ROWS}`, formula: inlineList(SHOWS) },
+      // What they are to us is column K.
+      { ref: `K2:K${DROPDOWN_ROWS}`, formula: inlineList(RELATIONSHIPS) },
+      // Trade show is column M.
+      { ref: `M2:M${DROPDOWN_ROWS}`, formula: inlineList(SHOWS) },
     ],
   },
   { name: "How to fill this in", rows: guide },

@@ -32,7 +32,18 @@ export function buildVCard(contact: ContactSummary): string {
   if (contact.company) lines.push(`ORG:${esc(contact.company)}`);
   if (contact.job_title) lines.push(`TITLE:${esc(contact.job_title)}`);
   if (contact.mobile) lines.push(`TEL;TYPE=CELL,VOICE:${esc(contact.mobile)}`);
-  if (contact.office_phone) lines.push(`TEL;TYPE=WORK,VOICE:${esc(contact.office_phone)}`);
+  /*
+    The extension rides in the number, the way a vCard carries one: "x228"
+    after it. Phones dial the part before the x and offer the rest, which is
+    the closest an address book on somebody else's device gets to what the
+    tel: link does here.
+  */
+  if (contact.office_phone) {
+    const work = contact.office_phone_ext
+      ? `${contact.office_phone}x${contact.office_phone_ext}`
+      : contact.office_phone;
+    lines.push(`TEL;TYPE=WORK,VOICE:${esc(work)}`);
+  }
   if (contact.email) lines.push(`EMAIL;TYPE=INTERNET,PREF:${esc(contact.email)}`);
   if (contact.email2) lines.push(`EMAIL;TYPE=INTERNET:${esc(contact.email2)}`);
   if (contact.website) lines.push(`URL:${esc(contact.website)}`);

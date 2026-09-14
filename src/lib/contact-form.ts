@@ -13,7 +13,7 @@ import { phoneTooShort, phoneTooShortMessage } from "@/lib/phones";
 /** Every field the form can complain about. Keyed to the draft. */
 export type ContactField =
   | "firstName" | "lastName" | "jobTitle" | "company"
-  | "mobile" | "officePhone" | "email" | "email2" | "website"
+  | "mobile" | "officePhone" | "officePhoneExt" | "email" | "email2" | "website"
   | "street" | "suite" | "city" | "state" | "postalCode" | "country"
   | "source" | "tradeShow" | "tradeShowYear" | "notes";
 
@@ -22,7 +22,8 @@ export type ContactErrors = Partial<Record<ContactField, string>>;
 /** The label shown in the summary, so it names what you can see. */
 export const FIELD_LABELS: Record<ContactField, string> = {
   firstName: "First name", lastName: "Last name", jobTitle: "Job title", company: "Company",
-  mobile: "Mobile", officePhone: "Office phone", email: "Email", email2: "Second email",
+  mobile: "Mobile", officePhone: "Office phone", officePhoneExt: "Extension",
+  email: "Email", email2: "Second email",
   website: "Website", street: "Street", suite: "Suite / unit", city: "City", state: "State",
   postalCode: "ZIP", country: "Country", source: "Where they came from",
   tradeShow: "Trade show", tradeShowYear: "Trade show year", notes: "Notes",

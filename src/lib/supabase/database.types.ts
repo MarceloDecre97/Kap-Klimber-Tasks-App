@@ -278,6 +278,8 @@ export interface Database {
           company: string | null;
           mobile: string | null;
           office_phone: string | null;
+          /** Digits only, and only alongside an office line. See 0040. */
+          office_phone_ext: string | null;
           email: string | null;
           email2: string | null;
           website: string | null;

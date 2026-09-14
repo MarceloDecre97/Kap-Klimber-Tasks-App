@@ -282,6 +282,21 @@ export const contactInputSchema = z
     company: optionalText(120),
     mobile: phoneField("mobile"),
     officePhone: phoneField("office"),
+    /*
+      Digits only. An extension is dialled, not read — "ext. 228" in the box
+      would end up in the tel: link and a switchboard would hear nothing.
+    */
+    officePhoneExt: z
+      .string()
+      .trim()
+      .max(10)
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v.replace(/\D/g, "") : ""))
+      .refine((v) => v === "" || /^[0-9]{1,10}$/.test(v), {
+        message: "An extension is digits only — 228.",
+      })
+      .transform((v) => (v === "" ? null : v))
+      .nullable(),
     email: optionalEmail,
     email2: optionalEmail,
     website: optionalText(300),
@@ -360,6 +375,11 @@ export const contactInputSchema = z
   .refine((v) => v.tradeShowYear === null || v.tradeShow !== null, {
     message: "Which show? A year on its own has nothing to hang on.",
     path: ["tradeShow"],
+  })
+  /* An extension with no line to dial first reaches nobody. */
+  .refine((v) => v.officePhoneExt === null || v.officePhone !== null, {
+    message: "An extension needs an office line to dial first.",
+    path: ["officePhone"],
   });
 
 export type ContactInput = z.input<typeof contactInputSchema>;

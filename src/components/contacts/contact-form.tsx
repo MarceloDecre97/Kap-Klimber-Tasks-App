@@ -39,7 +39,8 @@ import type { ContactSummary } from "@/lib/data/contacts";
 /** The shape the form holds: every field a string, because inputs are. */
 type Draft = CompanyDraft & {
   firstName: string; lastName: string; jobTitle: string;
-  mobile: string; officePhone: string; email: string; email2: string; website: string;
+  mobile: string; officePhone: string; officePhoneExt: string;
+  email: string; email2: string; website: string;
   street: string; suite: string; city: string; state: string; postalCode: string; country: string;
   relationshipIds: string[]; source: string; notes: string;
   /** The show and its year, apart — see 0039. Both strings, inputs being inputs. */
@@ -75,6 +76,7 @@ function draftFrom(contact: ContactSummary | null): Draft {
     updateCompanyDetails: false,
     mobile: contact?.mobile ?? "",
     officePhone: contact?.office_phone ?? "",
+    officePhoneExt: contact?.office_phone_ext ?? "",
     email: contact?.email ?? "",
     email2: contact?.email2 ?? "",
     website: contact?.website ?? "",
@@ -276,8 +278,36 @@ export function ContactForm({
               <Input value={draft.mobile} onChange={(e) => set("mobile", e.target.value)} onBlur={() => leavePhone("mobile")} inputMode="tel" autoComplete="off" />
             </Field>
             <Field label="Office phone" error={shown.officePhone}>
-              <Input value={draft.officePhone} onChange={(e) => set("officePhone", e.target.value)} onBlur={() => leavePhone("officePhone")} inputMode="tel" autoComplete="off" />
+              <Input
+                value={draft.officePhone}
+                onChange={(e) => {
+                  set("officePhone", e.target.value);
+                  // The extension goes with the line. Left behind it is an
+                  // extension with nothing to dial first, which the database
+                  // refuses and the box below has just stopped showing.
+                  if (e.target.value.trim() === "") set("officePhoneExt", "");
+                }}
+                onBlur={() => leavePhone("officePhone")}
+                inputMode="tel"
+                autoComplete="off"
+              />
             </Field>
+            {/*
+              Only once there is a line for it to hang off. Digits only,
+              because this ends up in the tel: link — "ext. 228" typed here
+              would be dialled at a switchboard as nothing at all.
+            */}
+            {draft.officePhone.trim() !== "" && (
+              <Field label="Extension" hint="Digits only. Dialled after the number." error={shown.officePhoneExt}>
+                <Input
+                  value={draft.officePhoneExt}
+                  onChange={(e) => set("officePhoneExt", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="max-w-[160px]"
+                />
+              </Field>
+            )}
             <Field label="Email" error={shown.email}>
               <Input value={draft.email} onChange={(e) => set("email", e.target.value)} onBlur={() => leave("email")} inputMode="email" autoComplete="off" />
             </Field>

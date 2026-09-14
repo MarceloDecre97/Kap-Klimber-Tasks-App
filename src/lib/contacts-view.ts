@@ -55,6 +55,40 @@ export function avatarColor(c: { first_name: string; last_name: string }): strin
 }
 
 /* -------------------------------------------------------------------------
+   Phones
+   ------------------------------------------------------------------------- */
+
+/**
+ * The office line as it is read out: "(512)-916-5440 · ext. 228".
+ *
+ * The extension is stored apart from the number rather than tacked onto it,
+ * because the two are dialled separately — see telHref below, and 0040.
+ */
+export function officeLine(c: {
+  office_phone: string | null;
+  office_phone_ext: string | null;
+}): string | null {
+  if (!c.office_phone) return null;
+  return c.office_phone_ext ? `${c.office_phone} · ext. ${c.office_phone_ext}` : c.office_phone;
+}
+
+/**
+ * A tel: link that dials the extension too.
+ *
+ * The pair of commas is a pause — two seconds each, understood by both
+ * phones — so a switchboard has answered before the extension is sent. This
+ * is the whole reason the extension is a column of its own: written into the
+ * number it would be stripped out with the brackets and dashes and lost, and
+ * written into Notes it is something you read off a screen and type by hand
+ * while the switchboard waits.
+ */
+export function telHref(number: string | null, ext?: string | null): string | null {
+  if (!number) return null;
+  const dialled = number.replace(/[^\d+]/g, "");
+  return ext ? `tel:${dialled},,${ext}` : `tel:${dialled}`;
+}
+
+/* -------------------------------------------------------------------------
    Searching and filtering
    ------------------------------------------------------------------------- */
 

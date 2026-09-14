@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     "First name", "Last name", "Job title",
     "Company", "Company main line", "Company website", "Company address",
     "Relationship to us",
-    "Mobile", "Office phone", "Email", "Second email", "Website",
+    "Mobile", "Office phone", "Extension", "Email", "Second email", "Website",
     "Street", "Suite / unit", "City", "State", "ZIP", "Country", "Address",
     "Where they came from", "Trade show", "Notes", "Added by", "Added on",
   ];
@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
     c.relationships.map((r) => r.label).join(", "),
     c.mobile ?? "",
     c.office_phone ?? "",
+    c.office_phone_ext ?? "",
     c.email ?? "",
     c.email2 ?? "",
     c.website ?? "",

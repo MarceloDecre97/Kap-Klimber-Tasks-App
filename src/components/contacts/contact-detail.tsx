@@ -20,7 +20,9 @@ import {
   fullName,
   groupContactEvents,
   initialsOf,
+  officeLine,
   roleLine,
+  telHref,
   tradeShowLabel,
 } from "@/lib/contacts-view";
 import { cn, formatTimestamp, formatTimestampWithYear } from "@/lib/utils";
@@ -272,8 +274,14 @@ export function ContactDetail({
           </div>
 
           <Section heading="How to reach them">
-            <Row label="Mobile" value={contact.mobile} href={contact.mobile ? `tel:${contact.mobile.replace(/[^\d+]/g, "")}` : null} />
-            <Row label="Office phone" value={contact.office_phone} href={contact.office_phone ? `tel:${contact.office_phone.replace(/[^\d+]/g, "")}` : null} />
+            <Row label="Mobile" value={contact.mobile} href={telHref(contact.mobile)} />
+            {/* One row, not two: the extension is part of reaching them, and
+                the link dials it after the number. */}
+            <Row
+              label="Office phone"
+              value={officeLine(contact)}
+              href={telHref(contact.office_phone, contact.office_phone_ext)}
+            />
             <Row label="Email" value={contact.email} href={contact.email ? `mailto:${contact.email}` : null} />
             <Row label="Second email" value={contact.email2} href={contact.email2 ? `mailto:${contact.email2}` : null} />
             <Row label="Website" value={contact.website} href={externalHref(contact.website)} />
