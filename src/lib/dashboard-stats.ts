@@ -10,7 +10,28 @@ export const OPEN_STATUSES = STATUS_ORDER.filter((s) => s !== "complete");
 /** A task is "stale" once nothing has happened on it for this many days. */
 export const STALE_AFTER_DAYS = 14;
 
-export type PersonalScope = "assigned" | "created";
+export type PersonalScope =
+  /** Tasks I am assigned to — my own workload. */
+  | "assigned"
+  /**
+   * Tasks I am NOT assigned to — everybody else's workload.
+   *
+   * Deliberately not "tasks I did not create": a task I raised for Dee is
+   * work he is carrying, and it belongs here. Excluding it would leave it in
+   * neither tab and off my dashboard entirely, which is exactly the shape of
+   * task per-person reminders were built for.
+   */
+  | "team";
+
+/** One person's live reminder, as the team timeline prints it. */
+export interface TeamReminderLine {
+  memberId: string;
+  /** "Dee's reminder today, 11:00 AM" / "Keith's reminder passed 2 days ago" */
+  label: string;
+  tone: ReminderTone;
+  /** Sort key — the moment itself, so soonest and most overdue lead. */
+  at: string;
+}
 
 /**
  * A task in a bucket, with everything the row needs already resolved so the
@@ -29,6 +50,16 @@ export interface BucketEntry {
   reminderLabel: string | null;
   /** Colours that line, whole: amber ahead, red missed, grey handled. */
   reminderTone: ReminderTone | null;
+  /**
+   * In the team scope, one line per live reminder on the task, naming whose
+   * it is. Empty in the personal scope, where `reminderLabel` above already
+   * says everything — it is always yours, so there is nobody to name.
+   *
+   * Dismissed reminders are left out. They have been dealt with, and a list
+   * whose job is to explain why a card is sitting in Today should not be
+   * padded with the ones that are not why.
+   */
+  teamReminders: TeamReminderLine[];
   /** A deadline that has passed — drives the bucket's count colour. */
   missedDeadline: boolean;
   /** The reminder has been marked dealt with (shared across the team). */
@@ -226,9 +257,30 @@ function reminderKey(task: TaskWithRelations): string | null {
  * reminder someone dismissed used to keep holding the task in Today long
  * after it was handled.
  */
-function attentionKeyOf(task: TaskWithRelations, now: Date): string | null {
+function attentionKeyOf(task: TaskWithRelations, now: Date, scope: PersonalScope): string | null {
   const due = task.due_date ?? null;
-  const rem = reminderState(task.my_reminder, now) === "upcoming" ? reminderKey(task) : null;
+
+  /*
+    Whose reminders count depends on whose panel this is.
+
+    Yours reads your own — it is your day. The team's reads every assignee's,
+    so a task lands in Today for you exactly as it does for the person
+    carrying it. Without that the same task would sit in two different
+    sections depending on who was looking, which is the sort of thing that
+    makes a shared timeline useless in a meeting.
+  */
+  const candidates =
+    scope === "assigned"
+      ? task.my_reminder
+        ? [task.my_reminder]
+        : []
+      : task.reminders;
+
+  const upcoming = candidates
+    .filter((r) => reminderState(r, now) === "upcoming")
+    .map((r) => zonedDateKey(new Date(r.remind_at)))
+    .sort();
+  const rem = upcoming[0] ?? null;
 
   if (due && rem) return rem < due ? rem : due;
   return due ?? rem;
@@ -264,10 +316,16 @@ function plural(n: number, word: string) {
   return `${n} ${n === 1 ? word : `${word}s`}`;
 }
 
-function toEntry(task: TaskWithRelations, todayKey: string, now: Date): BucketEntry {
+function toEntry(
+  task: TaskWithRelations,
+  todayKey: string,
+  now: Date,
+  scope: PersonalScope,
+  roster: MemberSummary[]
+): BucketEntry {
   const due = task.due_date ?? null;
   const rem = reminderKey(task);
-  const attentionKey = attentionKeyOf(task, now);
+  const attentionKey = attentionKeyOf(task, now, scope);
   const remTime = task.my_reminder ? formatClockTime(new Date(task.my_reminder.remind_at)) : null;
 
   const rState = reminderState(task.my_reminder, now);
@@ -295,9 +353,37 @@ function toEntry(task: TaskWithRelations, todayKey: string, now: Date): BucketEn
     }
   }
 
+  /*
+    The team scope's lines: one per live reminder, named, soonest first.
+    Built here rather than in the component so the row never has to work out
+    why the card is where it is.
+  */
+  const teamReminders: TeamReminderLine[] =
+    scope === "team"
+      ? task.reminders
+          .filter((r) => r.dismissed_at === null)
+          .map((r) => {
+            const who =
+              roster.find((m) => m.id === r.member_id)?.display_name.split(" ")[0] ?? "Someone";
+            const key = zonedDateKey(new Date(r.remind_at));
+            const time = formatClockTime(new Date(r.remind_at));
+            const fired = reminderState(r, now) === "due";
+            return {
+              memberId: r.member_id,
+              tone: (fired ? "missed" : "upcoming") as ReminderTone,
+              at: r.remind_at,
+              label: fired
+                ? `${who}'s reminder passed ${plural(Math.abs(daysBetweenKeys(todayKey, key)), "day")} ago`
+                : `${who}'s reminder ${relativeDay(key, todayKey)}, ${time}`,
+            };
+          })
+          .sort((a, b) => a.at.localeCompare(b.at))
+      : [];
+
   return {
     task,
     attentionKey,
+    teamReminders,
     hasReminder: !!task.my_reminder,
     reminderLabel,
     reminderTone,
@@ -353,16 +439,17 @@ export function computeDashboardStats({
   const completeTasks = tasks.filter((t) => t.status === "complete");
 
   // ---- Personal panel -----------------------------------------------------
-  const mine = openTasks.filter((task) =>
-    scope === "assigned" ? task.assignees.some((a) => a.id === meId) : task.created_by === meId
-  );
+  const mine = openTasks.filter((task) => {
+    const onIt = task.assignees.some((a) => a.id === meId);
+    return scope === "assigned" ? onIt : !onIt;
+  });
 
   // Calendar weeks, Monday-start — the same week boundary the "Completed
   // this week" card uses, so the phrase means one thing across the screen.
   const endOfThisWeek = endOfWeekKey(todayKey);
   const endOfNextWeek = endOfWeekKey(todayKey, 1);
 
-  const entries = mine.map((task) => toEntry(task, todayKey, now));
+  const entries = mine.map((task) => toEntry(task, todayKey, now, scope, roster));
   const inRange = (predicate: (key: string | null) => boolean) =>
     entries.filter((e) => predicate(e.attentionKey)).sort(byAttention);
 
@@ -379,8 +466,26 @@ export function computeDashboardStats({
       title,
       entries: bucketEntries,
       countTone: toneFor(rule, bucketEntries),
-      remindersNeedingAttention: bucketEntries.filter((e) => e.reminderNeedsAttention).length,
-      remindersUpcoming: bucketEntries.filter((e) => e.reminderTone === "upcoming").length,
+      /*
+        The bell on the heading counts whichever reminders this scope is
+        about: yours in the personal panel, the whole team's in the team one.
+        Read from the same lines the rows draw, so a heading can never
+        disagree with the cards under it.
+      */
+      remindersNeedingAttention:
+        scope === "team"
+          ? bucketEntries.reduce(
+              (n, e) => n + e.teamReminders.filter((r) => r.tone === "missed").length,
+              0
+            )
+          : bucketEntries.filter((e) => e.reminderNeedsAttention).length,
+      remindersUpcoming:
+        scope === "team"
+          ? bucketEntries.reduce(
+              (n, e) => n + e.teamReminders.filter((r) => r.tone === "upcoming").length,
+              0
+            )
+          : bucketEntries.filter((e) => e.reminderTone === "upcoming").length,
       ...rest,
     };
   };

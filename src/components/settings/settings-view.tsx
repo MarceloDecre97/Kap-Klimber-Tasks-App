@@ -2,8 +2,9 @@
 
 import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, LogOut } from "lucide-react";
+import { safeReturnTo } from "@/lib/return-to";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PushSwitch } from "@/components/settings/push-switch";
@@ -11,6 +12,14 @@ import { NotificationPrefsPanel } from "@/components/settings/notification-prefs
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { signOut } from "@/app/settings/actions";
 import type { NotificationPrefs } from "@/lib/notification-prefs";
+
+/** What the back arrow calls each screen it can return to. */
+const RETURN_LABELS: Record<string, string> = {
+  "/tasks": "Tasks",
+  "/dashboard": "Dashboard",
+  "/contacts": "Contacts",
+  "/companies": "Companies",
+};
 
 export function SettingsView({
   member,
@@ -27,18 +36,25 @@ export function SettingsView({
     below dims its Device column when the answer is no. Starts true so nothing
     flickers grey while the browser is still being asked.
   */
+  const searchParams = useSearchParams();
+  const returnTo = safeReturnTo(searchParams.get("from"));
   const [deviceOn, setDeviceOn] = useState(true);
   const handleDeviceState = useCallback((on: boolean) => setDeviceOn(on), []);
 
   return (
     <div className="flex h-full flex-col bg-bg">
       <header className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-border bg-card px-3 pt-[calc(env(safe-area-inset-top)+8px)] pb-3">
+        {/*
+          Back to wherever the gear was pressed, named so the arrow is a
+          promise rather than a guess. Absent — a bookmark, a typed address —
+          it is the Tasklist, which is what this always did.
+        */}
         <Link
-          href="/tasks"
+          href={returnTo}
           className="flex h-14 items-center gap-2 rounded-xl px-3 text-[18px] leading-7 font-bold text-brand"
         >
           <ChevronLeft aria-hidden className="size-5" />
-          Tasks
+          {RETURN_LABELS[returnTo.split(/[?#]/)[0]] ?? "Tasks"}
         </Link>
       </header>
 

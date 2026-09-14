@@ -48,11 +48,14 @@ export function DashboardApp({
   roster,
   me,
   notifications,
+  focusTaskId,
 }: {
   initialTasks: TaskWithRelations[];
   roster: MemberSummary[];
   me: { id: string; display_name: string; initials: string; color: string };
   notifications: NotificationFeed;
+  /** A card to reopen — set when returning from the full-screen editor. */
+  focusTaskId: string | null;
 }) {
   const router = useRouter();
   /*
@@ -62,9 +65,30 @@ export function DashboardApp({
   */
   useRefreshOnReturn();
   const { showToast } = useToast();
-  const [scope, setScope] = useState<PersonalScope>("assigned");
+  /*
+    Returning from the editor reopens the card, in whichever tab it belongs
+    to — edit a teammate's task from the team timeline and you come back to
+    the team timeline, not to your own.
+  */
+  const focusTask = focusTaskId ? initialTasks.find((t) => t.id === focusTaskId) : undefined;
+  const focusScope: PersonalScope =
+    focusTask && !focusTask.assignees.some((a) => a.id === me.id) ? "team" : "assigned";
+
+  const [scope, setScope] = useState<PersonalScope>(focusScope);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(focusTaskId);
+
+  /*
+    Applied during render rather than in an effect, so the card is never
+    painted collapsed and then opened a frame later — the same reasoning as
+    the Tasklist's, and the same rule against setting state in effects.
+  */
+  const [focusApplied, setFocusApplied] = useState(focusTaskId);
+  if (focusTaskId && focusTaskId !== focusApplied) {
+    setFocusApplied(focusTaskId);
+    setExpandedId(focusTaskId);
+    setScope(focusScope);
+  }
   const [deleteTarget, setDeleteTarget] = useState<TaskWithRelations | null>(null);
   const [, startTransition] = useTransition();
 
@@ -244,8 +268,14 @@ export function DashboardApp({
                 >
                   <Bell aria-hidden className="size-5 shrink-0 text-danger" />
                   <span className="font-bold tabular-nums text-pretty">
+                    {/*
+                      "your" only when they are yours. In the team scope this
+                      counts everybody else's, and telling somebody that four
+                      of Dee's reminders need their attention is simply untrue.
+                    */}
                     {stats.remindersNeedingAttention}{" "}
-                    {stats.remindersNeedingAttention === 1 ? "reminder needs" : "reminders need"} your attention
+                    {stats.remindersNeedingAttention === 1 ? "reminder needs" : "reminders need"}{" "}
+                    {scope === "team" ? "attention" : "your attention"}
                   </span>
                 </button>
               )}
@@ -254,7 +284,7 @@ export function DashboardApp({
                 {(
                   [
                     { value: "assigned", label: "Assigned to me" },
-                    { value: "created", label: "Created by me" },
+                    { value: "team", label: "Assigned to team" },
                   ] as const
                 ).map((option) => (
                   <button
@@ -264,7 +294,18 @@ export function DashboardApp({
                     aria-selected={scope === option.value}
                     onClick={() => setScope(option.value)}
                     className={cn(
-                      "h-12 flex-1 rounded-full text-[17px] leading-6 font-bold cursor-pointer transition-colors duration-150",
+                      /*
+                        14px, not 17: "Assigned to team" wrapped to two lines
+                        at 17px and took the whole pill with it. Measured at
+                        14 it clears 360px with 16px to spare, against 6px at
+                        15 — worth the pixel. Both labels move together; one
+                        tab a size smaller than its neighbour reads as a bug.
+
+                        At 320px it still wraps. That is below the floor the
+                        status pills were sized to, and nobody here carries
+                        one.
+                      */
+                      "h-12 flex-1 rounded-full text-[14px] leading-6 font-bold cursor-pointer transition-colors duration-150",
                       scope === option.value ? "bg-prim text-on-prim" : "text-muted-fg hover:text-fg"
                     )}
                   >
@@ -369,6 +410,31 @@ export function DashboardApp({
                             dates in two colours on one line meant neither
                             read as a signal.
                           */}
+                          {/*
+                            The team's reminders: one bell, one heading, then
+                            a line each. Repeating the icon down the list made
+                            three reminders louder than the task they were
+                            about.
+                          */}
+                          {entry.teamReminders.length > 0 && (
+                            <div className="flex flex-col gap-0.5 px-3">
+                              <div className="flex items-center gap-2 text-[15px] leading-5 font-bold text-sub">
+                                <Bell aria-hidden className="size-3.5 shrink-0" />
+                                Reminders
+                              </div>
+                              {entry.teamReminders.map((line) => (
+                                <div
+                                  key={line.memberId}
+                                  className={cn(
+                                    "pl-[22px] text-[15px] leading-5 font-bold tabular-nums",
+                                    line.tone === "missed" ? "text-danger" : "text-accent"
+                                  )}
+                                >
+                                  {line.label}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {entry.reminderLabel && (
                             <div
                               className={cn(

@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { returnToQuery } from "@/lib/return-to";
 import { Settings } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { AppClock } from "@/components/layout/app-clock";
@@ -47,6 +49,7 @@ export function AppHeader({
   notifications: NotificationFeed;
   children?: ReactNode;
 }) {
+  const pathname = usePathname();
   return (
     <header className="flex shrink-0 flex-col gap-2.5 border-b-[1.5px] border-border bg-card px-5 pt-[calc(env(safe-area-inset-top)+10px)] pb-3.5 lg:gap-3">
       <div className="flex flex-wrap items-center gap-2 lg:gap-3">
@@ -79,7 +82,12 @@ export function AppHeader({
           <AppClock className="order-2 ml-auto lg:order-1 lg:ml-0" />
           <NotificationBell feed={notifications} className="order-3 lg:order-2 lg:ml-0" />
           <ThemeToggle className="hidden lg:order-3 lg:ml-0 lg:inline-flex" />
-          <Link href="/settings" className="order-4 lg:order-4">
+          {/*
+            The gear carries the screen it was pressed on, so Settings can
+            send somebody back to it. Without this every route out of
+            Settings ended at the Tasklist, whichever book you came from.
+          */}
+          <Link href={`/settings${returnToQuery(pathname)}`} className="order-4 lg:order-4">
             <IconButton aria-label="Settings" className="size-12 lg:size-14">
               <Settings aria-hidden className="size-5" />
             </IconButton>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, Calendar, Link as LinkIcon } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { PRIORITIES, PRIORITY_ORDER, STATUSES, STATUS_ORDER } from "@/lib/consta
 import { ContactPicker } from "@/components/contacts/contact-picker";
 import { createTask, updateTask } from "@/app/tasks/actions";
 import { cn } from "@/lib/utils";
+import { safeReturnTo } from "@/lib/return-to";
 
 /** Matches the cap enforced in validation and in the database. */
 const TITLE_MAX = 200;
@@ -69,6 +70,13 @@ export function TaskForm({
   categories: { id: string; label: string }[];
 }) {
   const router = useRouter();
+  /*
+    Where to land when this screen closes — on save, on cancel, on discard.
+    Whoever opened the form said so in the URL; absent, it is the Tasklist,
+    which is what this always did.
+  */
+  const searchParams = useSearchParams();
+  const returnTo = safeReturnTo(searchParams.get("from"));
   const initial = useMemo(() => initialState(task), [task]);
   const [form, setForm] = useState<FormState>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +97,7 @@ export function TaskForm({
 
   function handleCancel() {
     if (isDirty) setConfirmDiscard(true);
-    else router.push("/tasks");
+    else router.push(returnTo);
   }
 
   function submit() {
@@ -125,7 +133,16 @@ export function TaskForm({
         setError(result.error);
         return;
       }
-      router.push("/tasks");
+      /*
+        Carrying the task id back, so the card reopens where it was rather
+        than leaving somebody to find it again in a list they had already
+        scrolled.
+      */
+      router.push(
+        result.ok && "taskId" in result
+          ? `${returnTo}${returnTo.includes("?") ? "&" : "?"}task=${result.taskId}`
+          : returnTo
+      );
       router.refresh();
     });
   }
@@ -379,7 +396,7 @@ export function TaskForm({
         <Button variant="secondary" onClick={() => setConfirmDiscard(false)}>
           Keep editing
         </Button>
-        <Button variant="destructive" onClick={() => router.push("/tasks")}>
+        <Button variant="destructive" onClick={() => router.push(returnTo)}>
           Discard it
         </Button>
       </Dialog>
