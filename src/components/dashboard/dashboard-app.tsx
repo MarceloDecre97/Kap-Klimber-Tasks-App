@@ -295,17 +295,18 @@ export function DashboardApp({
                     onClick={() => setScope(option.value)}
                     className={cn(
                       /*
-                        14px, not 17: "Assigned to team" wrapped to two lines
-                        at 17px and took the whole pill with it. Measured at
-                        14 it clears 360px with 16px to spare, against 6px at
-                        15 — worth the pixel. Both labels move together; one
-                        tab a size smaller than its neighbour reads as a bug.
+                        15px is the largest that holds. Measured across
+                        320/360/390/412: 17 and 16 both wrap "Assigned to
+                        team" onto two lines at 360 and take the whole pill
+                        with them; 15 clears 360 with 6px to spare and 390
+                        with 21px. Both labels move together — one tab a size
+                        smaller than its neighbour reads as a bug.
 
-                        At 320px it still wraps. That is below the floor the
-                        status pills were sized to, and nobody here carries
-                        one.
+                        At 320px it wraps, which is below the floor the status
+                        pills were sized to and narrower than anything anyone
+                        here carries.
                       */
-                      "h-12 flex-1 rounded-full text-[14px] leading-6 font-bold cursor-pointer transition-colors duration-150",
+                      "h-12 flex-1 rounded-full text-[15px] leading-6 font-bold cursor-pointer transition-colors duration-150",
                       scope === option.value ? "bg-prim text-on-prim" : "text-muted-fg hover:text-fg"
                     )}
                   >
@@ -418,7 +419,15 @@ export function DashboardApp({
                           */}
                           {entry.teamReminders.length > 0 && (
                             <div className="flex flex-col gap-0.5 px-3">
-                              <div className="flex items-center gap-2 text-[15px] leading-5 font-bold text-sub">
+                              {/*
+                                Amber heading, neutral lines, red only where
+                                something has actually been missed. Colouring
+                                every line amber made three upcoming reminders
+                                shout as loudly as one that had been ignored
+                                for two days — which is the one you need to
+                                pick out of the list.
+                              */}
+                              <div className="flex items-center gap-2 text-[15px] leading-5 font-bold text-accent">
                                 <Bell aria-hidden className="size-3.5 shrink-0" />
                                 Reminders
                               </div>
@@ -427,7 +436,7 @@ export function DashboardApp({
                                   key={line.memberId}
                                   className={cn(
                                     "pl-[22px] text-[15px] leading-5 font-bold tabular-nums",
-                                    line.tone === "missed" ? "text-danger" : "text-accent"
+                                    line.tone === "missed" ? "text-danger" : "text-sub"
                                   )}
                                 >
                                   {line.label}

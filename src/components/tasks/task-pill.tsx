@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   AtSign,
   Bell,
@@ -58,6 +59,7 @@ import type {
   TaskReminder,
   TaskWithRelations,
 } from "@/lib/data/tasks";
+import { returnToQuery } from "@/lib/return-to";
 import type { TaskStatus } from "@/lib/supabase/database.types";
 
 /** Both match 0032_task_links.sql, which is what actually enforces them. */
@@ -121,6 +123,7 @@ export function TaskPill({
    */
   mentionsYou?: boolean;
 }) {
+  const pathname = usePathname();
   const priority = PRIORITIES[task.priority];
   const status = STATUSES[task.status];
   const [noteBody, setNoteBody] = useState("");
@@ -160,6 +163,15 @@ export function TaskPill({
   const isCreatorOrOrphan = task.created_by === meId || !creatorActive;
   const canDecide = isCreatorOrOrphan;
   const canEdit = isCreatorOrOrphan;
+  /*
+    Moving a task needs a stake in it: you are on it, or you own it. Since
+    0037 put other people's work on the Dashboard, somebody with neither used
+    to have the status buttons and Mark complete right in front of them.
+    0038 pins those columns; this stops drawing controls the database will
+    now refuse.
+  */
+  const iAmAssigned = task.assignees.some((a) => a.id === meId);
+  const canMove = isCreatorOrOrphan || iAmAssigned;
   const pending = task.deletion_requested_at !== null;
   const requester = roster.find((m) => m.id === task.deletion_requested_by) ?? null;
   const creator = roster.find((m) => m.id === task.created_by) ?? null;
@@ -403,6 +415,25 @@ export function TaskPill({
         )}
       </div>
 
+      {/*
+        Who is carrying it, on the collapsed card — but only when it is not
+        you. On your own list every card would say your name, which is a line
+        of noise on every row to tell you something you already know. On the
+        team timeline it is the first thing you need.
+      */}
+      {!expanded && !iAmAssigned && task.assignees.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {task.assignees.map((person) => (
+            <span key={person.id} className="inline-flex min-w-0 items-center gap-1.5">
+              <Avatar initials={person.initials} color={person.color} size={20} />
+              <span className="min-w-0 truncate text-[15px] leading-5 text-sub">
+                {person.display_name}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+
       {expanded && (
         <div className="flex flex-col gap-4 border-t-[1.5px] border-border pt-3">
           {/*
@@ -593,6 +624,7 @@ export function TaskPill({
           */}
           <TaskReminders task={task} meId={meId} canManageAll={canEdit} />
 
+          {canMove && (
           <div className="flex flex-col gap-2">
             <div className="text-section-heading">Change Task&apos;s Status To:</div>
             {/*
@@ -646,6 +678,7 @@ export function TaskPill({
               })}
             </div>
           </div>
+          )}
 
           {contacts.length > 0 && (
             <div className="flex flex-col gap-2">
@@ -799,6 +832,7 @@ export function TaskPill({
               values in constants.ts, and tailwind-merge drops classes built
               from names it does not know.
             */}
+            {canMove && (
             <Button
               onClick={() => onSetStatus(task.status === "complete" ? "not_started" : "complete")}
               style={
@@ -820,14 +854,23 @@ export function TaskPill({
             >
               {task.status === "complete" ? "Mark not complete" : "Mark complete"}
             </Button>
+            )}
             {/*
               Hidden rather than disabled for a non-creator: a greyed-out
               button invites a tap and explains nothing. What an assignee can
               still change — status, links, notes, their own reminder — is
               all present above, so nothing here reads as missing.
             */}
+            {/*
+              The screen this was pressed on travels with the link, so saving
+              comes back here rather than to the Tasklist. Without it the form
+              has no idea a Dashboard exists.
+            */}
             {canEdit && (
-              <Link href={`/tasks/${task.id}/edit`} className="block">
+              <Link
+                href={`/tasks/${task.id}/edit${returnToQuery(pathname, task.id)}`}
+                className="block"
+              >
                 <Button variant="secondary" className="w-full">
                   <Pencil aria-hidden className="size-5" />
                   Edit task
