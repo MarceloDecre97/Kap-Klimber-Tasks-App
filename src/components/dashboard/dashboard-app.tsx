@@ -102,7 +102,19 @@ export function DashboardApp({
   );
 
   function isSectionOpen(bucket: BucketSpec) {
-    return openSections[bucket.key] ?? bucket.defaultOpen;
+    /*
+      A section holding the card we came back to opens itself.
+
+      Without this, returning from the editor expanded a card inside a
+      collapsed section — so the state was right and the screen showed
+      nothing, which reads exactly like the feature not working. Only
+      "Overdue" is open by default, so most tasks landed this way.
+
+      It is the default, not an override: an explicit tap still wins, so the
+      section can be closed again straight after.
+    */
+    const holdsFocus = expandedId !== null && bucket.entries.some((e) => e.task.id === expandedId);
+    return openSections[bucket.key] ?? (holdsFocus || bucket.defaultOpen);
   }
 
   /*

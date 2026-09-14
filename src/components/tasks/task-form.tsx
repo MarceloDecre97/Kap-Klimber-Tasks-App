@@ -76,7 +76,20 @@ export function TaskForm({
     which is what this always did.
   */
   const searchParams = useSearchParams();
+  /*
+    Where to land when this screen closes, and which card to reopen there.
+
+    The task id rides along on every exit, not only on save: leaving by
+    Cancel should put you back exactly where you were, which is the whole
+    point of remembering the origin at all.
+  */
   const returnTo = safeReturnTo(searchParams.get("from"));
+  const returnCardId = searchParams.get("task") ?? task?.id ?? null;
+  const backTo = (taskId?: string | null) => {
+    const id = taskId ?? returnCardId;
+    if (!id) return returnTo;
+    return `${returnTo}${returnTo.includes("?") ? "&" : "?"}task=${id}`;
+  };
   const initial = useMemo(() => initialState(task), [task]);
   const [form, setForm] = useState<FormState>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +110,7 @@ export function TaskForm({
 
   function handleCancel() {
     if (isDirty) setConfirmDiscard(true);
-    else router.push(returnTo);
+    else router.push(backTo());
   }
 
   function submit() {
@@ -133,16 +146,7 @@ export function TaskForm({
         setError(result.error);
         return;
       }
-      /*
-        Carrying the task id back, so the card reopens where it was rather
-        than leaving somebody to find it again in a list they had already
-        scrolled.
-      */
-      router.push(
-        result.ok && "taskId" in result
-          ? `${returnTo}${returnTo.includes("?") ? "&" : "?"}task=${result.taskId}`
-          : returnTo
-      );
+      router.push(backTo(result.ok && "taskId" in result ? result.taskId : null));
       router.refresh();
     });
   }
@@ -396,7 +400,7 @@ export function TaskForm({
         <Button variant="secondary" onClick={() => setConfirmDiscard(false)}>
           Keep editing
         </Button>
-        <Button variant="destructive" onClick={() => router.push(returnTo)}>
+        <Button variant="destructive" onClick={() => router.push(backTo())}>
           Discard it
         </Button>
       </Dialog>
