@@ -442,7 +442,14 @@ export function ContactsApp({
               <EmptyCompanyBook />
             ) : (
               <>
-                <div className="flex flex-col gap-3 lg:flex-row">
+                {/*
+                  Search on its own line, filters underneath — on every width,
+                  not just the narrow ones. Side by side on a laptop the box
+                  was squeezed to about a word and a half by chips that never
+                  shrink, so the field somebody types in most was the one
+                  paying for the three beside it.
+                */}
+                <div className="flex flex-col gap-3">
                   <label className="relative flex min-w-0 flex-1 items-center">
                     <Search
                       aria-hidden
@@ -534,7 +541,8 @@ export function ContactsApp({
             <EmptyBook />
           ) : (
             <>
-              <div className="flex flex-col gap-3 lg:flex-row">
+              {/* Two lines at every width, as above. Both books, one shape. */}
+              <div className="flex flex-col gap-3">
                 <label className="relative flex min-w-0 flex-1 items-center">
                   <Search
                     aria-hidden
