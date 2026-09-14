@@ -251,11 +251,52 @@ export function DashboardApp({
     <div className="flex h-full flex-col bg-bg">
       <AppHeader current="/dashboard" notifications={notifications} />
 
-      <div className="flex-1 overflow-y-auto px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+32px)]">
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[400px_minmax(0,1fr)]">
+      {/*
+        One scroller on a phone, two panes on a desktop.
+
+        Below `lg` this stays exactly as it was: the whole page moves
+        together. Two nested scrollers on a phone is a trap — the outer one
+        steals the drag meant for the inner — and there is no second column
+        there to need it.
+
+        From `lg` up it stops scrolling and hands that job to the panes.
+        Padding moves inward at the same moment, so each pane scrolls under
+        its own rather than sharing one that sits outside both and leaves a
+        gap at the top of the travel.
+      */}
+      <div
+        className={cn(
+          "flex-1 overflow-y-auto px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+32px)]",
+          "lg:min-h-0 lg:overflow-hidden lg:p-0"
+        )}
+      >
+        {/*
+          `min-h-0` is the whole reason this works. A grid child will not
+          shrink below its own content by default, so without it neither pane
+          ever scrolls — the layout simply grows taller and the page scrolls
+          instead, which is the failure this is meant to fix.
+        */}
+        <div
+          className={cn(
+            "grid grid-cols-1 items-start gap-5 lg:grid-cols-[400px_minmax(0,1fr)]",
+            "lg:h-full lg:min-h-0 lg:items-stretch lg:gap-0"
+          )}
+        >
           {/* ---- Personal panel ------------------------------------------ */}
-          <div className="flex min-w-0 flex-col gap-5">
-            <div className="flex flex-col gap-4">
+          <div
+            className={cn(
+              "flex min-w-0 flex-col gap-5",
+              "lg:h-full lg:min-h-0 lg:overflow-hidden lg:gap-0 lg:border-r-[1.5px] lg:border-border"
+            )}
+          >
+            {/*
+              The head stays put on desktop: the greeting, the alert, and the
+              scope toggle. It pins by sitting outside the scroller below
+              rather than by any positioning of its own — an alert that
+              scrolls away has stopped alerting, and the toggle is the
+              control you reach for most.
+            */}
+            <div className="flex flex-col gap-4 lg:shrink-0 lg:px-5 lg:pt-5 lg:pb-4">
               <h1 className="text-screen-title text-fg">Hello, {firstName}</h1>
 
               {/*
@@ -328,6 +369,18 @@ export function DashboardApp({
               </div>
             </div>
 
+            {/*
+              The buckets, and only the buckets, scroll. `flex-1 min-h-0` is
+              what lets this shrink inside the column above it; without the
+              second half it would size to its content and push the column
+              taller instead of scrolling.
+            */}
+            <div
+              className={cn(
+                "flex flex-col gap-5",
+                "lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-5 lg:pb-8"
+              )}
+            >
             {stats.buckets.map((bucket) => {
               const open = isSectionOpen(bucket);
               const has = bucket.entries.length > 0;
@@ -485,10 +538,16 @@ export function DashboardApp({
                 </div>
               );
             })}
+            </div>
           </div>
 
           {/* ---- Team overview ------------------------------------------- */}
-          <div className="flex min-w-0 flex-col gap-5">
+          <div
+            className={cn(
+              "flex min-w-0 flex-col gap-5",
+              "lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-5 lg:pt-5 lg:pb-8"
+            )}
+          >
             <div className="flex flex-col gap-1">
               <h2 className="text-screen-title text-fg">Team overview</h2>
               <p className="text-[17px] leading-6 text-sub">All open tasks across the team.</p>
