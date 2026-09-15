@@ -20,6 +20,7 @@ import {
 } from "@/lib/companies-view";
 import { formatAddress } from "@/lib/contacts-view";
 import { CompanyMark } from "@/components/companies/company-mark";
+import { CompanyMarkPicker } from "@/components/companies/company-mark-picker";
 import { cn, formatTimestampWithYear } from "@/lib/utils";
 import type { ContactSummary } from "@/lib/data/contacts";
 
@@ -212,6 +213,13 @@ export function CompanyDetail({
               </p>
             </div>
           </div>
+
+          {/*
+            Under the mark it changes, and only while editing — the same rule
+            the rest of this screen follows. Reading a company should not put
+            a row of buttons in front of you that alter it.
+          */}
+          {editing && <CompanyMarkPicker companyId={company.id} hasLogo={Boolean(logo)} />}
 
           {editing ? (
             <>

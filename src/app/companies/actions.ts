@@ -5,7 +5,12 @@ import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
 import { companyInputSchema } from "@/lib/validation";
 import { canonicalCountry } from "@/lib/countries";
-import { fetchCompanyLogo, type LogoFailure } from "@/lib/logos";
+import {
+  decodeDataUri,
+  fetchCompanyLogo,
+  fetchLogoFromUrl,
+  type LogoFailure,
+} from "@/lib/logos";
 
 type ActionResult<T = unknown> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -78,7 +83,70 @@ export async function refreshCompanyLogo(
   }
 }
 
-/** Put the letter mark back. */
+/**
+ * Set a company's mark by hand — from a file, or from an image on their site.
+ *
+ * The sweep is a guess made from somebody else's <head>, and it is sometimes
+ * confidently wrong: a WordPress site that never replaced its default favicon
+ * hands over the WordPress logo, which looks like a decision rather than a
+ * mistake. This is how a person overrules it.
+ */
+export async function setCompanyLogo(
+  companyIdInput: string,
+  /** A data: URI from the picker, or an https URL to fetch. */
+  source: string
+): Promise<ActionResult<{ reason?: LogoFailure }>> {
+  const companyId = companyIdSchema.safeParse(companyIdInput);
+  if (!companyId.success) return { ok: false, error: "Invalid company." };
+
+  const raw = (source ?? "").trim();
+  if (!raw) return { ok: false, error: "Nothing to use." };
+  /*
+    A cap on the string before anything is decoded. A data: URI arrives as a
+    request body, and the point of a limit is to stop work that should not
+    happen — checking it after base64 has been turned into bytes is checking
+    it after the expensive part.
+  */
+  if (raw.length > 400_000) return { ok: false, error: "That image is too big. Under 100KB, please." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+
+    const logo = raw.startsWith("data:")
+      ? decodeDataUri(raw)
+      : await (async () => {
+          const result = await fetchLogoFromUrl(raw);
+          return result.ok ? result.logo : null;
+        })();
+
+    if (!logo) {
+      return {
+        ok: false,
+        error: raw.startsWith("data:")
+          ? "That file is not an image the book can use."
+          : "Couldn't get an image from that link.",
+      };
+    }
+
+    const { error } = await supabase.from("company_logos").upsert({
+      company_id: companyId.data,
+      data_uri: logo.dataUri,
+      source_url: raw.startsWith("data:") ? null : logo.sourceUrl,
+      content_type: logo.contentType,
+      fetched_at: new Date().toISOString(),
+      fetched_by: member.id,
+    });
+    if (error) throw error;
+
+    revalidateCompanyViews(companyId.data);
+    return { ok: true };
+  } catch (error) {
+    console.error("setCompanyLogo failed", error);
+    return { ok: false, error: "Couldn't save that icon." };
+  }
+}
+
+/** Put the type mark back. */
 export async function clearCompanyLogo(companyIdInput: string): Promise<ActionResult> {
   const companyId = companyIdSchema.safeParse(companyIdInput);
   if (!companyId.success) return { ok: false, error: "Invalid company." };

@@ -305,3 +305,49 @@ export async function fetchCompanyLogo(website: string | null): Promise<LogoResu
   */
   return { ok: false, reason: reached ? "not-an-image" : "icon-unreachable" };
 }
+
+/**
+ * One URL, fetched and checked — for when somebody says which image to use.
+ *
+ * The sweep guesses from a site's <head>; this is the answer to the sweep
+ * guessing wrong. Liddell's favicon is the WordPress logo, which is a mark
+ * the auto-fetch will happily and confidently store, and is worse than no
+ * mark at all because it looks deliberate.
+ *
+ * Same checks as everything else here: https only, nothing pointing inside,
+ * a timeout, a size cap, and the bytes decide what it is.
+ */
+export async function fetchLogoFromUrl(raw: string): Promise<LogoResult> {
+  const url = safeWebsite(raw);
+  if (!url) return { ok: false, reason: "no-website" };
+
+  const response = await get(url, "image/*");
+  if (!response) return { ok: false, reason: "icon-unreachable" };
+
+  const logo = encodeLogo(Buffer.from(await response.arrayBuffer()), url.toString());
+  return logo ? { ok: true, logo } : { ok: false, reason: "not-an-image" };
+}
+
+/**
+ * Bytes that arrived as a data: URI from the browser, checked as if they had
+ * come off the wire.
+ *
+ * The picker shrinks an image before sending it, which means the bytes were
+ * last touched by code running on somebody's phone — so they get exactly the
+ * same treatment as a stranger's web server. The browser saying "image/png"
+ * is not evidence; the signature is.
+ */
+export function decodeDataUri(raw: string): FetchedLogo | null {
+  const match = /^data:([a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+)?;base64,([a-z0-9+/=]+)$/i.exec(
+    raw.trim()
+  );
+  if (!match) return null;
+
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(match[2]!, "base64");
+  } catch {
+    return null;
+  }
+  return encodeLogo(buffer, "uploaded");
+}
