@@ -57,16 +57,27 @@ somebody's `<head>` is not worth it, and a bad match costs nothing — the URL
 is checked again before it is fetched and the bytes again before they are
 stored.
 
-## One at a time
+## The sweep, and why it is gone
 
-The button fetches one company per call and loops in the browser. Thirty-odd
-sites inside a single request is a request that times out on somebody's phone
-halfway through and leaves you guessing which ones landed. A loop shows
-progress and can be walked away from.
+There was a "Get icons" button in the companies header that walked the whole
+book one company at a time. It did its job — twenty-six of thirty-three in a
+single press — and then had nothing left to do, because a book only needs
+sweeping once. Marcelo's call, and the right one: a button that spends most
+of its life hidden, and the rest of it telling you there is nothing to fetch,
+is not worth the room it takes in a header.
 
-It is only offered for companies that have a website and no mark yet, so
-pressing it twice costs nothing and there is no way to re-fetch the whole book
-by accident.
+What replaced it is where the work actually happens. Everything is on the
+company itself, under Edit:
+
+- **Use an image / Replace icon** — from the phone.
+- **From a link** — an image address off their website.
+- **Fetch again** — the automatic guess, for this one company.
+- **Remove** — back to the type mark.
+
+A company added from now on gets its icon the same way, the moment after it
+is saved. Deliberately not during: a save that waits on somebody else's web
+server is a slow save, and Add company is a path people are in a hurry
+through.
 
 ## Why the first attempt got nothing
 

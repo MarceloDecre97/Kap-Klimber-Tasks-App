@@ -8,7 +8,6 @@ import {
   ChevronUp,
   ContactRound,
   Globe,
-  ImageDown,
   Plus,
   Search,
   Sheet,
@@ -25,7 +24,6 @@ import { useToast } from "@/components/ui/toast";
 import { DeleteContactDialog } from "@/components/contacts/delete-contact-dialog";
 import { ExportDialog } from "@/components/contacts/export-dialog";
 import { contactActivity, restoreContact } from "@/app/contacts/actions";
-import { refreshCompanyLogo } from "@/app/companies/actions";
 import { ContactDetail } from "@/components/contacts/contact-detail";
 import { Avatar } from "@/components/ui/avatar";
 import { ContactRow } from "@/components/contacts/contact-row";
@@ -360,85 +358,6 @@ export function ContactsApp({
 
   const showingCompanies = book === "companies";
 
-  /* Companies with a website but no mark yet — the only ones worth asking about. */
-  const missingLogos = useMemo(
-    () => companies.filter((c) => c.website && !logos[c.id]),
-    [companies, logos]
-  );
-  const [fetching, setFetching] = useState<number | null>(null);
-
-  function fetchLogos() {
-    startTransition(async () => {
-      let found = 0;
-      let tried = 0;
-      const why = new Map<string, number>();
-      /*
-        Snapshotted before the first await. The memo behind it recomputes
-        whenever the page's props change, and a sweep that re-read it
-        mid-flight would be walking a list that moves under it.
-      */
-      const queue = missingLogos;
-
-      for (const [index, company] of queue.entries()) {
-        setFetching(index + 1);
-        tried += 1;
-        /*
-          Every company in its own try. The first version had none, so one
-          website that took too long killed the request, the promise
-          rejected, and the sweep stopped on company one having written
-          nothing — which looked exactly like "no site publishes an icon".
-        */
-        try {
-          const result = await refreshCompanyLogo(company.id);
-          if (result.ok && result.found) {
-            found += 1;
-            /*
-              Refreshed as they land rather than only at the end. A phone that
-              locks, or a tab that gets backgrounded, stops the loop where it
-              stands — and what it had already won should be on the screen
-              when you come back, not thrown away.
-            */
-            router.refresh();
-          }
-          else if (result.ok && result.reason) why.set(result.reason, (why.get(result.reason) ?? 0) + 1);
-          else why.set("error", (why.get("error") ?? 0) + 1);
-        } catch {
-          why.set("error", (why.get("error") ?? 0) + 1);
-        }
-      }
-
-      setFetching(null);
-      router.refresh();
-
-      /*
-        The tally is said out loud. "Nothing found" on its own is the least
-        useful message a button can give you — blocked by their CDN and
-        broken on our side look identical from the outside.
-      */
-      const REASONS: Record<string, string> = {
-        "icon-unreachable": "refused the request",
-        "not-an-image": "sent something that was not an image",
-        "no-website": "have no website",
-        error: "failed",
-      };
-      const detail = [...why.entries()]
-        .map(([reason, count]) => `${count} ${REASONS[reason] ?? reason}`)
-        .join(", ");
-
-      /*
-        How many it got THROUGH, not just how many worked.
-
-        The first run of this reported "no icons · 3 not an image, 3 refused"
-        for a book of thirty-one, and the interesting number — that it only
-        reached six of them — was the one nobody was told.
-      */
-      showToast({
-        message:
-          `${found ? `Got ${found}` : "No icons"} · tried ${tried} of ${queue.length}` +
-          (detail ? ` · ${detail}` : ""),
-      });
-    });
-  }
   const isEmptyCompanyBook = companies.length === 0;
 
   /*
@@ -545,30 +464,6 @@ export function ContactsApp({
               it exports whichever book you are looking at, because a button
               that quietly exported the other one would be worse than none.
             */}
-            {/*
-              Goes and gets each company's own mark from its own website, one
-              at a time. A loop here rather than a sweep on the server: thirty
-              sites fetched inside one request is a request that times out
-              halfway through and leaves you guessing which ones landed.
-
-              Only offered for companies that have no mark yet, so pressing it
-              twice costs nothing and there is no way to make it re-fetch the
-              book by accident.
-            */}
-            {showingCompanies && missingLogos.length > 0 && (
-              <button
-                type="button"
-                onClick={fetchLogos}
-                disabled={fetching !== null}
-                className="inline-flex h-[60px] shrink-0 cursor-pointer items-center justify-center gap-2 rounded-2xl border-[1.5px] border-fg bg-transparent px-4 text-[18px] leading-7 font-bold text-fg hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <ImageDown aria-hidden className="size-5" strokeWidth={1.75} />
-                {fetching === null
-                  ? `Get icons (${missingLogos.length})`
-                  : `Fetching ${fetching} of ${missingLogos.length}…`}
-              </button>
-            )}
-
             {(showingCompanies ? !isEmptyCompanyBook : !isEmptyBook) && (
               <button
                 type="button"
