@@ -370,10 +370,18 @@ export function ContactsApp({
   function fetchLogos() {
     startTransition(async () => {
       let found = 0;
+      let tried = 0;
       const why = new Map<string, number>();
+      /*
+        Snapshotted before the first await. The memo behind it recomputes
+        whenever the page's props change, and a sweep that re-read it
+        mid-flight would be walking a list that moves under it.
+      */
+      const queue = missingLogos;
 
-      for (const [index, company] of missingLogos.entries()) {
+      for (const [index, company] of queue.entries()) {
         setFetching(index + 1);
+        tried += 1;
         /*
           Every company in its own try. The first version had none, so one
           website that took too long killed the request, the promise
@@ -382,7 +390,16 @@ export function ContactsApp({
         */
         try {
           const result = await refreshCompanyLogo(company.id);
-          if (result.ok && result.found) found += 1;
+          if (result.ok && result.found) {
+            found += 1;
+            /*
+              Refreshed as they land rather than only at the end. A phone that
+              locks, or a tab that gets backgrounded, stops the loop where it
+              stands — and what it had already won should be on the screen
+              when you come back, not thrown away.
+            */
+            router.refresh();
+          }
           else if (result.ok && result.reason) why.set(result.reason, (why.get(result.reason) ?? 0) + 1);
           else why.set("error", (why.get("error") ?? 0) + 1);
         } catch {
@@ -408,10 +425,17 @@ export function ContactsApp({
         .map(([reason, count]) => `${count} ${REASONS[reason] ?? reason}`)
         .join(", ");
 
+      /*
+        How many it got THROUGH, not just how many worked.
+
+        The first run of this reported "no icons · 3 not an image, 3 refused"
+        for a book of thirty-one, and the interesting number — that it only
+        reached six of them — was the one nobody was told.
+      */
       showToast({
-        message: found
-          ? `Got ${found} of ${missingLogos.length}${detail ? ` · ${detail}` : ""}`
-          : `No icons${detail ? ` · ${detail}` : ""}`,
+        message:
+          `${found ? `Got ${found}` : "No icons"} · tried ${tried} of ${queue.length}` +
+          (detail ? ` · ${detail}` : ""),
       });
     });
   }
