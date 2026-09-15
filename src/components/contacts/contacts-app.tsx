@@ -7,14 +7,9 @@ import {
   ChevronDown,
   ChevronUp,
   ContactRound,
-  Globe,
   Plus,
   Search,
   Sheet,
-  Send,
-  Shapes,
-  Tag,
-  Ticket,
   Trash2,
   X,
 } from "lucide-react";
@@ -223,10 +218,23 @@ export function ContactsApp({
   const groups = useMemo(() => groupContacts(matching), [matching]);
   const activeFilters = countActiveContactFilters(filters);
 
-  const companyOptions: FilterOption<string>[] = useMemo(
-    () => companyNames.map((name) => ({ value: name, label: name })),
-    [companyNames]
-  );
+  /*
+    The chosen value is always in the list, even when nothing in view carries
+    it any more.
+
+    Each of these lists is narrowed to what somebody currently visible has —
+    which is right for browsing, and a trap when two filters are on at once:
+    pick a trade show, then pick an outreach state nobody at that show is in,
+    and the show falls out of its own dropdown. The filter stays applied and
+    there is no longer a control to turn it off. So whatever is selected
+    survives the narrowing.
+  */
+  const companyOptions: FilterOption<string>[] = useMemo(() => {
+    const names = filters.company && !companyNames.includes(filters.company)
+      ? [...companyNames, filters.company].sort((a, b) => a.localeCompare(b))
+      : companyNames;
+    return names.map((name) => ({ value: name, label: name }));
+  }, [companyNames, filters.company]);
 
   /*
     Only relationships somebody in view actually carries, the same rule the
@@ -237,6 +245,7 @@ export function ContactsApp({
       matchesContact(c, { ...filters, relationshipId: null }, outreach)
     );
     const present = new Set(inView.flatMap((c) => c.relationships.map((r) => r.id)));
+    if (filters.relationshipId) present.add(filters.relationshipId);
     return relationships
       .filter((r) => present.has(r.id))
       .map((r) => {
@@ -250,13 +259,16 @@ export function ContactsApp({
     the other two follow, so picking a company narrows the list of shows
     rather than leaving entries that now find nobody.
   */
-  const tradeShowOptions: FilterOption<string>[] = useMemo(
-    () =>
-      tradeShowsIn(
-        contacts.filter((c) => matchesContact(c, { ...filters, tradeShow: null }, outreach))
-      ).map((label) => ({ value: label, label, icon: <Ticket aria-hidden className="size-4" /> })),
-    [contacts, filters, outreach]
-  );
+  const tradeShowOptions: FilterOption<string>[] = useMemo(() => {
+    const inView = tradeShowsIn(
+      contacts.filter((c) => matchesContact(c, { ...filters, tradeShow: null }, outreach))
+    );
+    const shows =
+      filters.tradeShow && !inView.includes(filters.tradeShow)
+        ? [filters.tradeShow, ...inView]
+        : inView;
+    return shows.map((label) => ({ value: label, label }));
+  }, [contacts, filters, outreach]);
 
   /*
     Everybody else at the same company, for the "anyone else?" step. Worked
@@ -273,11 +285,7 @@ export function ContactsApp({
   */
   const outreachOptions: FilterOption<string>[] = useMemo(
     () =>
-      OUTREACH_ORDER.map((state) => ({
-        value: state,
-        label: OUTREACH_LABELS[state],
-        icon: <Send aria-hidden className="size-4" />,
-      })),
+      OUTREACH_ORDER.map((state) => ({ value: state, label: OUTREACH_LABELS[state] })),
     []
   );
 
@@ -519,7 +527,7 @@ export function ContactsApp({
                     */}
                     <FilterDropdown
                       label="Country"
-                      icon={<Globe aria-hidden className="size-4" />}
+                      single
                       options={countryOptions}
                       selected={companyFilters.country ? [companyFilters.country] : []}
                       onChange={(next) =>
@@ -528,7 +536,7 @@ export function ContactsApp({
                     />
                     <FilterDropdown
                       label="Type"
-                      icon={<Shapes aria-hidden className="size-4" />}
+                      single
                       options={typeOptions}
                       selected={companyFilters.typeId ? [companyFilters.typeId] : []}
                       onChange={(next) =>
@@ -603,9 +611,19 @@ export function ContactsApp({
                 </label>
 
                 <div className="flex shrink-0 flex-wrap items-center gap-3">
+                  {/*
+                    No icons and no counts on these four.
+
+                    Measured in the desktop left pane, which is 599px wide at
+                    1280: with both, the four of them need 716px and the
+                    fourth wraps. Without, 572px — they hold one line and the
+                    only thing that ever drops to a second is Clear, which is
+                    what Marcelo asked for. The icon repeated the label and
+                    the count on a one-at-a-time filter is always "· 1".
+                  */}
                   <FilterDropdown
                     label="Company"
-                    icon={<Building2 aria-hidden className="size-4" />}
+                    single
                     options={companyOptions}
                     /*
                       The dropdown is multi-select by design; these two are
@@ -622,7 +640,7 @@ export function ContactsApp({
                       asked of two different things. */}
                   <FilterDropdown
                     label="Type"
-                    icon={<Tag aria-hidden className="size-4" />}
+                    single
                     options={relationshipOptions}
                     selected={filters.relationshipId ? [filters.relationshipId] : []}
                     onChange={(next) =>
@@ -630,14 +648,15 @@ export function ContactsApp({
                     }
                   />
                   {/*
-                    Only once somebody has been to one. An empty dropdown
-                    beside two full ones reads as broken rather than as
-                    nothing-to-show-yet.
+                    Once somebody has been to one — or while one is filtered
+                    on, whether or not anybody in view is still at it. Hiding
+                    a filter that is switched on leaves it switched on with
+                    nothing to switch it off.
                   */}
-                  {tradeShowOptions.length > 0 && (
+                  {(tradeShowOptions.length > 0 || filters.tradeShow) && (
                     <FilterDropdown
                       label="Trade show"
-                      icon={<Ticket aria-hidden className="size-4" />}
+                      single
                       options={tradeShowOptions}
                       selected={filters.tradeShow ? [filters.tradeShow] : []}
                       onChange={(next) =>
@@ -647,7 +666,7 @@ export function ContactsApp({
                   )}
                   <FilterDropdown
                     label="Outreach"
-                    icon={<Send aria-hidden className="size-4" />}
+                    single
                     options={outreachOptions}
                     selected={filters.outreach ? [filters.outreach] : []}
                     onChange={(next) =>
@@ -798,6 +817,7 @@ export function ContactsApp({
           selectedCompany ? (
             <CompanyDetail
               logo={logos[selectedCompany.id]}
+              outreach={outreach}
               key={selectedCompany.id}
               company={selectedCompany}
               people={peopleAtSelectedCompany}

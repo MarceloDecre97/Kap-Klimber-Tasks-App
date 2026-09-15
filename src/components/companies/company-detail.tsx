@@ -19,6 +19,7 @@ import {
   type CompanyType,
 } from "@/lib/companies-view";
 import { formatAddress } from "@/lib/contacts-view";
+import type { Outreach } from "@/lib/outreach";
 import { CompanyMark } from "@/components/companies/company-mark";
 import { CompanyMarkPicker } from "@/components/companies/company-mark-picker";
 import { cn, formatTimestampWithYear } from "@/lib/utils";
@@ -56,6 +57,7 @@ function draftFrom(c: CompanySummary): Draft {
 export function CompanyDetail({
   company,
   logo,
+  outreach,
   people,
   types,
   companies = [],
@@ -68,6 +70,14 @@ export function CompanyDetail({
   company: CompanySummary;
   /** The company's own mark, when somebody has fetched one. See 0042. */
   logo?: string;
+  /**
+   * Where the people here stand, keyed by contact id.
+   *
+   * The same pills the address book shows. Looking at a company is the
+   * moment you ask who has been spoken to and who has not — leaving them off
+   * meant opening three people one at a time to find out.
+   */
+  outreach?: Record<string, Outreach>;
   people: ContactSummary[];
   types: CompanyType[];
   /** The rest of the book, so a rename can be checked against it. */
@@ -338,6 +348,7 @@ export function CompanyDetail({
                     */}
                     <ContactRow
                       contact={person}
+                      outreach={outreach?.[person.id]}
                       onSelect={onOpenContact ? () => onOpenContact(person) : undefined}
                     />
                   </li>

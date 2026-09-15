@@ -19,12 +19,22 @@ export function FilterDropdown<T extends string>({
   options,
   selected,
   onChange,
+  single = false,
 }: {
   label: string;
   icon?: ReactNode;
   options: FilterOption<T>[];
   selected: T[];
   onChange: (next: T[]) => void;
+  /**
+   * One choice at a time, so the count is dropped from the chip.
+   *
+   * "· 1" on a filter that can only ever be one is a number that never says
+   * anything, and it costs about thirty pixels — which is the difference
+   * between four of these fitting on one line in the address book's left
+   * pane and the fourth one wrapping.
+   */
+  single?: boolean;
 }) {
   const { open, setOpen, triggerRef, panelRef, style } = useFloatingPanel<HTMLButtonElement>();
 
@@ -47,7 +57,9 @@ export function FilterDropdown<T extends string>({
       >
         {icon}
         {label}
-        {selected.length > 0 && <span className="tabular-nums">· {selected.length}</span>}
+        {!single && selected.length > 0 && (
+          <span className="tabular-nums">· {selected.length}</span>
+        )}
         <ChevronDown aria-hidden className={cn("size-4 transition-transform duration-150", open && "rotate-180")} />
       </button>
       {open && (

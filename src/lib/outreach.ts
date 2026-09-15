@@ -75,9 +75,15 @@ export function outreachStateOf(o: Omit<Outreach, "state">): OutreachState {
   return "none";
 }
 
+/*
+  Kept short because these sit on a row beside a relationship chip, and the
+  pill is the same height, padding and type size as that chip — measured, all
+  four are 30px tall. The only thing that made "Outreach open" look bigger
+  was that it is more letters. "Reaching out" says the same in less.
+*/
 export const OUTREACH_LABELS: Record<OutreachState, string> = {
   none: "Not contacted",
-  open: "Outreach open",
+  open: "Reaching out",
   contacted: "Contacted",
   in_touch: "In touch",
 };
@@ -126,7 +132,17 @@ export function outreachTaskTitle(
   people: { first_name: string; company: string | null }[]
 ): string {
   if (people.length === 0) return "Contact";
-  const names = people.map((p) => p.first_name.trim()).filter(Boolean).join(", ");
+  /*
+    "Eric, Mike and Sheena" — a list the way a person writes one, with the
+    last comma turned into an "and". A task title is read out loud in
+    somebody's head; a trailing comma before the last name reads as a
+    spreadsheet.
+  */
+  const first = people.map((p) => p.first_name.trim()).filter(Boolean);
+  const names =
+    first.length > 1
+      ? `${first.slice(0, -1).join(", ")} and ${first[first.length - 1]}`
+      : first.join("");
   const companies = new Set(people.map((p) => p.company?.trim() ?? ""));
   const company = companies.size === 1 ? [...companies][0] : "";
   return company ? `Contact ${names} from ${company}` : `Contact ${names}`;
