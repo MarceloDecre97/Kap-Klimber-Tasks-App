@@ -285,6 +285,7 @@ export async function listOutreach(
     .from("task_contacts")
     .select(
       `contact_id,
+       contact:contacts(id, first_name, last_name),
        task:tasks!inner(
          id, title, status, created_at, completed_at, is_outreach, deleted_at,
          created_by:members!tasks_created_by_fkey(id, display_name, initials, color),
@@ -299,6 +300,7 @@ export async function listOutreach(
 
   type Row = {
     contact_id: string;
+    contact: { id: string; first_name: string; last_name: string } | null;
     task: {
       id: string;
       title: string;
@@ -311,8 +313,24 @@ export async function listOutreach(
     } | null;
   };
 
+  const rows = (data ?? []) as unknown as Row[];
+
+  /*
+    Who each task went to, before anything else is worked out. A contact's
+    record of an outreach has to name the other recipients, and the only
+    place that is known is across the rows rather than within one.
+  */
+  const peopleByTask: Record<string, { id: string; first_name: string; last_name: string }[]> = {};
+  for (const row of rows) {
+    if (!row.task || !row.contact) continue;
+    (peopleByTask[row.task.id] ??= []).push(row.contact);
+  }
+  for (const people of Object.values(peopleByTask)) {
+    people.sort((a, b) => a.first_name.localeCompare(b.first_name));
+  }
+
   const byContact: Record<string, OutreachTask[]> = {};
-  for (const row of (data ?? []) as unknown as Row[]) {
+  for (const row of rows) {
     const t = row.task;
     if (!t) continue;
     /*
@@ -331,6 +349,7 @@ export async function listOutreach(
       completed_at: t.completed_at,
       completed_by: t.completed_by,
       mine,
+      people: peopleByTask[t.id] ?? [],
     });
   }
 

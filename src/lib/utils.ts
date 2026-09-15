@@ -27,9 +27,22 @@ const COLORS = [
   "btn-edge", "switch-on", "switch-knob", "tag", "link", "ok",
 ];
 
-/** The `text-*` utilities that really are type scales, not colours. */
+/**
+ * The `text-*` utilities that really are type scales, not colours.
+ *
+ * Every one of these has to be listed, and the cost of forgetting one is
+ * invisible until somebody looks closely: tailwind-merge files an unknown
+ * `text-x` under colour, so the next real colour in the same cn() call
+ * deletes it and the element quietly inherits its parent's size. That is
+ * exactly what happened to the outreach pill — 18px on a row of 15px chips,
+ * which read as "the pill is too big" rather than as a missing token.
+ *
+ * Kept in step with the .text-* rules in globals.css. If you add one there,
+ * add it here.
+ */
 const TEXT_SIZES = [
-  "card-title", "card-title-compact", "chip", "field-label", "section-heading",
+  "card-title", "card-title-compact", "chip", "field-label",
+  "screen-title", "section-heading", "timestamp",
 ];
 
 const twMerge = extendTailwindMerge({

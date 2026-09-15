@@ -47,6 +47,8 @@ export function OutreachSection({
   const [isPending, startTransition] = useTransition();
   const [picking, setPicking] = useState(false);
   const [also, setAlso] = useState<string[]>([]);
+  /* Who the reply counts for. Null while the question is not being asked. */
+  const [replyingFor, setReplyingFor] = useState<string[] | null>(null);
   const contactId = contact.id;
 
   /*
@@ -69,16 +71,46 @@ export function OutreachSection({
     router.push(`/tasks/new?contacts=${ids.join(",")}&outreach=1`);
   }
 
-  function confirm(on: boolean) {
+  function confirm(on: boolean, ids: string[] = [contactId]) {
     startTransition(async () => {
-      const result = await setInTouch(contactId, on);
-      if (!result.ok) {
-        showToast({ message: result.error });
+      const failures: string[] = [];
+      for (const id of ids) {
+        const result = await setInTouch(id, on);
+        if (!result.ok) failures.push(result.error);
+      }
+      setReplyingFor(null);
+      if (failures.length > 0) {
+        showToast({ message: failures[0]! });
         return;
       }
       onChanged();
-      showToast({ message: on ? "Marked as in touch" : "In touch taken back" });
+      showToast({
+        message: on
+          ? ids.length > 1
+            ? `${ids.length} marked as in touch`
+            : "Marked as in touch"
+          : "In touch taken back",
+      });
     });
+  }
+
+  /*
+    One email to three people gets one reply, and it usually speaks for all
+    three — so the question is who it counts for, asked once, with everybody
+    on that task ticked to begin with.
+ 
+    Not assumed, though. If only Sheena ever came back, "In touch" on Mike is
+    a claim nobody made, and in six months it is the kind of wrong that sends
+    somebody into a conversation thinking they have a relationship they do
+    not. Two taps for the common case, one untick for the honest one.
+  */
+  function startConfirm() {
+    const others = outreach.latestCompleted?.people ?? [];
+    if (others.length > 1) {
+      setReplyingFor(others.map((p) => p.id));
+      return;
+    }
+    confirm(true);
   }
 
   const { state, latestOpen, latestCompleted, inTouchAt, inTouchBy, canConfirm, tasks } = outreach;
@@ -141,7 +173,7 @@ export function OutreachSection({
             rule itself.
           */}
           {canConfirm && !inTouchAt && (
-            <Button variant="secondary" size="md" onClick={() => confirm(true)} disabled={isPending} className="w-auto">
+            <Button variant="secondary" size="md" onClick={startConfirm} disabled={isPending} className="w-auto">
               They replied
             </Button>
           )}
@@ -157,6 +189,58 @@ export function OutreachSection({
           history under a sentence that already says the same thing is
           repetition; three of them is the story.
         */}
+        {/* Who the reply counts for, when the email went to more than one. */}
+        {replyingFor !== null && (
+          <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-border bg-bg p-3">
+            <p className="text-[17px] leading-6 text-fg text-pretty">
+              Who replied? One answer often speaks for everybody it was sent to.
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {(outreach.latestCompleted?.people ?? []).map((person) => {
+                const on = replyingFor.includes(person.id);
+                return (
+                  <li key={person.id}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReplyingFor((prev) =>
+                          (prev ?? []).includes(person.id)
+                            ? (prev ?? []).filter((id) => id !== person.id)
+                            : [...(prev ?? []), person.id]
+                        )
+                      }
+                      className="flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-muted"
+                    >
+                      <Avatar
+                        initials={initialsOf(person)}
+                        color={avatarColor(person)}
+                        size={32}
+                      />
+                      <span className="min-w-0 grow text-[17px] leading-6 text-fg wrap-anywhere">
+                        {fullName(person)}
+                      </span>
+                      {on && <Check aria-hidden className="size-5 shrink-0 text-brand" strokeWidth={2.5} />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                size="md"
+                className="w-auto"
+                disabled={isPending || replyingFor.length === 0}
+                onClick={() => confirm(true, replyingFor)}
+              >
+                {replyingFor.length > 1 ? `Mark ${replyingFor.length} in touch` : "Mark in touch"}
+              </Button>
+              <Button variant="ghost" size="md" className="w-auto" onClick={() => setReplyingFor(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/*
           The "anyone else?" step. Inline rather than a modal: it is a short
           list of people you already know, and a sheet that darkens the page

@@ -28,6 +28,14 @@ export interface OutreachTask {
   completed_by: MemberSummary | null;
   /** Whether the viewer is the creator or on it — who may confirm a reply. */
   mine: boolean;
+  /**
+   * Everybody the task went to, this contact included.
+   *
+   * Carried because one email to three people gets one reply, and that reply
+   * usually speaks for all three — so confirming it has to be able to reach
+   * the other two without making somebody open each of their pages.
+   */
+  people: { id: string; first_name: string; last_name: string }[];
 }
 
 export type OutreachState = "none" | "open" | "contacted" | "in_touch";

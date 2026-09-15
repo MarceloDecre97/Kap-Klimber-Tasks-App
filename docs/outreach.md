@@ -71,6 +71,19 @@ still a reply and still ends the chase. A label that claims victory would be
 wrong the moment somebody declines, and a pill people learn to distrust is
 worse than no pill.
 
+## One reply, three people
+
+An email to three people at one company gets one reply, and that reply
+usually speaks for all three. Marking each of them by hand is busywork
+describing something that happened once; marking all three automatically is a
+claim nobody made, and in six months it is the kind of wrong that sends
+somebody into a conversation believing they have a relationship they do not.
+
+So the question is asked rather than assumed: press **They replied** on a
+task that went to more than one person and it asks who it counts for, with
+everybody on that task already ticked. Two taps for the common case, one
+untick for the honest one. A task that went to one person is still one tap.
+
 ## Decisions worth recording
 
 **The pill shows the furthest state reached.** Somebody who answered in
@@ -89,6 +102,22 @@ the same stand is one outreach each.
 against my advice — it costs each row about 36px on a phone, which over 57
 contacts is real scrolling. He is testing it live; dropping it is a one-line
 change.
+
+**"Outreach open" was never a bigger pill.** All four states are 30px tall
+with the same padding and type size as the relationship chip beside them —
+the label was simply thirteen letters against eight, so it became "Reaching
+out". What was genuinely wrong was `text-timestamp` missing from `TEXT_SIZES`
+in utils.ts: tailwind-merge files an unknown `text-x` under colour, so the
+state colour in the same `cn()` call deleted the size and the pill inherited
+the row's 18px. The same trap the file already documents for colour names,
+from the other end. `screen-title` was missing too.
+
+**No filter hides while it is switched on.** Each dropdown lists only values
+somebody in view carries, which is right for browsing and a trap with two
+filters at once: pick a trade show, then an outreach state nobody at that
+show is in, and the show falls out of its own dropdown — still filtering,
+with nothing left to switch it off. The current selection now survives the
+narrowing in all three lists.
 
 **The generated title is derived, not stored in form state.** It keeps itself
 in step with who is on the task until somebody types their own wording, at
