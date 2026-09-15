@@ -370,18 +370,48 @@ export function ContactsApp({
   function fetchLogos() {
     startTransition(async () => {
       let found = 0;
+      const why = new Map<string, number>();
+
       for (const [index, company] of missingLogos.entries()) {
         setFetching(index + 1);
-        const result = await refreshCompanyLogo(company.id);
-        if (result.ok && result.found) found += 1;
+        /*
+          Every company in its own try. The first version had none, so one
+          website that took too long killed the request, the promise
+          rejected, and the sweep stopped on company one having written
+          nothing — which looked exactly like "no site publishes an icon".
+        */
+        try {
+          const result = await refreshCompanyLogo(company.id);
+          if (result.ok && result.found) found += 1;
+          else if (result.ok && result.reason) why.set(result.reason, (why.get(result.reason) ?? 0) + 1);
+          else why.set("error", (why.get("error") ?? 0) + 1);
+        } catch {
+          why.set("error", (why.get("error") ?? 0) + 1);
+        }
       }
+
       setFetching(null);
       router.refresh();
+
+      /*
+        The tally is said out loud. "Nothing found" on its own is the least
+        useful message a button can give you — blocked by their CDN and
+        broken on our side look identical from the outside.
+      */
+      const REASONS: Record<string, string> = {
+        "icon-unreachable": "refused the request",
+        "not-an-image": "sent something that was not an image",
+        "no-website": "have no website",
+        error: "failed",
+      };
+      const detail = [...why.entries()]
+        .map(([reason, count]) => `${count} ${REASONS[reason] ?? reason}`)
+        .join(", ");
+
       showToast({
-        message:
-          found === 0
-            ? "No icons found. Those sites do not publish one."
-            : `Got ${found} of ${missingLogos.length}`,
+        message: found
+          ? `Got ${found} of ${missingLogos.length}${detail ? ` · ${detail}` : ""}`
+          : `No icons${detail ? ` · ${detail}` : ""}`,
       });
     });
   }

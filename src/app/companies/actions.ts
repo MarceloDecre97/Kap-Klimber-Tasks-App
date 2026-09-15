@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
 import { companyInputSchema } from "@/lib/validation";
 import { canonicalCountry } from "@/lib/countries";
-import { fetchCompanyLogo } from "@/lib/logos";
+import { fetchCompanyLogo, type LogoFailure } from "@/lib/logos";
 
 type ActionResult<T = unknown> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -37,7 +37,7 @@ function revalidateCompanyViews(companyId?: string) {
  */
 export async function refreshCompanyLogo(
   companyIdInput: string
-): Promise<ActionResult<{ found: boolean }>> {
+): Promise<ActionResult<{ found: boolean; reason?: LogoFailure | "error" }>> {
   const companyId = companyIdSchema.safeParse(companyIdInput);
   if (!companyId.success) return { ok: false, error: "Invalid company." };
 
@@ -50,16 +50,16 @@ export async function refreshCompanyLogo(
       .eq("id", companyId.data)
       .maybeSingle();
     if (readError) throw readError;
-    if (!company?.website) return { ok: true, found: false };
+    if (!company?.website) return { ok: true, found: false, reason: "no-website" };
 
-    const logo = await fetchCompanyLogo(company.website);
-    if (!logo) return { ok: true, found: false };
+    const result = await fetchCompanyLogo(company.website);
+    if (!result.ok) return { ok: true, found: false, reason: result.reason };
 
     const { error } = await supabase.from("company_logos").upsert({
       company_id: companyId.data,
-      data_uri: logo.dataUri,
-      source_url: logo.sourceUrl,
-      content_type: logo.contentType,
+      data_uri: result.logo.dataUri,
+      source_url: result.logo.sourceUrl,
+      content_type: result.logo.contentType,
       fetched_at: new Date().toISOString(),
       fetched_by: member.id,
     });
@@ -68,8 +68,13 @@ export async function refreshCompanyLogo(
     revalidateCompanyViews(companyId.data);
     return { ok: true, found: true };
   } catch (error) {
+    /*
+      Reported as an outcome rather than thrown. A rejected action takes the
+      whole sweep down with it, which is how the first attempt at this
+      managed to write nothing at all for thirty-one companies.
+    */
     console.error("refreshCompanyLogo failed", error);
-    return { ok: false, error: "Couldn't fetch that icon." };
+    return { ok: true, found: false, reason: "error" };
   }
 }
 

@@ -13,6 +13,14 @@ import { ContactsApp, type Book } from "@/components/contacts/contacts-app";
 import { DELETED_CONTACTS_VISIBLE_DAYS } from "@/lib/contacts-view";
 
 export const dynamic = "force-dynamic";
+/*
+  The icon sweep runs as a server action from this page, and each company
+  costs a fetch to somebody else's website. The default ten seconds is not
+  enough for a slow one, and a function the host kills mid-fetch takes the
+  whole sweep with it — see the try/catch in contacts-app.tsx for the other
+  half of that lesson.
+*/
+export const maxDuration = 60;
 
 /**
  * People and companies are one screen with a switch, not two pages. `?book=`

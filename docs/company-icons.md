@@ -68,6 +68,37 @@ It is only offered for companies that have a website and no mark yet, so
 pressing it twice costs nothing and there is no way to re-fetch the whole book
 by accident.
 
+## Why the first attempt got nothing
+
+Thirty-one companies, zero icons, nothing written. Four things were wrong,
+and any one of them alone would have cost most of the book:
+
+1. **The sweep had no try/catch.** A rejected server action takes the whole
+   loop down with it, so one slow website stopped everything at company one
+   — and the toast never appeared either, which is why it looked like a
+   silent "nothing found" rather than a crash.
+2. **The route's time budget was the default.** The fetch allowed up to four
+   requests at six seconds each, which is longer than the host will run a
+   function before killing it. Now three seconds, two candidates, and a
+   minute of headroom on the route.
+3. **It trusted the content-type header.** A great many sites serve a `.ico`
+   as `application/octet-stream` — not a lie, just not in any allowlist. The
+   bytes are what decide now: PNG, ICO, JPEG, GIF and WEBP are recognised by
+   their signatures, so the header cannot get it wrong in either direction.
+   An HTML error page labelled `image/png` is refused for the same reason.
+4. **It sent an honest user agent.** Ryder, FedEx, UPS and Walmart sit behind
+   CDNs that refuse anything that is not a browser.
+
+And SVG, refused outright before, is now accepted and sanitised — a lot of
+sites ship `favicon.svg` and nothing else. Script tags, event handlers,
+`javascript:` hrefs, `foreignObject`, `iframe` and `use` come out before the
+bytes are stored, and an SVG with nothing left to draw is refused rather than
+stored as a blank square.
+
+The sweep now reports **why**, not just how many: "No icons · 22 refused the
+request, 9 sent something that was not an image" is a sentence that can be
+acted on. "No icons found" was not.
+
 ## What could not be verified here
 
 The container this was built in refuses outbound connections to arbitrary

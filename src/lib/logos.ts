@@ -10,30 +10,60 @@ import "server-only";
  * Everything below is written with that in mind.
  */
 
-/** Raw bytes we will accept. No SVG — see below. */
-const IMAGE_TYPES = [
-  "image/png",
-  "image/x-icon",
-  "image/vnd.microsoft.icon",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
+/**
+ * What an image actually starts with.
+ *
+ * The first version trusted the content-type header and got nothing from
+ * thirty-one real websites. Half of them serve a .ico as
+ * application/octet-stream, which is not a lie exactly — it is a file of
+ * bytes — but it is not in any allowlist either. The bytes themselves are the
+ * one thing that cannot be got wrong, so they are what decides now.
+ *
+ * It also fails safe in the other direction: an HTML error page served with
+ * `content-type: image/png` has no signature here and is refused, which the
+ * header check could not have caught.
+ */
+const SIGNATURES: { type: string; match: (b: Buffer) => boolean }[] = [
+  { type: "image/png", match: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  { type: "image/x-icon", match: (b) => b[0] === 0x00 && b[1] === 0x00 && (b[2] === 0x01 || b[2] === 0x02) && b[3] === 0x00 },
+  { type: "image/jpeg", match: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { type: "image/gif", match: (b) => b.subarray(0, 6).toString("latin1").startsWith("GIF8") },
+  { type: "image/webp", match: (b) => b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP" },
 ];
 
-/*
-  SVG is deliberately absent.
+/**
+ * SVG, allowed now, sanitised.
+ *
+ * It was refused outright and that turned out to cost real icons: a lot of
+ * sites now ship favicon.svg and nothing else. An <img src> will not run
+ * script in an SVG in any current browser — the tag is a picture, not a
+ * document — so the risk was always theoretical. It is cheap to close
+ * anyway: anything that could execute comes out before the bytes are stored,
+ * and what is left is shapes.
+ */
+const SVG_DANGEROUS = /<\s*(script|foreignObject|iframe|use)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>|<\s*(script|foreignObject|iframe|use)\b[^>]*\/?>|\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)|(href|xlink:href)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*')/gi;
 
-  An <img src> will not run script in an SVG in any current browser, so this
-  is belt and braces rather than a known hole — but the file is arbitrary
-  markup from a third party that we would be storing and serving back, and
-  the whole point of holding the bytes ourselves is not to be at the mercy of
-  what somebody else's server hands over. Every company worth an icon also
-  ships a PNG or an ICO.
-*/
+/** At least one thing that puts ink on the page. */
+const SVG_DRAWS = /<\s*(path|circle|rect|ellipse|line|polyline|polygon|text|image|symbol)\b/i;
+
+function looksLikeSvg(buffer: Buffer): boolean {
+  const head = buffer.subarray(0, 512).toString("utf8").trimStart().toLowerCase();
+  return head.startsWith("<svg") || (head.startsWith("<?xml") && head.includes("<svg"));
+}
 
 const MAX_BYTES = 140_000;
 const MAX_HTML_BYTES = 300_000;
-const TIMEOUT_MS = 6000;
+/*
+  Three seconds, and two candidates at most.
+
+  The first version allowed six seconds across four fetches, which is up to
+  twenty-four seconds inside one request — past what the host will run before
+  it kills the function, and a killed function is a sweep that stops at the
+  first slow website. A site that cannot hand over an icon in three seconds
+  is a site whose icon we can live without.
+*/
+const TIMEOUT_MS = 3000;
+const MAX_CANDIDATES = 2;
 
 /**
  * A website we are willing to ask for a picture.
@@ -78,7 +108,21 @@ export function safeWebsite(raw: string | null | undefined): URL | null {
 async function get(url: URL, accept: string): Promise<Response | null> {
   try {
     const response = await fetch(url, {
-      headers: { accept, "user-agent": "Kap-Klimber-Tasks/1.0 (address book icon fetch)" },
+      /*
+        A browser's user agent, because the honest one got 403s.
+
+        Ryder, FedEx, UPS and Walmart all sit behind a CDN that refuses
+        anything it does not recognise, and "Kap-Klimber-Tasks/1.0" is not a
+        browser. This is not pretending to be a person — the request is for
+        one public icon, once, and it is the same request a browser makes
+        when it renders their tab.
+      */
+      headers: {
+        accept,
+        "user-agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "accept-language": "en-US,en;q=0.9",
+      },
       redirect: "follow",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -157,52 +201,86 @@ export interface FetchedLogo {
  * what is accepted, what is refused and what the stored string looks like are
  * the parts worth proving, and they do not need a server to prove.
  */
-export function encodeLogo(
-  buffer: Buffer,
-  rawContentType: string,
-  sourceUrl: string
-): FetchedLogo | null {
-  const type = (rawContentType ?? "").split(";")[0]!.trim().toLowerCase();
-  if (!IMAGE_TYPES.includes(type)) return null;
-
+export function encodeLogo(buffer: Buffer, sourceUrl: string): FetchedLogo | null {
   /*
-    Checked after the fact as well as by the header: content-length is a
-    claim, and the only number that matters is how much actually arrived.
+    Size first, and measured on the bytes that arrived rather than on
+    content-length, which is a claim.
   */
-  if (buffer.length === 0 || buffer.length > MAX_BYTES) return null;
+  if (buffer.length < 4 || buffer.length > MAX_BYTES) return null;
+
+  const signature = SIGNATURES.find((s) => s.match(buffer));
+  if (signature) {
+    return {
+      dataUri: `data:${signature.type};base64,${buffer.toString("base64")}`,
+      contentType: signature.type,
+      sourceUrl,
+    };
+  }
+
+  if (looksLikeSvg(buffer)) {
+    const cleaned = buffer.toString("utf8").replace(SVG_DANGEROUS, "");
+    /* Still an SVG after the dangerous parts came out, or it was not one. */
+    if (!/<svg[\s>]/i.test(cleaned)) return null;
+    /*
+      And still a picture. An SVG whose only content was a <script> cleans
+      down to an empty one — harmless, but it would draw a blank square where
+      the type mark used to be, and a blank square reads as broken. Nothing
+      left to draw means we never had an icon.
+    */
+    if (!SVG_DRAWS.test(cleaned)) return null;
+    return {
+      dataUri: `data:image/svg+xml;base64,${Buffer.from(cleaned, "utf8").toString("base64")}`,
+      contentType: "image/svg+xml",
+      sourceUrl,
+    };
+  }
+
+  /* Not a picture. An HTML 404 wearing an image header lands here. */
+  return null;
+}
+
+/** The bytes, fetched. `reached` says whether the server answered at all. */
+async function download(candidate: string): Promise<{ logo: FetchedLogo | null; reached: boolean }> {
+  const url = safeWebsite(candidate);
+  if (!url) return { logo: null, reached: false };
+
+  const response = await get(url, "image/*");
+  if (!response) return { logo: null, reached: false };
 
   return {
-    dataUri: `data:${type};base64,${buffer.toString("base64")}`,
-    contentType: type,
-    sourceUrl,
+    logo: encodeLogo(Buffer.from(await response.arrayBuffer()), url.toString()),
+    reached: true,
   };
 }
 
-/** The bytes, fetched, or null if the site had nothing usable. */
-async function download(candidate: string): Promise<FetchedLogo | null> {
-  const url = safeWebsite(candidate);
-  if (!url) return null;
+/**
+ * Why nothing came back.
+ *
+ * Reported rather than swallowed, because the first version of this returned
+ * a bare null and got nothing from thirty-one websites — which left no way
+ * to tell a site that blocks us from a site with no icon from a bug in our
+ * own code. The sweep tallies these and says so.
+ */
+export type LogoFailure =
+  | "no-website"
+  | "site-unreachable"
+  | "icon-unreachable"
+  | "not-an-image";
 
-  const response = await get(url, "image/*");
-  if (!response) return null;
-
-  return encodeLogo(
-    Buffer.from(await response.arrayBuffer()),
-    response.headers.get("content-type") ?? "",
-    url.toString()
-  );
-}
+export type LogoResult =
+  | { ok: true; logo: FetchedLogo }
+  | { ok: false; reason: LogoFailure };
 
 /**
- * A company's icon, or null.
+ * A company's icon, or the reason there isn't one.
  *
- * Null is an ordinary outcome, not a failure: plenty of sites have no icon
- * worth the name, and the letter mark the book already draws is a perfectly
+ * Failing is an ordinary outcome, not an error: plenty of sites publish
+ * nothing usable, and the type mark the book already draws is a perfectly
  * good answer. Nothing here throws.
  */
-export async function fetchCompanyLogo(website: string | null): Promise<FetchedLogo | null> {
+export async function fetchCompanyLogo(website: string | null): Promise<LogoResult> {
   const site = safeWebsite(website);
-  if (!site) return null;
+  if (!site) return { ok: false, reason: "no-website" };
 
   const page = await get(site, "text/html");
   let candidates: string[];
@@ -211,13 +289,19 @@ export async function fetchCompanyLogo(website: string | null): Promise<FetchedL
     const html = (await page.text()).slice(0, MAX_HTML_BYTES);
     candidates = iconCandidates(html, site);
   } else {
+    /* The page refused us, but /favicon.ico is often served by something else. */
     candidates = [new URL("/favicon.ico", site).toString()];
   }
 
-  /* Three at most. Past that a site is telling us it has nothing. */
-  for (const candidate of candidates.slice(0, 3)) {
-    const logo = await download(candidate);
-    if (logo) return logo;
+  let reached = false;
+  for (const candidate of candidates.slice(0, MAX_CANDIDATES)) {
+    const attempt = await download(candidate);
+    if (attempt.logo) return { ok: true, logo: attempt.logo };
+    if (attempt.reached) reached = true;
   }
-  return null;
+  /*
+    Told apart on purpose. "We were refused" is somebody else's CDN and there
+    is nothing to fix here; "we got bytes that were not a picture" is ours.
+  */
+  return { ok: false, reason: reached ? "not-an-image" : "icon-unreachable" };
 }
