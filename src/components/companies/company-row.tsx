@@ -9,6 +9,7 @@ import {
   type CompanySummary,
 } from "@/lib/companies-view";
 import { ChipRow } from "@/components/contacts/chip-picker";
+import { CompanyMark } from "@/components/companies/company-mark";
 import { formatAddress } from "@/lib/contacts-view";
 import { cn } from "@/lib/utils";
 
@@ -21,17 +22,19 @@ import { cn } from "@/lib/utils";
  */
 export function CompanyRow({
   company,
+  logo,
   className,
   onSelect,
   selected,
 }: {
   company: CompanySummary;
+  /** The company's own mark, when somebody has fetched one. See 0042. */
+  logo?: string;
   className?: string;
   /** Given only on a wide screen, where the row fills the panel. */
   onSelect?: () => void;
   selected?: boolean;
 }) {
-  const Icon = COMPANY_TYPE_ICONS[company.types[0]?.icon ?? ""] ?? DEFAULT_COMPANY_TYPE_ICON;
   const address = formatAddress(company);
 
   const rowClass = cn(
@@ -43,12 +46,7 @@ export function CompanyRow({
 
   const inner = (
     <>
-      <span
-        aria-hidden
-        className="mt-0.5 inline-flex size-11 shrink-0 items-center justify-center rounded-xl border-[1.5px] border-border bg-muted text-sub"
-      >
-        <Icon className="size-[22px]" strokeWidth={1.75} />
-      </span>
+      <CompanyMark company={company} logo={logo} className="mt-0.5" />
 
       <span className="flex min-w-0 grow flex-col gap-1.5">
         <span className="text-card-title text-fg text-pretty wrap-anywhere">{company.name}</span>

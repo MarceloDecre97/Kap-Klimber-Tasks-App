@@ -8,7 +8,7 @@ import {
   withOutreach,
 } from "@/lib/data/contacts";
 import { listRoster } from "@/lib/data/tasks";
-import { listCompanies, listCompanyTypes } from "@/lib/data/companies";
+import { listCompanies, listCompanyLogos, listCompanyTypes } from "@/lib/data/companies";
 import { ContactsApp, type Book } from "@/components/contacts/contacts-app";
 import { DELETED_CONTACTS_VISIBLE_DAYS } from "@/lib/contacts-view";
 
@@ -27,17 +27,27 @@ export default async function ContactsPage({
   const { book } = await searchParams;
   const { supabase, member } = await getCurrentMember();
 
-  const [contacts, deleted, relationships, companies, companyTypes, notifications, rawOutreach, roster] =
-    await Promise.all([
-      listContacts(supabase),
-      listDeletedContacts(supabase, DELETED_CONTACTS_VISIBLE_DAYS),
-      listContactRelationships(supabase),
-      listCompanies(supabase),
-      listCompanyTypes(supabase),
-      listNotifications(supabase),
-      listOutreach(supabase, member.id),
-      listRoster(supabase),
-    ]);
+  const [
+    contacts,
+    deleted,
+    relationships,
+    companies,
+    companyTypes,
+    notifications,
+    rawOutreach,
+    roster,
+    logos,
+  ] = await Promise.all([
+    listContacts(supabase),
+    listDeletedContacts(supabase, DELETED_CONTACTS_VISIBLE_DAYS),
+    listContactRelationships(supabase),
+    listCompanies(supabase),
+    listCompanyTypes(supabase),
+    listNotifications(supabase),
+    listOutreach(supabase, member.id),
+    listRoster(supabase),
+    listCompanyLogos(supabase),
+  ]);
 
   /* The tasks half and the assertion half, stitched into one answer. */
   const outreach = withOutreach(contacts, rawOutreach, roster);
@@ -48,6 +58,7 @@ export default async function ContactsPage({
     <ContactsApp
       contacts={contacts}
       outreach={outreach}
+      logos={logos}
       deletedContacts={deleted}
       relationships={relationships}
       companies={companies}

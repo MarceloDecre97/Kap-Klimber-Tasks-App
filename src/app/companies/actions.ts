@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
 import { companyInputSchema } from "@/lib/validation";
 import { canonicalCountry } from "@/lib/countries";
+import { fetchCompanyLogo } from "@/lib/logos";
 
 type ActionResult<T = unknown> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -21,6 +22,76 @@ function revalidateCompanyViews(companyId?: string) {
   if (companyId) revalidatePath(`/companies/${companyId}`);
   revalidatePath("/tasks");
   revalidatePath("/dashboard");
+}
+
+/**
+ * Go and get a company's own mark from its own website.
+ *
+ * One company per call, deliberately. Thirty-three sites fetched inside one
+ * request is a request that times out on somebody's phone halfway through
+ * and leaves you guessing which ones landed; a loop in the browser shows
+ * progress and can be walked away from.
+ *
+ * "Nothing found" is an ordinary answer, not an error — plenty of sites have
+ * no icon worth showing, and the letter mark was never broken.
+ */
+export async function refreshCompanyLogo(
+  companyIdInput: string
+): Promise<ActionResult<{ found: boolean }>> {
+  const companyId = companyIdSchema.safeParse(companyIdInput);
+  if (!companyId.success) return { ok: false, error: "Invalid company." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+
+    const { data: company, error: readError } = await supabase
+      .from("companies")
+      .select("website")
+      .eq("id", companyId.data)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!company?.website) return { ok: true, found: false };
+
+    const logo = await fetchCompanyLogo(company.website);
+    if (!logo) return { ok: true, found: false };
+
+    const { error } = await supabase.from("company_logos").upsert({
+      company_id: companyId.data,
+      data_uri: logo.dataUri,
+      source_url: logo.sourceUrl,
+      content_type: logo.contentType,
+      fetched_at: new Date().toISOString(),
+      fetched_by: member.id,
+    });
+    if (error) throw error;
+
+    revalidateCompanyViews(companyId.data);
+    return { ok: true, found: true };
+  } catch (error) {
+    console.error("refreshCompanyLogo failed", error);
+    return { ok: false, error: "Couldn't fetch that icon." };
+  }
+}
+
+/** Put the letter mark back. */
+export async function clearCompanyLogo(companyIdInput: string): Promise<ActionResult> {
+  const companyId = companyIdSchema.safeParse(companyIdInput);
+  if (!companyId.success) return { ok: false, error: "Invalid company." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase
+      .from("company_logos")
+      .delete()
+      .eq("company_id", companyId.data);
+    if (error) throw error;
+
+    revalidateCompanyViews(companyId.data);
+    return { ok: true };
+  } catch (error) {
+    console.error("clearCompanyLogo failed", error);
+    return { ok: false, error: "Couldn't remove that icon." };
+  }
 }
 
 /**

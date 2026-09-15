@@ -228,6 +228,21 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      company_logos: {
+        Row: {
+          company_id: string;
+          /** The image itself, base64 in a data: URI. See 0042. */
+          data_uri: string;
+          source_url: string | null;
+          content_type: string | null;
+          fetched_at: string;
+          fetched_by: string | null;
+        };
+        Insert: Omit<Database["public"]["Tables"]["company_logos"]["Row"], "fetched_at"> &
+          Partial<Pick<Database["public"]["Tables"]["company_logos"]["Row"], "fetched_at">>;
+        Update: Partial<Database["public"]["Tables"]["company_logos"]["Row"]>;
+        Relationships: [];
+      };
       company_types: {
         Row: {
           id: string;

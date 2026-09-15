@@ -118,3 +118,22 @@ export async function listCompanyTypes(
   if (error) throw error;
   return (data ?? []) as CompanyType[];
 }
+
+/**
+ * The fetched marks, keyed by company.
+ *
+ * Read on its own rather than embedded in CompanySummary, and only by the
+ * screens that draw one. A company is embedded inside every contact the book
+ * returns, so putting a few kilobytes of base64 on it would put that image
+ * on the wire once per person at that company — see 0042.
+ */
+export async function listCompanyLogos(
+  supabase: SupabaseClient<Database>
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from("company_logos").select("company_id, data_uri");
+  if (error) throw error;
+
+  const out: Record<string, string> = {};
+  for (const row of data ?? []) out[row.company_id] = row.data_uri;
+  return out;
+}

@@ -8,6 +8,7 @@ import {
   ChevronUp,
   ContactRound,
   Globe,
+  ImageDown,
   Plus,
   Search,
   Sheet,
@@ -24,6 +25,7 @@ import { useToast } from "@/components/ui/toast";
 import { DeleteContactDialog } from "@/components/contacts/delete-contact-dialog";
 import { ExportDialog } from "@/components/contacts/export-dialog";
 import { contactActivity, restoreContact } from "@/app/contacts/actions";
+import { refreshCompanyLogo } from "@/app/companies/actions";
 import { ContactDetail } from "@/components/contacts/contact-detail";
 import { Avatar } from "@/components/ui/avatar";
 import { ContactRow } from "@/components/contacts/contact-row";
@@ -90,6 +92,7 @@ export type Book = "contacts" | "companies";
 export function ContactsApp({
   contacts,
   outreach,
+  logos,
   deletedContacts,
   relationships,
   companies,
@@ -100,6 +103,8 @@ export function ContactsApp({
   contacts: ContactSummary[];
   /** Where each contact stands. Keyed by contact id. See 0041. */
   outreach: Record<string, Outreach>;
+  /** Company marks already fetched, keyed by company id. See 0042. */
+  logos: Record<string, string>;
   /** The bin, shared: it names who deleted each one, and anyone can act. */
   deletedContacts: ContactSummary[];
   relationships: ContactRelationship[];
@@ -354,6 +359,32 @@ export function ContactsApp({
   );
 
   const showingCompanies = book === "companies";
+
+  /* Companies with a website but no mark yet — the only ones worth asking about. */
+  const missingLogos = useMemo(
+    () => companies.filter((c) => c.website && !logos[c.id]),
+    [companies, logos]
+  );
+  const [fetching, setFetching] = useState<number | null>(null);
+
+  function fetchLogos() {
+    startTransition(async () => {
+      let found = 0;
+      for (const [index, company] of missingLogos.entries()) {
+        setFetching(index + 1);
+        const result = await refreshCompanyLogo(company.id);
+        if (result.ok && result.found) found += 1;
+      }
+      setFetching(null);
+      router.refresh();
+      showToast({
+        message:
+          found === 0
+            ? "No icons found. Those sites do not publish one."
+            : `Got ${found} of ${missingLogos.length}`,
+      });
+    });
+  }
   const isEmptyCompanyBook = companies.length === 0;
 
   /*
@@ -460,6 +491,30 @@ export function ContactsApp({
               it exports whichever book you are looking at, because a button
               that quietly exported the other one would be worse than none.
             */}
+            {/*
+              Goes and gets each company's own mark from its own website, one
+              at a time. A loop here rather than a sweep on the server: thirty
+              sites fetched inside one request is a request that times out
+              halfway through and leaves you guessing which ones landed.
+
+              Only offered for companies that have no mark yet, so pressing it
+              twice costs nothing and there is no way to make it re-fetch the
+              book by accident.
+            */}
+            {showingCompanies && missingLogos.length > 0 && (
+              <button
+                type="button"
+                onClick={fetchLogos}
+                disabled={fetching !== null}
+                className="inline-flex h-[60px] shrink-0 cursor-pointer items-center justify-center gap-2 rounded-2xl border-[1.5px] border-fg bg-transparent px-4 text-[18px] leading-7 font-bold text-fg hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <ImageDown aria-hidden className="size-5" strokeWidth={1.75} />
+                {fetching === null
+                  ? `Get icons (${missingLogos.length})`
+                  : `Fetching ${fetching} of ${missingLogos.length}…`}
+              </button>
+            )}
+
             {(showingCompanies ? !isEmptyCompanyBook : !isEmptyBook) && (
               <button
                 type="button"
@@ -560,6 +615,7 @@ export function ContactsApp({
                       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
                         {group.companies.map((company) => (
                           <CompanyRow
+                          logo={logos[company.id]}
                             key={company.id}
                             company={company}
                             onSelect={wide ? () => setSelectedCompanyId(company.id) : undefined}
@@ -792,6 +848,7 @@ export function ContactsApp({
         {showingCompanies ? (
           selectedCompany ? (
             <CompanyDetail
+              logo={logos[selectedCompany.id]}
               key={selectedCompany.id}
               company={selectedCompany}
               people={peopleAtSelectedCompany}

@@ -13,14 +13,13 @@ import { countryUnmatched } from "@/components/ui/country-field";
 import { ContactRow } from "@/components/contacts/contact-row";
 import { deleteCompany, updateCompany } from "@/app/companies/actions";
 import {
-  COMPANY_TYPE_ICONS,
-  DEFAULT_COMPANY_TYPE_ICON,
   companyPeopleLine,
   nearCompanyMatches,
   type CompanySummary,
   type CompanyType,
 } from "@/lib/companies-view";
 import { formatAddress } from "@/lib/contacts-view";
+import { CompanyMark } from "@/components/companies/company-mark";
 import { cn, formatTimestampWithYear } from "@/lib/utils";
 import type { ContactSummary } from "@/lib/data/contacts";
 
@@ -55,6 +54,7 @@ function draftFrom(c: CompanySummary): Draft {
  */
 export function CompanyDetail({
   company,
+  logo,
   people,
   types,
   companies = [],
@@ -65,6 +65,8 @@ export function CompanyDetail({
   onOpenContact,
 }: {
   company: CompanySummary;
+  /** The company's own mark, when somebody has fetched one. See 0042. */
+  logo?: string;
   people: ContactSummary[];
   types: CompanyType[];
   /** The rest of the book, so a rename can be checked against it. */
@@ -108,7 +110,6 @@ export function CompanyDetail({
 
   const address = formatAddress(company);
   const website = externalHref(company.website);
-  const Icon = COMPANY_TYPE_ICONS[company.types[0]?.icon ?? ""] ?? DEFAULT_COMPANY_TYPE_ICON;
 
   function patch(next: Partial<Draft>) {
     setDraft((d) => ({ ...d, ...next }));
@@ -195,9 +196,7 @@ export function CompanyDetail({
           )}
 
           <div className="flex items-start gap-4">
-            <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl border-[1.5px] border-border bg-muted">
-              <Icon aria-hidden className="size-7 text-sub" strokeWidth={1.75} />
-            </span>
+            <CompanyMark company={company} logo={logo} size={56} className="rounded-2xl" />
             <div className="flex min-w-0 grow flex-col gap-1">
               <h1 className="text-screen-title text-fg text-pretty wrap-anywhere">{company.name}</h1>
               <p className="text-[17px] leading-6 text-sub text-pretty">
