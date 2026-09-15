@@ -206,11 +206,19 @@ export function ContactsApp({
     });
   }
 
-  const companyNames = useMemo(
-    () =>
-      companiesIn(contacts.filter((c) => matchesContact(c, { ...filters, company: null }, outreach))),
-    [contacts, filters, outreach]
-  );
+  /*
+    Every filter offers everything in the book, whatever else is switched on.
+
+    This used to narrow each list to what somebody currently in view carried,
+    which reads well until two filters are on at once: pick Partner, and the
+    trade show list empties because no partner came from one — so the whole
+    control vanishes mid-thought. A filter that disappears because of what
+    you picked somewhere else is a filter you cannot reason about.
+
+    The honest answer to "Partner, from MATS" is an empty list and the line
+    that already says so, not a missing dropdown.
+  */
+  const companyNames = useMemo(() => companiesIn(contacts), [contacts]);
   const matching = useMemo(
     () => contacts.filter((c) => matchesContact(c, filters, outreach)),
     [contacts, filters, outreach]
@@ -218,57 +226,23 @@ export function ContactsApp({
   const groups = useMemo(() => groupContacts(matching), [matching]);
   const activeFilters = countActiveContactFilters(filters);
 
-  /*
-    The chosen value is always in the list, even when nothing in view carries
-    it any more.
-
-    Each of these lists is narrowed to what somebody currently visible has —
-    which is right for browsing, and a trap when two filters are on at once:
-    pick a trade show, then pick an outreach state nobody at that show is in,
-    and the show falls out of its own dropdown. The filter stays applied and
-    there is no longer a control to turn it off. So whatever is selected
-    survives the narrowing.
-  */
-  const companyOptions: FilterOption<string>[] = useMemo(() => {
-    const names = filters.company && !companyNames.includes(filters.company)
-      ? [...companyNames, filters.company].sort((a, b) => a.localeCompare(b))
-      : companyNames;
-    return names.map((name) => ({ value: name, label: name }));
-  }, [companyNames, filters.company]);
+  const companyOptions: FilterOption<string>[] = useMemo(
+    () => companyNames.map((name) => ({ value: name, label: name })),
+    [companyNames]
+  );
 
   /*
     Only relationships somebody in view actually carries, the same rule the
     companies book follows. Both books, both filters, one behaviour.
   */
-  const relationshipOptions: FilterOption<string>[] = useMemo(() => {
-    const inView = contacts.filter((c) =>
-      matchesContact(c, { ...filters, relationshipId: null }, outreach)
-    );
-    const present = new Set(inView.flatMap((c) => c.relationships.map((r) => r.id)));
-    if (filters.relationshipId) present.add(filters.relationshipId);
-    return relationships
-      .filter((r) => present.has(r.id))
-      .map((r) => {
+  const relationshipOptions: FilterOption<string>[] = useMemo(
+    () =>
+      relationships.map((r) => {
         const Icon = RELATIONSHIP_ICONS[r.icon] ?? DEFAULT_RELATIONSHIP_ICON;
         return { value: r.id, label: r.label, icon: <Icon aria-hidden className="size-4" /> };
-      });
-  }, [contacts, filters, relationships, outreach]);
-
-  /*
-    Shows carried by somebody currently in view, newest first — the same rule
-    the other two follow, so picking a company narrows the list of shows
-    rather than leaving entries that now find nobody.
-  */
-  const tradeShowOptions: FilterOption<string>[] = useMemo(() => {
-    const inView = tradeShowsIn(
-      contacts.filter((c) => matchesContact(c, { ...filters, tradeShow: null }, outreach))
-    );
-    const shows =
-      filters.tradeShow && !inView.includes(filters.tradeShow)
-        ? [filters.tradeShow, ...inView]
-        : inView;
-    return shows.map((label) => ({ value: label, label }));
-  }, [contacts, filters, outreach]);
+      }),
+    [relationships]
+  );
 
   /*
     Everybody else at the same company, for the "anyone else?" step. Worked
@@ -278,14 +252,14 @@ export function ContactsApp({
   const colleaguesOf = (c: ContactSummary) =>
     c.company_id ? contacts.filter((o) => o.company_id === c.company_id && o.id !== c.id) : [];
 
-  /*
-    All four states, always — unlike the other three filters, which only
-    offer what somebody in view carries. "Not contacted" has to be there
-    even when nobody is, because that is the state you are trying to empty.
-  */
+  /* Every show anybody in the book came from, narrowed by nothing. */
+  const tradeShowOptions: FilterOption<string>[] = useMemo(
+    () => tradeShowsIn(contacts).map((label) => ({ value: label, label })),
+    [contacts]
+  );
+
   const outreachOptions: FilterOption<string>[] = useMemo(
-    () =>
-      OUTREACH_ORDER.map((state) => ({ value: state, label: OUTREACH_LABELS[state] })),
+    () => OUTREACH_ORDER.map((state) => ({ value: state, label: OUTREACH_LABELS[state] })),
     []
   );
 
@@ -311,33 +285,25 @@ export function ContactsApp({
   const activeCompanyFilters = countActiveCompanyFilters(companyFilters);
 
   /*
-    Each dropdown offers only what the *other* one, and the search, leave
-    standing. Country was already derived from the data; Type came from the
-    whole table, so picking United States still offered every type in the
-    book including ones no American company had. Two filters side by side
-    behaving differently is the kind of thing nobody can name but everybody
-    feels.
+    Both of these offer everything in the book too, for the reason given
+    above: a dropdown that empties because of what you picked in the one
+    beside it is a dropdown that vanishes mid-thought. This reverses the note
+    that used to sit here — the two filters do still behave identically,
+    which was the point of that note; they just both stopped narrowing.
   */
   const countryOptions: FilterOption<string>[] = useMemo(
-    () =>
-      countriesIn(
-        companies.filter((c) =>
-          matchesCompany(c, { ...companyFilters, country: null })
-        )
-      ).map((name) => ({ value: name, label: name })),
-    [companies, companyFilters]
+    () => countriesIn(companies).map((name) => ({ value: name, label: name })),
+    [companies]
   );
 
-  const typeOptions: FilterOption<string>[] = useMemo(() => {
-    const inView = companies.filter((c) => matchesCompany(c, { ...companyFilters, typeId: null }));
-    const present = new Set(inView.flatMap((c) => c.types.map((t) => t.id)));
-    return companyTypes
-      .filter((type) => present.has(type.id))
-      .map((type) => {
+  const typeOptions: FilterOption<string>[] = useMemo(
+    () =>
+      companyTypes.map((type) => {
         const Icon = COMPANY_TYPE_ICONS[type.icon] ?? DEFAULT_COMPANY_TYPE_ICON;
         return { value: type.id, label: type.label, icon: <Icon aria-hidden className="size-4" /> };
-      });
-  }, [companies, companyFilters, companyTypes]);
+      }),
+    [companyTypes]
+  );
 
   const selectedCompany = useMemo(
     () => (selectedCompanyId ? companies.find((c) => c.id === selectedCompanyId) ?? null : null),

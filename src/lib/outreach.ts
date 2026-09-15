@@ -77,7 +77,20 @@ export const NO_OUTREACH: Outreach = {
  * task means.
  */
 export function outreachStateOf(o: Omit<Outreach, "state">): OutreachState {
-  if (o.inTouchAt) return "in_touch";
+  /*
+    The claim only stands while something backs it.
+
+    "In touch" is the one stored fact here and it was outliving its evidence:
+    bin the outreach task and the contact kept the pill, while the button to
+    take it back — which asks for a live completed task — disappeared with
+    the task. A state you can enter and cannot leave.
+
+    So a binned task hides the claim and restoring the task brings it back,
+    which is what a bin is for. Erasing the task destroys it outright, in the
+    database, so a later round starts from Contacted rather than leaping
+    straight to In touch. See 0043.
+  */
+  if (o.inTouchAt && o.contactedCount > 0) return "in_touch";
   if (o.contactedCount > 0) return "contacted";
   if (o.openCount > 0) return "open";
   return "none";

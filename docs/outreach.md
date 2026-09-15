@@ -112,6 +112,25 @@ state colour in the same `cn()` call deleted the size and the pill inherited
 the row's 18px. The same trap the file already documents for colour names,
 from the other end. `screen-title` was missing too.
 
+**"In touch" cannot outlive the task that earned it.** 0041 got half of this
+right: "Contacted" is derived, so binning the task took it away on its own,
+while "In touch" is stored and nothing cleared it. A contact whose outreach
+task had been deleted and erased kept the pill for ever — and because the
+undo asks for a live completed task, the button to take it back had gone too.
+A state you can enter and cannot leave. Now a binned task **hides** the claim
+and restoring brings it back, while erasing the last one **clears** it in the
+database (0043), so a later round starts at Contacted instead of leaping to
+In touch on the strength of a task nobody can see.
+
+**No filter narrows another.** Every dropdown offers everything in the book,
+whatever else is switched on. The old rule — offer only what somebody in view
+carries — reads well until two filters are on at once: pick Partner and the
+trade show list empties, so the control vanishes mid-thought. The honest
+answer to "Partner, from MATS" is an empty list and the line that already
+says so. This reverses the note that used to sit in contacts-app.tsx arguing
+both books should narrow identically; they still behave identically, they
+just both stopped narrowing.
+
 **No filter hides while it is switched on.** Each dropdown lists only values
 somebody in view carries, which is right for browsing and a trap with two
 filters at once: pick a trade show, then an outreach state nobody at that
