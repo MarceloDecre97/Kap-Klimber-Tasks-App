@@ -1,6 +1,13 @@
 import { notFound } from "next/navigation";
 import { getCurrentMember } from "@/lib/get-current-member";
-import { getContact, listContactEvents } from "@/lib/data/contacts";
+import { listRoster } from "@/lib/data/tasks";
+import {
+  getContact,
+  listContactEvents,
+  listContactsAtCompany,
+  listOutreach,
+  withOutreach,
+} from "@/lib/data/contacts";
 import { ContactDetail } from "@/components/contacts/contact-detail";
 
 export const dynamic = "force-dynamic";
@@ -23,14 +30,27 @@ export default async function ContactPage({
     what stops a crafted link turning the Back button into somewhere else.
   */
   const fromTaskId = from && UUID.test(from) ? from : null;
-  const { supabase } = await getCurrentMember();
+  const { supabase, member } = await getCurrentMember();
 
   const contact = await getContact(supabase, id);
   // RLS returns nothing for a row this member cannot see, which reaches here
   // as the same "no such contact" — which is the honest answer either way.
   if (!contact) notFound();
 
-  const events = await listContactEvents(supabase, id);
+  const [events, outreach, roster, atCompany] = await Promise.all([
+    listContactEvents(supabase, id),
+    listOutreach(supabase, member.id),
+    listRoster(supabase),
+    contact.company_id ? listContactsAtCompany(supabase, contact.company_id) : Promise.resolve([]),
+  ]);
 
-  return <ContactDetail contact={contact} events={events} fromTaskId={fromTaskId} />;
+  return (
+    <ContactDetail
+      contact={contact}
+      events={events}
+      outreach={withOutreach([contact], outreach, roster)[contact.id]!}
+      colleagues={atCompany.filter((c) => c.id !== contact.id)}
+      fromTaskId={fromTaskId}
+    />
+  );
 }

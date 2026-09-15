@@ -105,14 +105,23 @@ export const taskInputSchema = z.object({
   status: statusEnum,
   assigneeIds: z.array(z.string().uuid()).min(1, "Pick at least one person."),
   /*
-    Optional, and capped at two — the same cap the database enforces with a
+    Optional, and capped at four — the same cap the database enforces with a
     trigger. This copy exists so the form can say so in words rather than
-    letting somebody pick a third and meet a raise() on save.
+    letting somebody pick a fifth and meet a raise() on save.
+
+    It was two until 0041. One email to four people you met on the same stand
+    is one outreach each, and that is the shape the Contact button makes.
   */
   contactIds: z
     .array(z.string().uuid())
-    .max(2, "Two contacts at most. Take one off to swap it.")
+    .max(4, "Four contacts at most. Take one off to swap it.")
     .optional(),
+  /*
+    Set only by the Contact button on a contact, and only on create. What
+    separates an outreach from any other task that happens to name somebody —
+    see 0041. The database pins it afterwards, so a lie here is a lie once.
+  */
+  isOutreach: z.boolean().optional(),
   /*
     Three at most, the same cap the database enforces with a trigger. This
     copy exists so the form can say so in words rather than letting somebody

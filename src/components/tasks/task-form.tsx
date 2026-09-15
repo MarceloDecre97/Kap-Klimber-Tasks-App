@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
 import { PRIORITIES, PRIORITY_ORDER, STATUSES, STATUS_ORDER } from "@/lib/constants";
 import { ContactPicker } from "@/components/contacts/contact-picker";
+import { outreachTaskTitle } from "@/lib/outreach";
 import { createTask, updateTask } from "@/app/tasks/actions";
 import { cn } from "@/lib/utils";
 import { safeReturnTo } from "@/lib/return-to";
@@ -39,17 +40,25 @@ interface FormState {
   links: { label: string; url: string }[];
 }
 
-function initialState(task?: TaskWithRelations): FormState {
+function initialState(
+  task?: TaskWithRelations,
+  prefill?: {
+    contactIds: string[];
+    assigneeIds: string[];
+    categoryId: string | null;
+    isOutreach: boolean;
+  }
+): FormState {
   return {
     title: task?.title ?? "",
     description: task?.description ?? "",
-    categoryId: task?.category?.id ?? null,
+    categoryId: task?.category?.id ?? prefill?.categoryId ?? null,
     useOtherCategory: false,
     newCategoryLabel: "",
     priority: task?.priority ?? "medium",
     status: task?.status ?? "not_started",
-    assigneeIds: task?.assignees.map((a) => a.id) ?? [],
-    contactIds: task?.contacts.map((c) => c.id) ?? [],
+    assigneeIds: task?.assignees.map((a) => a.id) ?? prefill?.assigneeIds ?? [],
+    contactIds: task?.contacts.map((c) => c.id) ?? prefill?.contactIds ?? [],
     dueDate: task?.due_date ?? "",
     links: task?.links.map((link) => ({ label: link.label, url: link.url })) ?? [],
   };
@@ -61,10 +70,24 @@ export function TaskForm({
   roster,
   categories,
   contacts,
+  prefill,
 }: {
   mode: "create" | "edit";
   task?: TaskWithRelations;
   roster: MemberSummary[];
+  /**
+   * What the Contact button on a contact filled in on the way here.
+   *
+   * Only ever set on create. The title keeps itself in step with the people
+   * until somebody types their own — see below, and 0041 for why the task is
+   * the record rather than a flag on the contact.
+   */
+  prefill?: {
+    contactIds: string[];
+    assigneeIds: string[];
+    categoryId: string | null;
+    isOutreach: boolean;
+  };
   /** The whole book, for the picker to search. Never a fetch per keystroke. */
   contacts: ContactSummary[];
   categories: { id: string; label: string }[];
@@ -90,15 +113,45 @@ export function TaskForm({
     if (!id) return returnTo;
     return `${returnTo}${returnTo.includes("?") ? "&" : "?"}task=${id}`;
   };
-  const initial = useMemo(() => initialState(task), [task]);
+  const initial = useMemo(() => initialState(task, prefill), [task, prefill]);
   const [form, setForm] = useState<FormState>(initial);
+  /*
+    Whether the title is still the one this screen wrote.
+
+    An outreach title keeps itself in step as people are added and removed —
+    that is the whole reason the colleague step exists — but the moment
+    somebody types their own wording it is theirs, and a field that rewrites
+    itself under a cursor is infuriating. One flag, set once, never cleared.
+  */
+  const [titleIsMine, setTitleIsMine] = useState(prefill?.isOutreach === true);
+
+  /*
+    The generated title, worked out rather than written into the form.
+
+    Derived on purpose: an effect that wrote it into state would fight the
+    input every render, and React says so out loud. While the title is still
+    this screen's, what the box shows IS the generated one — so adding Sue in
+    the picker renames the task. The first keystroke hands it over for good,
+    and because the box already held the generated words, editing starts from
+    them rather than from nothing.
+  */
+  const generatedTitle = useMemo(
+    () =>
+      outreachTaskTitle(
+        form.contactIds
+          .map((id) => contacts.find((c) => c.id === id))
+          .filter((c): c is ContactSummary => Boolean(c))
+      ),
+    [form.contactIds, contacts]
+  );
+  const title = titleIsMine ? generatedTitle : form.title;
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(initial);
-  const canSave = form.title.trim().length > 0 && form.assigneeIds.length > 0;
-  const titleLength = form.title.length;
+  const canSave = title.trim().length > 0 && form.assigneeIds.length > 0;
+  const titleLength = title.length;
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -119,7 +172,8 @@ export function TaskForm({
 
 
     const input = {
-      title: form.title,
+      title,
+      isOutreach: prefill?.isOutreach === true,
       description: form.description,
       categoryId: form.useOtherCategory ? null : form.categoryId,
       newCategoryLabel: form.useOtherCategory ? form.newCategoryLabel : undefined,
@@ -178,15 +232,18 @@ export function TaskForm({
           <Input
             id="task-title"
             placeholder="What needs doing?"
-            value={form.title}
+            value={title}
             maxLength={TITLE_MAX}
-            onChange={(event) => update("title", event.target.value)}
-            aria-invalid={!!error && !form.title.trim()}
+            onChange={(event) => {
+              setTitleIsMine(false);
+              update("title", event.target.value);
+            }}
+            aria-invalid={!!error && !title.trim()}
             aria-describedby="task-title-hint"
           />
           <div className="flex items-start justify-between gap-3">
             <p id="task-title-hint" className="text-[16px] leading-[22px] text-sub text-pretty">
-              {!form.title.trim() && <>Save turns on once the task has a title. </>}
+              {!title.trim() && <>Save turns on once the task has a title. </>}
               Long titles are shortened in the list — put extra detail in the Description below, or add notes
               once the task is saved.
             </p>

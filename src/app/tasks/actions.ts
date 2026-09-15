@@ -208,6 +208,12 @@ export async function createTask(input: unknown): Promise<ActionResult> {
         priority: data.priority,
         status: data.status,
         due_date: data.dueDate ?? null,
+        /*
+          Only on create. The trigger pins it from here on, so a task cannot
+          become outreach after the fact — which is what stops a finished
+          "fix their address" from claiming somebody was emailed. See 0041.
+        */
+        is_outreach: data.isOutreach === true,
         created_by: member.id,
       })
       .select("id")

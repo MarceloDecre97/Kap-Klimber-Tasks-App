@@ -26,6 +26,8 @@ import {
   tradeShowLabel,
 } from "@/lib/contacts-view";
 import { cn, formatTimestamp, formatTimestampWithYear } from "@/lib/utils";
+import { OutreachSection } from "@/components/contacts/outreach-section";
+import type { Outreach } from "@/lib/outreach";
 import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
 
 /**
@@ -43,6 +45,8 @@ import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
 export function ContactDetail({
   contact,
   events,
+  outreach,
+  colleagues,
   fromTaskId,
   embedded = false,
   onGone,
@@ -51,6 +55,10 @@ export function ContactDetail({
 }: {
   contact: ContactSummary;
   events: ContactEvent[];
+  /** Where they stand. See 0041 — derived from tasks, not stored. */
+  outreach: Outreach;
+  /** Everyone else at their company, for the "anyone else?" step. */
+  colleagues: ContactSummary[];
   /** Set when you arrived from a task's contact pill. */
   fromTaskId?: string | null;
   /** True inside the desktop list panel: no header, no going anywhere. */
@@ -323,6 +331,13 @@ export function ContactDetail({
               <Row label="Address" value={ownAddress} />
             </Section>
           )}
+
+          <OutreachSection
+            contact={contact}
+            outreach={outreach}
+            colleagues={colleagues}
+            onChanged={() => router.refresh()}
+          />
 
           <Section heading="Details">
             <Row label="Where they came from" value={contact.source} />

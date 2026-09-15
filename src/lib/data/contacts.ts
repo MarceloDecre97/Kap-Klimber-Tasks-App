@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemberSummary } from "@/lib/data/tasks";
 import type { CompanySummary, CompanyType, ContactRelationship } from "@/lib/companies-view";
 import type { ContactEventKind, Database, TaskStatus } from "@/lib/supabase/database.types";
+import { NO_OUTREACH, outreachStateOf, type Outreach, type OutreachTask } from "@/lib/outreach";
 
 /**
  * The address book, read.
@@ -46,6 +47,9 @@ export interface ContactSummary {
   postal_code: string | null;
   country: string | null;
   source: string | null;
+  /** They answered. Written only through set_contact_in_touch — see 0041. */
+  in_touch_at: string | null;
+  in_touch_by: string | null;
   /**
    * The filterable half of where they came from. Free text stays free — this
    * is the part the book is filtered by, so it is split from the year and
@@ -81,6 +85,7 @@ export interface ContactEvent {
 const CONTACT_SELECT = `
   id, first_name, last_name, job_title, company, company_id,
   mobile, office_phone, office_phone_ext, email, email2, website,
+  in_touch_at, in_touch_by,
   street, suite, city, state, postal_code, country, source, notes,
   trade_show, trade_show_year,
   created_at, deleted_at,
@@ -257,6 +262,122 @@ export async function listContactEvents(
 
   if (error) throw error;
   return (data ?? []) as unknown as ContactEvent[];
+}
+
+/**
+ * Who has been reached out to, worked out from the tasks.
+ *
+ * One query for the whole book rather than one per contact: this is a
+ * four-person company's address list, and the outreach tasks on it will be
+ * counted in dozens. The same reasoning the export route gives for filtering
+ * in memory — code that is demonstrably the same for every caller beats a
+ * faster one that might not be.
+ *
+ * Only tasks the Contact button made, and only ones still in the book. A
+ * binned task has been retracted; counting it would have the contact claiming
+ * an email that somebody decided never happened.
+ */
+export async function listOutreach(
+  supabase: SupabaseClient<Database>,
+  meId: string
+): Promise<Record<string, Outreach>> {
+  const { data, error } = await supabase
+    .from("task_contacts")
+    .select(
+      `contact_id,
+       task:tasks!inner(
+         id, title, status, created_at, completed_at, is_outreach, deleted_at,
+         created_by:members!tasks_created_by_fkey(id, display_name, initials, color),
+         completed_by:members!tasks_completed_by_fkey(id, display_name, initials, color),
+         assignees:task_assignees(member_id)
+       )`
+    )
+    .eq("task.is_outreach", true)
+    .is("task.deleted_at", null);
+
+  if (error) throw error;
+
+  type Row = {
+    contact_id: string;
+    task: {
+      id: string;
+      title: string;
+      status: TaskStatus;
+      created_at: string;
+      completed_at: string | null;
+      created_by: MemberSummary | null;
+      completed_by: MemberSummary | null;
+      assignees: { member_id: string }[] | null;
+    } | null;
+  };
+
+  const byContact: Record<string, OutreachTask[]> = {};
+  for (const row of (data ?? []) as unknown as Row[]) {
+    const t = row.task;
+    if (!t) continue;
+    /*
+      "Mine" is the same rule can_confirm_in_touch enforces: the person who
+      made the task, or anyone put on it. Worked out here as well as there so
+      the button can be hidden rather than shown and then refused.
+    */
+    const mine =
+      t.created_by?.id === meId || (t.assignees ?? []).some((a) => a.member_id === meId);
+    (byContact[row.contact_id] ??= []).push({
+      task_id: t.id,
+      title: t.title,
+      status: t.status,
+      created_at: t.created_at,
+      created_by: t.created_by,
+      completed_at: t.completed_at,
+      completed_by: t.completed_by,
+      mine,
+    });
+  }
+
+  const out: Record<string, Outreach> = {};
+  for (const [contactId, tasks] of Object.entries(byContact)) {
+    tasks.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const done = tasks.filter((t) => t.status === "complete");
+    const open = tasks.filter((t) => t.status !== "complete");
+    const shape = {
+      contactedCount: done.length,
+      openCount: open.length,
+      latestCompleted: done[0] ?? null,
+      latestOpen: open[0] ?? null,
+      tasks,
+      inTouchAt: null,
+      inTouchBy: null,
+      /* A reply can only be confirmed off the back of a finished round. */
+      canConfirm: done.some((t) => t.mine),
+    };
+    out[contactId] = { ...shape, state: outreachStateOf(shape) };
+  }
+  return out;
+}
+
+/**
+ * The contacts and their outreach, stitched.
+ *
+ * The assertion lives on the contact and the rest is derived from tasks, so
+ * neither half knows the whole answer on its own.
+ */
+export function withOutreach(
+  contacts: ContactSummary[],
+  outreach: Record<string, Outreach>,
+  roster: MemberSummary[]
+): Record<string, Outreach> {
+  const byId = new Map(roster.map((m) => [m.id, m]));
+  const out: Record<string, Outreach> = {};
+  for (const c of contacts) {
+    const base = outreach[c.id] ?? NO_OUTREACH;
+    const shape = {
+      ...base,
+      inTouchAt: c.in_touch_at,
+      inTouchBy: c.in_touch_by ? byId.get(c.in_touch_by) ?? null : null,
+    };
+    out[c.id] = { ...shape, state: outreachStateOf(shape) };
+  }
+  return out;
 }
 
 /**

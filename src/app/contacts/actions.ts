@@ -360,6 +360,37 @@ export async function contactActivity(
   }
 }
 
+/**
+ * Say they answered, or take it back.
+ *
+ * Thin on purpose: every rule lives in set_contact_in_touch, which is the
+ * only thing that can move those two columns. A check repeated here would be
+ * a second copy to drift — and one that a direct API call would walk past
+ * anyway.
+ */
+export async function setInTouch(
+  contactIdInput: string,
+  on: boolean
+): Promise<ActionResult> {
+  const contactId = contactIdSchema.safeParse(contactIdInput);
+  if (!contactId.success) return { ok: false, error: "Invalid contact." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase.rpc("set_contact_in_touch", {
+      p_contact_id: contactId.data,
+      p_on: on,
+    });
+    if (error) throw error;
+
+    revalidateContactViews(contactId.data);
+    return { ok: true, contactId: contactId.data };
+  } catch (error) {
+    console.error("setInTouch failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't record that.") };
+  }
+}
+
 export async function createContact(input: unknown): Promise<ActionResult> {
   const parsed = contactInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the details.") };

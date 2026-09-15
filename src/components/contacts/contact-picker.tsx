@@ -15,8 +15,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { ContactSummary } from "@/lib/data/contacts";
 
-/** The cap, in one place, matching the trigger in 0022_contacts.sql. */
-const MAX_CONTACTS = 2;
+/** The cap, in one place, matching the trigger — 0022, raised in 0041. */
+const MAX_CONTACTS = 4;
 
 /**
  * Attaching contacts to a task.
@@ -117,7 +117,7 @@ export function ContactPicker({
 
       {atCap ? (
         <p className="rounded-2xl border-[1.5px] border-border bg-card px-4 py-3 text-[16px] leading-6 text-sub text-pretty">
-          Two contacts is the limit. Take one off to swap it.
+          Four contacts is the limit. Take one off to swap it.
         </p>
       ) : (
         <>

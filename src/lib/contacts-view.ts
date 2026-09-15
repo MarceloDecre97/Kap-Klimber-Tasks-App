@@ -1,4 +1,5 @@
 import type { ContactSummary } from "@/lib/data/contacts";
+import { NO_OUTREACH, type Outreach, type OutreachState } from "@/lib/outreach";
 
 /**
  * Turning the address book into something readable.
@@ -99,6 +100,8 @@ export interface ContactFilters {
   relationshipId: string | null;
   /** A whole label — "MATS 2026" — not the show alone. See tradeShowLabel. */
   tradeShow: string | null;
+  /** Where they are in the outreach, worked out from tasks. See 0041. */
+  outreach: OutreachState | null;
 }
 
 export const EMPTY_CONTACT_FILTERS: ContactFilters = {
@@ -106,10 +109,16 @@ export const EMPTY_CONTACT_FILTERS: ContactFilters = {
   company: null,
   relationshipId: null,
   tradeShow: null,
+  outreach: null,
 };
 
 export function countActiveContactFilters(f: ContactFilters): number {
-  return (f.company ? 1 : 0) + (f.relationshipId ? 1 : 0) + (f.tradeShow ? 1 : 0);
+  return (
+    (f.company ? 1 : 0) +
+    (f.relationshipId ? 1 : 0) +
+    (f.tradeShow ? 1 : 0) +
+    (f.outreach ? 1 : 0)
+  );
 }
 
 /**
@@ -139,12 +148,24 @@ export function tradeShowLabel(c: {
  * "5550164" finds a contact stored as "(847) 555 0164". That is how anybody
  * reading a number off a screen would type it.
  */
-export function matchesContact(c: ContactSummary, filters: ContactFilters): boolean {
+export function matchesContact(
+  c: ContactSummary,
+  filters: ContactFilters,
+  /*
+    Passed rather than carried on the contact, because it is not a fact about
+    the person — it is a fact about the tasks pointing at them. The contact
+    picker inside the task form never filters by it and never loads it.
+  */
+  outreach?: Record<string, Outreach>
+): boolean {
   if (filters.company && c.company !== filters.company) return false;
   if (filters.relationshipId && !c.relationships.some((r) => r.id === filters.relationshipId)) {
     return false;
   }
   if (filters.tradeShow && tradeShowLabel(c) !== filters.tradeShow) return false;
+  if (filters.outreach && (outreach?.[c.id] ?? NO_OUTREACH).state !== filters.outreach) {
+    return false;
+  }
 
   const q = filters.query.trim().toLowerCase();
   if (!q) return true;

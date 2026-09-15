@@ -105,6 +105,8 @@ export interface Database {
           deletion_requested_at: string | null;
           deletion_reason: string | null;
           due_date: string | null;
+          /** Set once by the Contact button, pinned by trigger. See 0041. */
+          is_outreach: boolean;
           created_by: string;
           completed_at: string | null;
           completed_by: string | null;
@@ -280,6 +282,9 @@ export interface Database {
           office_phone: string | null;
           /** Digits only, and only alongside an office line. See 0040. */
           office_phone_ext: string | null;
+          /** They answered. An assertion, written only by set_contact_in_touch. */
+          in_touch_at: string | null;
+          in_touch_by: string | null;
           email: string | null;
           email2: string | null;
           website: string | null;
@@ -316,12 +321,21 @@ export interface Database {
           | "updated_at"
           | "mobile_digits"
           | "office_digits"
+          /* Never written directly — set_contact_in_touch is the only way. */
+          | "in_touch_at"
+          | "in_touch_by"
         > &
           Partial<Pick<Database["public"]["Tables"]["contacts"]["Row"], "id" | "company_id">>;
         Update: Partial<
           Omit<
             Database["public"]["Tables"]["contacts"]["Row"],
-            "id" | "created_by" | "created_at" | "mobile_digits" | "office_digits"
+            | "id"
+            | "created_by"
+            | "created_at"
+            | "mobile_digits"
+            | "office_digits"
+            | "in_touch_at"
+            | "in_touch_by"
           >
         >;
         Relationships: [];
@@ -474,6 +488,9 @@ export interface Database {
        * only, and only on a task already in the bin. Returns what it
        * destroyed: { title, notes, events }. See 0021_purge_task.sql.
        */
+      /* The only writer of contacts.in_touch_at. See 0041_outreach.sql. */
+      set_contact_in_touch: { Args: { p_contact_id: string; p_on: boolean }; Returns: void };
+      can_confirm_in_touch: { Args: { p_contact_id: string }; Returns: boolean };
       /** Refused while anyone is still at the company. See 0024_companies.sql. */
       delete_company: { Args: { p_company_id: string }; Returns: void };
       company_contact_count: { Args: { p_company_id: string }; Returns: number };

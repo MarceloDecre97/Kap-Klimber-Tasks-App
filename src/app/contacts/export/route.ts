@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentMember } from "@/lib/get-current-member";
-import { listContacts } from "@/lib/data/contacts";
+import { listContacts, listOutreach, withOutreach } from "@/lib/data/contacts";
+import { listRoster } from "@/lib/data/tasks";
+import { outreachLabel } from "@/lib/outreach";
 import { buildXlsx } from "@/lib/export/xlsx";
 import {
   EMPTY_CONTACT_FILTERS,
@@ -24,8 +26,13 @@ import {
  * that might not be.
  */
 export async function GET(request: NextRequest) {
-  const { supabase } = await getCurrentMember();
-  const contacts = await listContacts(supabase);
+  const { supabase, member } = await getCurrentMember();
+  const [contacts, rawOutreach, roster] = await Promise.all([
+    listContacts(supabase),
+    listOutreach(supabase, member.id),
+    listRoster(supabase),
+  ]);
+  const outreach = withOutreach(contacts, rawOutreach, roster);
 
   const params = request.nextUrl.searchParams;
   const filters = {
@@ -34,8 +41,9 @@ export async function GET(request: NextRequest) {
     company: params.get("company"),
     relationshipId: params.get("relationship"),
     tradeShow: params.get("show"),
+    outreach: (params.get("outreach") as (typeof EMPTY_CONTACT_FILTERS)["outreach"]) ?? null,
   };
-  const rows = contacts.filter((contact) => matchesContact(contact, filters));
+  const rows = contacts.filter((contact) => matchesContact(contact, filters, outreach));
 
   /*
     The company's own columns sit beside its name rather than at the end.
@@ -49,7 +57,8 @@ export async function GET(request: NextRequest) {
     "Relationship to us",
     "Mobile", "Office phone", "Extension", "Email", "Second email", "Website",
     "Street", "Suite / unit", "City", "State", "ZIP", "Country", "Address",
-    "Where they came from", "Trade show", "Notes", "Added by", "Added on",
+    "Where they came from", "Trade show", "Outreach", "Reached out by", "Reached out on",
+    "Notes", "Added by", "Added on",
   ];
 
   const body = rows.map((c) => [
@@ -78,6 +87,9 @@ export async function GET(request: NextRequest) {
     formatAddress(c) ?? "",
     c.source ?? "",
     tradeShowLabel(c) ?? "",
+    outreachLabel(outreach[c.id]!),
+    outreach[c.id]!.latestCompleted?.completed_by?.display_name ?? "",
+    outreach[c.id]!.latestCompleted?.completed_at?.slice(0, 10) ?? "",
     c.notes ?? "",
     c.created_by?.display_name ?? "",
     c.created_at.slice(0, 10),

@@ -6,6 +6,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { ChipRow } from "@/components/contacts/chip-picker";
 import { DEFAULT_RELATIONSHIP_ICON, RELATIONSHIP_ICONS } from "@/lib/companies-view";
 import { avatarColor, fullName, initialsOf } from "@/lib/contacts-view";
+import { OutreachPill } from "@/components/contacts/outreach-pill";
+import type { Outreach } from "@/lib/outreach";
 import { cn } from "@/lib/utils";
 import type { ContactSummary } from "@/lib/data/contacts";
 
@@ -22,11 +24,18 @@ import type { ContactSummary } from "@/lib/data/contacts";
  */
 export function ContactRow({
   contact,
+  outreach,
   className,
   onSelect,
   selected,
 }: {
   contact: ContactSummary;
+  /*
+    Where they stand. Left out on the bin, where a row is a thing you are
+    putting back rather than working through, and "Not contacted" beside a
+    deleted person is noise.
+  */
+  outreach?: Outreach;
   className?: string;
   /*
     Given only on a wide screen, where the row opens the panel beside the
@@ -74,6 +83,10 @@ export function ContactRow({
         )}
 
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">
+          {/* Before the relationship chips, not after: "have we spoken to
+              them" is the question being asked of a list you are working
+              through, and it should be the first thing the eye lands on. */}
+          {outreach && <OutreachPill outreach={outreach} />}
           <ChipRow
             items={contact.relationships}
             icons={RELATIONSHIP_ICONS}

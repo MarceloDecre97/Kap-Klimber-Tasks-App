@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Sheet,
+  Send,
   Shapes,
   Tag,
   Ticket,
@@ -57,6 +58,12 @@ import {
   tradeShowsIn,
   type ContactFilters,
 } from "@/lib/contacts-view";
+import {
+  NO_OUTREACH,
+  OUTREACH_LABELS,
+  OUTREACH_ORDER,
+  type Outreach,
+} from "@/lib/outreach";
 import { cn, formatDateGroup } from "@/lib/utils";
 import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
 import type { NotificationFeed } from "@/lib/data/notifications";
@@ -82,6 +89,7 @@ export type Book = "contacts" | "companies";
  */
 export function ContactsApp({
   contacts,
+  outreach,
   deletedContacts,
   relationships,
   companies,
@@ -90,6 +98,8 @@ export function ContactsApp({
   initialBook = "contacts",
 }: {
   contacts: ContactSummary[];
+  /** Where each contact stands. Keyed by contact id. See 0041. */
+  outreach: Record<string, Outreach>;
   /** The bin, shared: it names who deleted each one, and anyone can act. */
   deletedContacts: ContactSummary[];
   relationships: ContactRelationship[];
@@ -199,12 +209,13 @@ export function ContactsApp({
   }
 
   const companyNames = useMemo(
-    () => companiesIn(contacts.filter((c) => matchesContact(c, { ...filters, company: null }))),
-    [contacts, filters]
+    () =>
+      companiesIn(contacts.filter((c) => matchesContact(c, { ...filters, company: null }, outreach))),
+    [contacts, filters, outreach]
   );
   const matching = useMemo(
-    () => contacts.filter((c) => matchesContact(c, filters)),
-    [contacts, filters]
+    () => contacts.filter((c) => matchesContact(c, filters, outreach)),
+    [contacts, filters, outreach]
   );
   const groups = useMemo(() => groupContacts(matching), [matching]);
   const activeFilters = countActiveContactFilters(filters);
@@ -220,7 +231,7 @@ export function ContactsApp({
   */
   const relationshipOptions: FilterOption<string>[] = useMemo(() => {
     const inView = contacts.filter((c) =>
-      matchesContact(c, { ...filters, relationshipId: null })
+      matchesContact(c, { ...filters, relationshipId: null }, outreach)
     );
     const present = new Set(inView.flatMap((c) => c.relationships.map((r) => r.id)));
     return relationships
@@ -229,7 +240,7 @@ export function ContactsApp({
         const Icon = RELATIONSHIP_ICONS[r.icon] ?? DEFAULT_RELATIONSHIP_ICON;
         return { value: r.id, label: r.label, icon: <Icon aria-hidden className="size-4" /> };
       });
-  }, [contacts, filters, relationships]);
+  }, [contacts, filters, relationships, outreach]);
 
   /*
     Shows carried by somebody currently in view, newest first — the same rule
@@ -238,10 +249,33 @@ export function ContactsApp({
   */
   const tradeShowOptions: FilterOption<string>[] = useMemo(
     () =>
-      tradeShowsIn(contacts.filter((c) => matchesContact(c, { ...filters, tradeShow: null }))).map(
-        (label) => ({ value: label, label, icon: <Ticket aria-hidden className="size-4" /> })
-      ),
-    [contacts, filters]
+      tradeShowsIn(
+        contacts.filter((c) => matchesContact(c, { ...filters, tradeShow: null }, outreach))
+      ).map((label) => ({ value: label, label, icon: <Ticket aria-hidden className="size-4" /> })),
+    [contacts, filters, outreach]
+  );
+
+  /*
+    Everybody else at the same company, for the "anyone else?" step. Worked
+    out from the book already in memory rather than asked of the server —
+    the panel has the whole list sitting beside it.
+  */
+  const colleaguesOf = (c: ContactSummary) =>
+    c.company_id ? contacts.filter((o) => o.company_id === c.company_id && o.id !== c.id) : [];
+
+  /*
+    All four states, always — unlike the other three filters, which only
+    offer what somebody in view carries. "Not contacted" has to be there
+    even when nobody is, because that is the state you are trying to empty.
+  */
+  const outreachOptions: FilterOption<string>[] = useMemo(
+    () =>
+      OUTREACH_ORDER.map((state) => ({
+        value: state,
+        label: OUTREACH_LABELS[state],
+        icon: <Send aria-hidden className="size-4" />,
+      })),
+    []
   );
 
   const isEmptyBook = contacts.length === 0;
@@ -334,6 +368,7 @@ export function ContactsApp({
     if (filters.company) params.set("company", filters.company);
     if (filters.relationshipId) params.set("relationship", filters.relationshipId);
     if (filters.tradeShow) params.set("show", filters.tradeShow);
+    if (filters.outreach) params.set("outreach", filters.outreach);
     const query = params.toString();
     return query ? `?${query}` : "";
   }, [filters]);
@@ -605,6 +640,18 @@ export function ContactsApp({
                       }
                     />
                   )}
+                  <FilterDropdown
+                    label="Outreach"
+                    icon={<Send aria-hidden className="size-4" />}
+                    options={outreachOptions}
+                    selected={filters.outreach ? [filters.outreach] : []}
+                    onChange={(next) =>
+                      setFilters((f) => ({
+                        ...f,
+                        outreach: (next[next.length - 1] as ContactFilters["outreach"]) ?? null,
+                      }))
+                    }
+                  />
                   {activeFilters > 0 && (
                     <button
                       type="button"
@@ -614,6 +661,7 @@ export function ContactsApp({
                           company: null,
                           relationshipId: null,
                           tradeShow: null,
+                          outreach: null,
                         }))
                       }
                       className="inline-flex h-12 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[16px] leading-[22px] font-bold text-sub hover:text-fg"
@@ -647,6 +695,7 @@ export function ContactsApp({
                         <ContactRow
                           key={contact.id}
                           contact={contact}
+                          outreach={outreach[contact.id] ?? NO_OUTREACH}
                           onSelect={wide ? () => select(contact) : undefined}
                           selected={wide && contact.id === selectedId}
                         />
@@ -775,6 +824,8 @@ export function ContactsApp({
             key={selected.id}
             contact={selected}
             events={panelEvents}
+            outreach={outreach[selected.id] ?? NO_OUTREACH}
+            colleagues={colleaguesOf(selected)}
             embedded
             onGone={() => setSelectedId(null)}
             onClose={() => setSelectedId(null)}
