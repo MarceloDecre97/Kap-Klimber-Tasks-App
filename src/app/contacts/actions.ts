@@ -6,6 +6,7 @@ import { getCurrentMember } from "@/lib/get-current-member";
 import { listContactEvents, listTradeShows, type ContactEvent } from "@/lib/data/contacts";
 import { contactInputSchema, type ContactValues } from "@/lib/validation";
 import { canonicalCountry } from "@/lib/countries";
+import type { OutreachOutcome } from "@/lib/outreach";
 
 type ActionResult<T = { contactId: string }> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -361,33 +362,70 @@ export async function contactActivity(
 }
 
 /**
- * Say they answered, or take it back.
+ * Say how the outreach ended — they answered, or they never did — or take it
+ * back.
  *
- * Thin on purpose: every rule lives in set_contact_in_touch, which is the
- * only thing that can move those two columns. A check repeated here would be
- * a second copy to drift — and one that a direct API call would walk past
- * anyway.
+ * Thin on purpose: every rule lives in set_contact_outcome, which is the only
+ * thing that can move those three columns. A check repeated here would be a
+ * second copy to drift — and one that a direct API call would walk past
+ * anyway. The one thing worth doing here is refusing a value the database
+ * would only refuse later, so a typo fails as a validation error rather than
+ * a 500.
  */
-export async function setInTouch(
+export async function setContactOutcome(
   contactIdInput: string,
-  on: boolean
+  outcome: OutreachOutcome | null
 ): Promise<ActionResult> {
   const contactId = contactIdSchema.safeParse(contactIdInput);
   if (!contactId.success) return { ok: false, error: "Invalid contact." };
+  if (outcome !== null && outcome !== "in_touch" && outcome !== "no_reply") {
+    return { ok: false, error: "Unknown outcome." };
+  }
 
   try {
     const { supabase } = await getCurrentMember();
-    const { error } = await supabase.rpc("set_contact_in_touch", {
+    const { error } = await supabase.rpc("set_contact_outcome", {
       p_contact_id: contactId.data,
-      p_on: on,
+      p_outcome: outcome,
     });
     if (error) throw error;
 
     revalidateContactViews(contactId.data);
     return { ok: true, contactId: contactId.data };
   } catch (error) {
-    console.error("setInTouch failed", error);
+    console.error("setContactOutcome failed", error);
     return { ok: false, error: rpcError(error, "Couldn't record that.") };
+  }
+}
+
+/**
+ * Another round on an outreach that is already finished.
+ *
+ * The point of 0044: a second email to the same prospect is not a second
+ * task. The database records the round on the task's own timeline and moves
+ * the sender's follow-up reminder a week on, so pressing this is the whole
+ * gesture — no form, no new card, no reminder to re-set by hand.
+ *
+ * Every contact on the task is revalidated rather than just one, because one
+ * email to three people is one round each and all three pills move.
+ */
+export async function recordOutreachSent(
+  taskIdInput: string
+): Promise<ActionResult<{ taskId: string }>> {
+  /* Same shape, different subject: contactIdSchema is a bare uuid check. */
+  const taskId = contactIdSchema.safeParse(taskIdInput);
+  if (!taskId.success) return { ok: false, error: "Invalid task." };
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase.rpc("record_outreach_sent", { p_task_id: taskId.data });
+    if (error) throw error;
+
+    revalidateContactViews();
+    return { ok: true, taskId: taskId.data };
+  } catch (error) {
+    console.error("recordOutreachSent failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't record that round.") };
   }
 }
 

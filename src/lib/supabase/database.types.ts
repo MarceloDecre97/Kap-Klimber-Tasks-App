@@ -41,7 +41,14 @@ export type TaskEventKind =
   | "deleted"
   | "restored"
   /** Recorded when the creator chases somebody's reminder. See 0034. */
-  | "reminder_nudge";
+  | "reminder_nudge"
+  /**
+   * Another round of an outreach, sent without a new task. See 0044.
+   *
+   * Written only by record_outreach_sent, which also moves the sender's
+   * follow-up reminder a week on.
+   */
+  | "outreach_sent";
 
 /** Everything a contact's Activity can record. */
 export type ContactEventKind = "created" | "edited" | "deleted" | "restored";
@@ -297,9 +304,15 @@ export interface Database {
           office_phone: string | null;
           /** Digits only, and only alongside an office line. See 0040. */
           office_phone_ext: string | null;
-          /** They answered. An assertion, written only by set_contact_in_touch. */
-          in_touch_at: string | null;
-          in_touch_by: string | null;
+          /**
+           * How the outreach ended: 'in_touch' or 'no_reply', or null while
+           * it is still running. An assertion — a reply lands in somebody's
+           * inbox and a silence lands nowhere — so it is stamped with who
+           * said so and written only by set_contact_outcome. See 0044.
+           */
+          outcome: string | null;
+          outcome_at: string | null;
+          outcome_by: string | null;
           email: string | null;
           email2: string | null;
           website: string | null;
@@ -336,9 +349,10 @@ export interface Database {
           | "updated_at"
           | "mobile_digits"
           | "office_digits"
-          /* Never written directly — set_contact_in_touch is the only way. */
-          | "in_touch_at"
-          | "in_touch_by"
+          /* Never written directly — set_contact_outcome is the only way. */
+          | "outcome"
+          | "outcome_at"
+          | "outcome_by"
         > &
           Partial<Pick<Database["public"]["Tables"]["contacts"]["Row"], "id" | "company_id">>;
         Update: Partial<
@@ -349,8 +363,9 @@ export interface Database {
             | "created_at"
             | "mobile_digits"
             | "office_digits"
-            | "in_touch_at"
-            | "in_touch_by"
+            | "outcome"
+            | "outcome_at"
+            | "outcome_by"
           >
         >;
         Relationships: [];
@@ -503,9 +518,20 @@ export interface Database {
        * only, and only on a task already in the bin. Returns what it
        * destroyed: { title, notes, events }. See 0021_purge_task.sql.
        */
-      /* The only writer of contacts.in_touch_at. See 0041_outreach.sql. */
-      set_contact_in_touch: { Args: { p_contact_id: string; p_on: boolean }; Returns: void };
-      can_confirm_in_touch: { Args: { p_contact_id: string }; Returns: boolean };
+      /**
+       * The only writer of contacts.outcome. Pass null to take an outcome
+       * back off. See 0044_outreach_outcome.sql.
+       */
+      set_contact_outcome: {
+        Args: { p_contact_id: string; p_outcome: "in_touch" | "no_reply" | null };
+        Returns: void;
+      };
+      can_set_contact_outcome: { Args: { p_contact_id: string }; Returns: boolean };
+      /**
+       * Another round on a completed outreach task, and the sender's
+       * follow-up reminder moved a week on. See 0044.
+       */
+      record_outreach_sent: { Args: { p_task_id: string }; Returns: void };
       /** Refused while anyone is still at the company. See 0024_companies.sql. */
       delete_company: { Args: { p_company_id: string }; Returns: void };
       company_contact_count: { Args: { p_company_id: string }; Returns: number };

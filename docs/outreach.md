@@ -143,3 +143,83 @@ in step with who is on the task until somebody types their own wording, at
 which point it is theirs for good. Written as an effect it fought the input
 on every render; derived, the box simply shows the generated words and the
 first keystroke hands it over.
+
+## Rounds, and the two ways it ends (0044)
+
+The chase used to cost one task per email, and only had one ending.
+
+**A round is not a task.** Four emails to a cold prospect was four task cards
+that all said much the same thing, times a few dozen prospects — a task list
+nobody could read. So a chase is now rounds on one task: completing the
+outreach task is round one, and **Sent another** on the contact records each
+one after it. `record_outreach_sent` writes an `outreach_sent` event on the
+task's own timeline, so the evidence is still the task's history rather than a
+counter somebody remembered to tick, and `Contacted ×4` counts rounds instead
+of cards.
+
+**"No reply" is a decision, parked.** `in_touch_at`/`in_touch_by` became
+`outcome`/`outcome_at`/`outcome_by`, because "they answered" and "they never
+did" are two answers to one question and two booleans would have been a rule
+somebody had to remember. The pane names both dates Marcelo asked for: when
+the first round went out, and when the silence was called.
+
+**A new round outranks a silence.** `no_reply` is the one state that steps
+aside: give up in March, start a fresh outreach today and the pill reads
+"Reaching out" again, because that is what is happening. "In touch" does not
+step aside — a relationship is not lost by emailing somebody again.
+
+**Giving up is offered after one round, and is the quietest thing in the row.**
+One cold email that went nowhere is a real thing to park, so the threshold is
+one; but it is a link rather than a button, because it should never be what a
+thumb finds first on a chase that still has life in it. It is never offered
+before any round has been sent — "No reply" from somebody nobody emailed is
+not a silence, it is a mistake waiting to happen.
+
+**Both endings ask who they count for**, when the email went to more than one
+person, and for symmetrical reasons read in opposite directions: marking Mike
+"In touch" because Sheena replied is a claim nobody made, and giving up on
+Sheena because Mike never answered throws away a live thread.
+
+### The reminder was the hard part
+
+Marcelo asked the question that broke the first design: *does the reminder
+stay active even though the task is completed?*
+
+No — and worse than no. Two separate rules killed it:
+
+1. `run_scheduled_notifications()` skipped reminders on completed tasks
+   (0035, rules 1 and 2).
+2. `clear_reminders_on_complete()` **deleted** them outright (0034).
+
+For ordinary work both are right: a nag about finished work should stop, and
+deleting it is more honest than leaving it to lurk. For outreach both are
+exactly backwards, because **completing the task is when the email went out** —
+the event the week's wait is measured from. The reminder the Contact button
+arms was being destroyed by the very act that starts it counting, so the first
+week's chase could never once fire. Loosening the scheduler alone would have
+fixed nothing: there would have been no row left to find.
+
+So 0044 exempts outreach from both, and adds the stop condition that keeps it
+from nagging for ever: `outreach_still_owed(task)` — true while at least one
+live contact on the task has no outcome. It is read every minute rather than
+switched off once, so marking In touch or No reply ends the chase by itself
+with nothing to remember to cancel. Three people on one email and one of them
+answers: the reminder keeps coming, because two of them haven't.
+
+`record_outreach_sent` re-arms that reminder seven days on, and writes it
+directly rather than through `set_task_reminder` — that function requires its
+subject to be an assignee, which is right for putting a reminder on somebody
+else's plate and wrong here. You can create an outreach task, assign it to
+Dee, and still be the one who sends the email; refusing you a reminder for
+yourself would have meant the round inserted and the reminder threw, rolling
+back the whole call and losing the round.
+
+**A near miss worth recording.** The first draft of 0044 rewrote
+`task_events_kind_check` from memory and invented `deletion_requested`,
+`deletion_cancelled`, `deletion_approved`, `deletion_declined` — dropping the
+real `delete_requested`, `delete_denied`, `delete_cancelled`, `deleted` and
+`reminder_nudge`. Every future deletion request and nudge would have been
+rejected by the constraint. The local tests all passed because none of them
+exercised a deletion or a nudge; it was caught by comparing the app's
+`TaskEventKind` against the migration and then reading 0014 and 0034. There is
+now a test that inserts all eleven kinds.

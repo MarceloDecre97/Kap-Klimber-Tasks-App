@@ -13,6 +13,7 @@ import {
   taskLinkSchema,
   type TaskLinkInput,
 } from "@/lib/validation";
+import { outreachFollowUpAt } from "@/lib/outreach";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -228,6 +229,35 @@ export async function createTask(input: unknown): Promise<ActionResult> {
 
     await syncTaskContacts(supabase, task.id, member.id, data.contactIds);
     await syncTaskLinks(supabase, task.id, member.id, data.links);
+
+    /*
+      An outreach task arms its own follow-up, a week out, for whoever is
+      going to do the chasing.
+
+      Set here rather than left to the form because the form has no reminder
+      field — since 0034 a reminder belongs to a person, and a single switch
+      on a form has no answer to "whose?". The answer for outreach is not
+      ambiguous at all: the people assigned to send the email are the people
+      who need reminding that no reply came back.
+
+      Deliberately survivable. The reminder is worth having and is not what
+      the task is for, so a failure here is logged and the task still stands
+      — better a chase you have to remember than a lost task and a save that
+      looked like it failed. See 0044, which also keeps this reminder alive
+      through completion, since completing an outreach task is when the email
+      goes out rather than when the matter ends.
+    */
+    if (data.isOutreach === true) {
+      const remindAt = outreachFollowUpAt().toISOString();
+      for (const memberId of data.assigneeIds) {
+        const { error: reminderError } = await supabase.rpc("set_task_reminder", {
+          p_task_id: task.id,
+          p_member_id: memberId,
+          p_remind_at: remindAt,
+        });
+        if (reminderError) console.error("outreach follow-up reminder failed", reminderError);
+      }
+    }
 
     revalidateTaskViews();
     return { ok: true, taskId: task.id };

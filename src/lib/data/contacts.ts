@@ -3,8 +3,19 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemberSummary } from "@/lib/data/tasks";
 import type { CompanySummary, CompanyType, ContactRelationship } from "@/lib/companies-view";
-import type { ContactEventKind, Database, TaskStatus } from "@/lib/supabase/database.types";
-import { NO_OUTREACH, outreachStateOf, type Outreach, type OutreachTask } from "@/lib/outreach";
+import type {
+  ContactEventKind,
+  Database,
+  TaskEventKind,
+  TaskStatus,
+} from "@/lib/supabase/database.types";
+import {
+  NO_OUTREACH,
+  outreachStateOf,
+  type Outreach,
+  type OutreachOutcome,
+  type OutreachTask,
+} from "@/lib/outreach";
 
 /**
  * The address book, read.
@@ -47,9 +58,13 @@ export interface ContactSummary {
   postal_code: string | null;
   country: string | null;
   source: string | null;
-  /** They answered. Written only through set_contact_in_touch — see 0041. */
-  in_touch_at: string | null;
-  in_touch_by: string | null;
+  /**
+   * How the outreach ended: 'in_touch', 'no_reply', or null while it runs.
+   * Written only through set_contact_outcome — see 0044.
+   */
+  outcome: OutreachOutcome | null;
+  outcome_at: string | null;
+  outcome_by: string | null;
   /**
    * The filterable half of where they came from. Free text stays free — this
    * is the part the book is filtered by, so it is split from the year and
@@ -85,7 +100,7 @@ export interface ContactEvent {
 const CONTACT_SELECT = `
   id, first_name, last_name, job_title, company, company_id,
   mobile, office_phone, office_phone_ext, email, email2, website,
-  in_touch_at, in_touch_by,
+  outcome, outcome_at, outcome_by,
   street, suite, city, state, postal_code, country, source, notes,
   trade_show, trade_show_year,
   created_at, deleted_at,
@@ -290,7 +305,8 @@ export async function listOutreach(
          id, title, status, created_at, completed_at, is_outreach, deleted_at,
          created_by:members!tasks_created_by_fkey(id, display_name, initials, color),
          completed_by:members!tasks_completed_by_fkey(id, display_name, initials, color),
-         assignees:task_assignees(member_id)
+         assignees:task_assignees(member_id),
+         rounds:task_events(kind, created_at)
        )`
     )
     .eq("task.is_outreach", true)
@@ -310,6 +326,7 @@ export async function listOutreach(
       created_by: MemberSummary | null;
       completed_by: MemberSummary | null;
       assignees: { member_id: string }[] | null;
+      rounds: { kind: TaskEventKind; created_at: string }[] | null;
     } | null;
   };
 
@@ -334,12 +351,22 @@ export async function listOutreach(
     const t = row.task;
     if (!t) continue;
     /*
-      "Mine" is the same rule can_confirm_in_touch enforces: the person who
+      "Mine" is the same rule can_set_contact_outcome enforces: the person who
       made the task, or anyone put on it. Worked out here as well as there so
       the button can be hidden rather than shown and then refused.
     */
     const mine =
       t.created_by?.id === meId || (t.assignees ?? []).some((a) => a.member_id === meId);
+    /*
+      Every event on the task comes back, so the rounds are filtered here
+      rather than in the query: PostgREST cannot filter an embedded table
+      without also making it an inner join, which would drop every outreach
+      task that has no extra rounds yet — that is, almost all of them.
+    */
+    const sentAgainAt = (t.rounds ?? [])
+      .filter((e) => e.kind === "outreach_sent")
+      .map((e) => e.created_at)
+      .sort();
     (byContact[row.contact_id] ??= []).push({
       task_id: t.id,
       title: t.title,
@@ -350,6 +377,7 @@ export async function listOutreach(
       completed_by: t.completed_by,
       mine,
       people: peopleByTask[t.id] ?? [],
+      sentAgainAt,
     });
   }
 
@@ -358,15 +386,32 @@ export async function listOutreach(
     tasks.sort((a, b) => b.created_at.localeCompare(a.created_at));
     const done = tasks.filter((t) => t.status === "complete");
     const open = tasks.filter((t) => t.status !== "complete");
+
+    /*
+      Every round that went out, as a flat list of dates.
+
+      A completed task is round one and each "Sent another" on it is the next,
+      so the count is the completions plus the events — not the number of
+      tasks. That is the whole point of 0044: chasing somebody four times
+      should read ×4 whether it took four task cards or one.
+    */
+    const rounds = done
+      .flatMap((t) => [t.completed_at, ...t.sentAgainAt])
+      .filter((d): d is string => Boolean(d))
+      .sort();
+
     const shape = {
-      contactedCount: done.length,
+      contactedCount: rounds.length,
       openCount: open.length,
       latestCompleted: done[0] ?? null,
       latestOpen: open[0] ?? null,
       tasks,
-      inTouchAt: null,
-      inTouchBy: null,
-      /* A reply can only be confirmed off the back of a finished round. */
+      firstContactedAt: rounds[0] ?? null,
+      lastContactedAt: rounds[rounds.length - 1] ?? null,
+      outcome: null,
+      outcomeAt: null,
+      outcomeBy: null,
+      /* An outcome can only be recorded off the back of a finished round. */
       canConfirm: done.some((t) => t.mine),
     };
     out[contactId] = { ...shape, state: outreachStateOf(shape) };
@@ -391,8 +436,9 @@ export function withOutreach(
     const base = outreach[c.id] ?? NO_OUTREACH;
     const shape = {
       ...base,
-      inTouchAt: c.in_touch_at,
-      inTouchBy: c.in_touch_by ? byId.get(c.in_touch_by) ?? null : null,
+      outcome: c.outcome,
+      outcomeAt: c.outcome_at,
+      outcomeBy: c.outcome_by ? byId.get(c.outcome_by) ?? null : null,
     };
     out[c.id] = { ...shape, state: outreachStateOf(shape) };
   }

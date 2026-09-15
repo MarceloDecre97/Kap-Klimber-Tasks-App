@@ -1,23 +1,30 @@
-import { Check, CheckCheck, Clock } from "lucide-react";
+import { Check, CheckCheck, CircleSlash, Clock } from "lucide-react";
 import { hasOpenRound, outreachLabel, type Outreach } from "@/lib/outreach";
 import { cn } from "@/lib/utils";
 
 /**
  * Where a contact stands, in one pill.
  *
- * Four states and four colours, but the quiet one is the point: "Not
- * contacted" is true of nearly everybody in a book that has just been
- * imported, so it is drawn in the border grey rather than shouting. The
- * states that mean somebody did something are the ones that catch the eye.
+ * Five states, but the quiet ones are the point: "Not contacted" is true of
+ * nearly everybody in a book that has just been imported, so it is drawn in
+ * the border grey rather than shouting. The states that mean somebody did
+ * something are the ones that catch the eye.
  *
- * Ticks rather than words for the last two, borrowed from every messaging app
- * anybody here uses: one tick sent, two ticks came back.
+ * Ticks rather than words for the middle two, borrowed from every messaging
+ * app anybody here uses: one tick sent, two ticks came back.
+ *
+ * "No reply" is grey as well, and deliberately so — it is not a failure to be
+ * flagged in red, it is a thread that is no longer live, the same as never
+ * having started one. What separates it from "Not contacted" is the firmer
+ * edge: `sub` rather than `border`, because giving up is a decision somebody
+ * made and never trying is just the state of the world.
  */
 const STYLES: Record<Outreach["state"], string> = {
   none: "border-border text-sub",
   open: "border-accent text-accent",
   contacted: "border-ok text-ok",
   in_touch: "border-link text-link",
+  no_reply: "border-sub text-sub",
 };
 
 const ICONS = {
@@ -25,6 +32,7 @@ const ICONS = {
   open: Clock,
   contacted: Check,
   in_touch: CheckCheck,
+  no_reply: CircleSlash,
 } as const;
 
 export function OutreachPill({ outreach, className }: { outreach: Outreach; className?: string }) {

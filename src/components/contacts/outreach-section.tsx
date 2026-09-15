@@ -3,32 +3,49 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Send } from "lucide-react";
+import { Check, CircleSlash, Send, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OutreachPill } from "@/components/contacts/outreach-pill";
 import { useToast } from "@/components/ui/toast";
-import { setInTouch } from "@/app/contacts/actions";
+import { recordOutreachSent, setContactOutcome } from "@/app/contacts/actions";
 import { Avatar } from "@/components/ui/avatar";
 import { avatarColor, fullName, initialsOf } from "@/lib/contacts-view";
 import { cn, formatTimestampWithYear } from "@/lib/utils";
-import type { Outreach } from "@/lib/outreach";
+import {
+  OUTREACH_FOLLOW_UP_DAYS,
+  canGiveUp,
+  canSendAnother,
+  type Outreach,
+  type OutreachOutcome,
+} from "@/lib/outreach";
 import type { ContactSummary } from "@/lib/data/contacts";
 
 /** A task can carry four people. See 0041 — one email to four is four records. */
 const MAX_PER_TASK = 4;
 
+/** What the two endings are called where somebody has to read them. */
+const OUTCOME_WORDS: Record<OutreachOutcome, { verb: string; done: string; undo: string }> = {
+  in_touch: { verb: "in touch", done: "Marked as in touch", undo: "In touch taken back" },
+  no_reply: { verb: "no reply", done: "Marked as no reply", undo: "No reply taken back" },
+};
+
 /**
  * Outreach, on the person's own page.
  *
- * The section says three different things depending on where they stand, and
- * the wording is chosen so that nobody has to read the pill and the sentence
- * and reconcile them. The pill is the headline; this is the detail.
+ * The section says a different thing depending on where they stand, and the
+ * wording is chosen so that nobody has to read the pill and the sentence and
+ * reconcile them. The pill is the headline; this is the detail.
  *
  * What is deliberately missing is a way to mark somebody contacted by hand.
  * Marcelo's rule, and the right one: if Fred rings someone from his truck he
  * makes the task and ticks it off, which takes half a minute and leaves
  * evidence. A button that set the flag on its own would make the book a
  * record of what people remembered to click.
+ *
+ * What is deliberately present, since 0044, is "Sent another" — because the
+ * rule above was costing a whole task per email. A chase is now rounds on one
+ * task rather than a task per round, which is the same evidence without the
+ * task list turning into a list of near-identical cards.
  */
 export function OutreachSection({
   contact,
@@ -47,8 +64,14 @@ export function OutreachSection({
   const [isPending, startTransition] = useTransition();
   const [picking, setPicking] = useState(false);
   const [also, setAlso] = useState<string[]>([]);
-  /* Who the reply counts for. Null while the question is not being asked. */
-  const [replyingFor, setReplyingFor] = useState<string[] | null>(null);
+  /*
+    The ending being recorded and who it counts for. Null while nothing is
+    being asked. One piece of state for both endings rather than two, because
+    the question is identical — only the word changes.
+  */
+  const [deciding, setDeciding] = useState<{ outcome: OutreachOutcome; ids: string[] } | null>(
+    null
+  );
   const contactId = contact.id;
 
   /*
@@ -71,25 +94,28 @@ export function OutreachSection({
     router.push(`/tasks/new?contacts=${ids.join(",")}&outreach=1`);
   }
 
-  function confirm(on: boolean, ids: string[] = [contactId]) {
+  function record(outcome: OutreachOutcome | null, ids: string[] = [contactId]) {
     startTransition(async () => {
       const failures: string[] = [];
       for (const id of ids) {
-        const result = await setInTouch(id, on);
+        const result = await setContactOutcome(id, outcome);
         if (!result.ok) failures.push(result.error);
       }
-      setReplyingFor(null);
+      setDeciding(null);
       if (failures.length > 0) {
         showToast({ message: failures[0]! });
         return;
       }
       onChanged();
+      const was = outreach.outcome;
       showToast({
-        message: on
+        message: outcome
           ? ids.length > 1
-            ? `${ids.length} marked as in touch`
-            : "Marked as in touch"
-          : "In touch taken back",
+            ? `${ids.length} marked as ${OUTCOME_WORDS[outcome].verb}`
+            : OUTCOME_WORDS[outcome].done
+          : was
+            ? OUTCOME_WORDS[was].undo
+            : "Taken back",
       });
     });
   }
@@ -98,22 +124,85 @@ export function OutreachSection({
     One email to three people gets one reply, and it usually speaks for all
     three — so the question is who it counts for, asked once, with everybody
     on that task ticked to begin with.
- 
+
     Not assumed, though. If only Sheena ever came back, "In touch" on Mike is
     a claim nobody made, and in six months it is the kind of wrong that sends
     somebody into a conversation thinking they have a relationship they do
     not. Two taps for the common case, one untick for the honest one.
+
+    Giving up is asked the same way and for the same reason, read the other
+    direction: if Sheena answered and Mike never did, parking Mike is right
+    and parking Sheena would be throwing away a live thread.
   */
-  function startConfirm() {
+  function startDeciding(outcome: OutreachOutcome) {
     const others = outreach.latestCompleted?.people ?? [];
     if (others.length > 1) {
-      setReplyingFor(others.map((p) => p.id));
+      setDeciding({ outcome, ids: others.map((p) => p.id) });
       return;
     }
-    confirm(true);
+    record(outcome);
   }
 
-  const { state, latestOpen, latestCompleted, inTouchAt, inTouchBy, canConfirm, tasks } = outreach;
+  /*
+    Another round on the task that is already there, rather than a new one.
+    The database moves the follow-up reminder on by a week as part of the same
+    call, so this button is the entire gesture.
+  */
+  function sendAnother() {
+    const taskId = outreach.latestCompleted?.task_id;
+    if (!taskId) return;
+    startTransition(async () => {
+      const result = await recordOutreachSent(taskId);
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      onChanged();
+      showToast({ message: `Round ${outreach.contactedCount + 1} recorded` });
+    });
+  }
+
+  const {
+    state,
+    latestOpen,
+    latestCompleted,
+    outcome,
+    outcomeAt,
+    outcomeBy,
+    canConfirm,
+    contactedCount,
+    firstContactedAt,
+    lastContactedAt,
+    tasks,
+  } = outreach;
+
+  /*
+    Every round that ever went out, newest first, flattened across tasks.
+
+    A task with three "Sent another" events on it is four lines here, not one,
+    because four emails is what happened. The open tasks come in as
+    themselves, since an intention has no send date to show.
+  */
+  const history = [
+    ...tasks.flatMap((t) =>
+      t.status === "complete"
+        ? [
+            {
+              at: t.completed_at ?? t.created_at,
+              who: t.completed_by?.display_name ?? "somebody",
+              what: t.title,
+              open: false,
+            },
+            ...t.sentAgainAt.map((at) => ({
+              at,
+              who: t.completed_by?.display_name ?? "somebody",
+              what: "sent another",
+              open: false,
+            })),
+          ]
+        : [{ at: t.created_at, who: t.created_by?.display_name ?? "somebody", what: t.title, open: true }]
+    ),
+  ].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <div className="flex flex-col gap-2">
@@ -146,17 +235,38 @@ export function OutreachSection({
           </p>
         )}
 
-        {latestCompleted && (
+        {/*
+          The shape of the chase, in one sentence: when it started, how many
+          rounds it has taken, and when the last one went.
+
+          Both ends are named because they answer different questions. "First
+          reached out in March" is how long this has been going on; "last
+          round three weeks ago" is whether it is your turn. A single date
+          would leave you guessing which one you were reading — and the first
+          date is the one Marcelo asked for by name when we designed "No
+          reply", because it is what tells you whether a silence is a week old
+          or a season old.
+        */}
+        {firstContactedAt && (
           <p className="text-[17px] leading-6 text-fg text-pretty">
-            Contacted by {latestCompleted.completed_by?.display_name ?? "somebody"},{" "}
-            {formatTimestampWithYear(latestCompleted.completed_at ?? latestCompleted.created_at)}.
+            First reached out {formatTimestampWithYear(firstContactedAt)}.
+            {contactedCount > 1 && (
+              <>
+                {" "}
+                {contactedCount} rounds, the last{" "}
+                {formatTimestampWithYear(lastContactedAt ?? firstContactedAt)}.
+              </>
+            )}
+            {contactedCount === 1 && latestCompleted && (
+              <> Sent by {latestCompleted.completed_by?.display_name ?? "somebody"}.</>
+            )}
           </p>
         )}
 
-        {inTouchAt && (
+        {outcome && outcomeAt && (
           <p className="text-[17px] leading-6 text-fg text-pretty">
-            In touch — confirmed by {inTouchBy?.display_name ?? "somebody"},{" "}
-            {formatTimestampWithYear(inTouchAt)}.
+            {outcome === "in_touch" ? "In touch" : "No reply"} — recorded by{" "}
+            {outcomeBy?.display_name ?? "somebody"}, {formatTimestampWithYear(outcomeAt)}.
           </p>
         )}
 
@@ -167,46 +277,86 @@ export function OutreachSection({
           </Button>
 
           {/*
-            Only for the people who did the outreach, and only once a round
-            has finished. The database holds the same rule — this hides a
-            button that would otherwise be refused, rather than being the
-            rule itself.
+            Another round. Shown before the two endings because on a live
+            chase it is much the commonest thing to press: most weeks the
+            answer to "has anything happened?" is no, and you send again.
           */}
-          {canConfirm && !inTouchAt && (
-            <Button variant="secondary" size="md" onClick={startConfirm} disabled={isPending} className="w-auto">
+          {canSendAnother(outreach) && (
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={sendAnother}
+              disabled={isPending}
+              className="w-auto"
+            >
+              <SendHorizontal aria-hidden className="size-5" strokeWidth={1.75} />
+              Sent another
+            </Button>
+          )}
+
+          {/*
+            Only for the people who did the outreach, and only once a round
+            has finished. The database holds the same rules — these hide
+            buttons that would otherwise be refused, rather than being the
+            rules themselves.
+          */}
+          {canConfirm && !outcome && (
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => startDeciding("in_touch")}
+              disabled={isPending}
+              className="w-auto"
+            >
               They replied
             </Button>
           )}
-          {canConfirm && inTouchAt && (
-            <Button variant="link" onClick={() => confirm(false)} disabled={isPending}>
-              Not in touch after all
+
+          {/*
+            Giving up, in the quietest treatment the row has: a link rather
+            than a button. It is a real decision and it should be reachable in
+            one tap, but it should never be the thing your thumb finds first
+            on a chase that still has life in it.
+          */}
+          {canGiveUp(outreach) && (
+            <Button variant="link" onClick={() => startDeciding("no_reply")} disabled={isPending}>
+              <CircleSlash aria-hidden className="size-[18px]" strokeWidth={1.75} />
+              No reply
+            </Button>
+          )}
+
+          {canConfirm && outcome && (
+            <Button variant="link" onClick={() => record(null)} disabled={isPending}>
+              {outcome === "in_touch" ? "Not in touch after all" : "Chase them again"}
             </Button>
           )}
         </div>
 
-        {/*
-          Every round, once there has been more than one. A single line of
-          history under a sentence that already says the same thing is
-          repetition; three of them is the story.
-        */}
-        {/* Who the reply counts for, when the email went to more than one. */}
-        {replyingFor !== null && (
+        {/* Who the ending counts for, when the email went to more than one. */}
+        {deciding !== null && (
           <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-border bg-bg p-3">
             <p className="text-[17px] leading-6 text-fg text-pretty">
-              Who replied? One answer often speaks for everybody it was sent to.
+              {deciding.outcome === "in_touch"
+                ? "Who replied? One answer often speaks for everybody it was sent to."
+                : "Who are you giving up on? Leave anyone still worth chasing unticked."}
             </p>
             <ul className="flex flex-col gap-1.5">
-              {(outreach.latestCompleted?.people ?? []).map((person) => {
-                const on = replyingFor.includes(person.id);
+              {(latestCompleted?.people ?? []).map((person) => {
+                const on = deciding.ids.includes(person.id);
                 return (
                   <li key={person.id}>
                     <button
                       type="button"
                       onClick={() =>
-                        setReplyingFor((prev) =>
-                          (prev ?? []).includes(person.id)
-                            ? (prev ?? []).filter((id) => id !== person.id)
-                            : [...(prev ?? []), person.id]
+                        setDeciding((prev) =>
+                          prev === null
+                            ? prev
+                            : {
+                                ...prev,
+                                ids: prev.ids.includes(person.id)
+                                  ? prev.ids.filter((id) => id !== person.id)
+                                  : [...prev.ids, person.id],
+                              }
                         )
                       }
                       className="flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-muted"
@@ -229,12 +379,14 @@ export function OutreachSection({
               <Button
                 size="md"
                 className="w-auto"
-                disabled={isPending || replyingFor.length === 0}
-                onClick={() => confirm(true, replyingFor)}
+                disabled={isPending || deciding.ids.length === 0}
+                onClick={() => record(deciding.outcome, deciding.ids)}
               >
-                {replyingFor.length > 1 ? `Mark ${replyingFor.length} in touch` : "Mark in touch"}
+                {deciding.ids.length > 1
+                  ? `Mark ${deciding.ids.length} as ${OUTCOME_WORDS[deciding.outcome].verb}`
+                  : `Mark as ${OUTCOME_WORDS[deciding.outcome].verb}`}
               </Button>
-              <Button variant="ghost" size="md" className="w-auto" onClick={() => setReplyingFor(null)}>
+              <Button variant="ghost" size="md" className="w-auto" onClick={() => setDeciding(null)}>
                 Cancel
               </Button>
             </div>
@@ -301,18 +453,31 @@ export function OutreachSection({
           </div>
         )}
 
-        {tasks.length > 1 && (
+        {/*
+          Every round, once there has been more than one. A single line of
+          history under a sentence that already says the same thing is
+          repetition; four of them is the story.
+        */}
+        {history.length > 1 && (
           <ul className="flex flex-col gap-1 border-t-[1.5px] border-border pt-3">
-            {tasks.map((t) => (
-              <li key={t.task_id} className="text-timestamp text-sub text-pretty">
-                {t.status === "complete"
-                  ? `${formatTimestampWithYear(t.completed_at ?? t.created_at)} · ${t.completed_by?.display_name ?? "somebody"}`
-                  : `${formatTimestampWithYear(t.created_at)} · open, ${t.created_by?.display_name ?? "somebody"}`}
-                {" — "}
-                {t.title}
+            {history.map((h, i) => (
+              <li key={`${h.at}-${i}`} className="text-timestamp text-sub text-pretty">
+                {formatTimestampWithYear(h.at)} · {h.open ? `open, ${h.who}` : h.who} — {h.what}
               </li>
             ))}
           </ul>
+        )}
+
+        {/*
+          Said once, at the bottom, and only while a chase is live: the
+          reminder is the part of this you cannot see, and somebody who does
+          not know it exists will set one by hand or chase by memory.
+        */}
+        {canSendAnother(outreach) && (
+          <p className="text-timestamp text-sub text-pretty">
+            Each round sets your reminder {OUTREACH_FOLLOW_UP_DAYS} days on. It stops when you
+            record a reply or a no reply.
+          </p>
         )}
       </div>
     </div>
