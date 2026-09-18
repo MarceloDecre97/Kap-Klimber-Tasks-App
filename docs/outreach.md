@@ -262,3 +262,42 @@ there is no third option, and the failure is silent. And a permission test that
 does not run under the permissions it is testing proves nothing; an audit of
 every non-SECURITY-DEFINER trigger function that writes to a `public.` table
 found exactly these two and nothing else.
+
+## Three buttons on one line (measured)
+
+Marcelo asked for all four actions on one line, or failing that three plus
+"No reply" below, on mobile too. The measurement settles which:
+
+At a 360px phone the row inside the outreach card has **290px** — the page's
+`px-5` and the card's `p-3.5` and border take the other 70px. The three
+buttons at `md` with icons need **445px**, which is why they were landing on
+three lines on a phone and two on a desktop. At a new `sm` size with icons
+they still need **328px**. There is no label short enough to close a 38px gap
+without turning "Sent again" into something nobody can read, so **four on one
+line is arithmetically impossible on a phone, and three with icons is too**.
+
+So the icons come off those three. The rename did their job anyway: the icon
+was added because "Sent another" was unclear, and "Sent again" says it in
+words. "They replied" becomes "Replied" — you are on their page, the subject
+was never in doubt. Three plain labels at 44px tall total **280px** and fit
+from 360px up with 10px of headroom, which is what stops this being a layout
+that works until a phone renders a font a shade wider. At 320px they wrap to
+2 + 1, which is a rare width and a graceful failure.
+
+"No reply" keeps its mark: it is on its own row where there is room, and a
+stop sign is worth most on the one control here you cannot undo by accident.
+
+Two containers rather than one wrapping row. Wrapping would put the link on
+the second line only by arithmetic, and the moment a label grew it would climb
+back up and push a button down instead. The arrangement is stated outright.
+
+`sm` is 44px rather than something smaller because that is the floor for
+something a thumb has to hit; going under it to win layout pixels is a bad
+trade. Everything shorter in this app is a chip you read, not a control you
+press.
+
+**How it was measured**, since a previous round got this wrong by measuring a
+hand-written mock: the probe reads the `base`, `secondary`, `link` and `sm`
+class strings out of button.tsx itself and reproduces the real nesting
+(`px-5` → `max-w` → card `p-3.5 border-[1.5px]` → row), against the built CSS
+found in `.next`. If the component changes, the probe changes with it.

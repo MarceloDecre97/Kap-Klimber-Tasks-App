@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, CheckCheck, CircleSlash, RotateCw, Send } from "lucide-react";
+import { Check, CircleSlash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OutreachPill } from "@/components/contacts/outreach-pill";
 import { useToast } from "@/components/ui/toast";
@@ -270,40 +270,57 @@ export function OutreachSection({
           </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="secondary" size="md" onClick={startOutreach} className="w-auto">
-            <Send aria-hidden className="size-5" strokeWidth={1.75} />
+        {/*
+          Three buttons on one line, and the parking decision on its own below.
+
+          Measured, because the eye is a bad judge of this: at a 360px phone
+          the row inside this card has 290px. The three buttons at `md` with
+          icons need 445px — which is why they were landing on three lines on
+          a phone and two on Marcelo's desktop. At `sm` with icons they still
+          need 328px. There is no label short enough to close a 38px gap
+          without turning "Sent again" into something nobody can read.
+
+          So the icons come off these three. The rename did their job anyway:
+          the icon was added because "Sent another" was unclear, and "Sent
+          again" says it in words. Three plain labels at 44px tall total 280px
+          and fit from 360px up, with the ten pixels of headroom that stops
+          this being a layout that works until somebody's phone renders a
+          font a shade wider.
+
+          "No reply" keeps its mark, because it is on its own row where there
+          is room, and because a stop sign is worth more on the one control
+          here you cannot undo by accident.
+
+          Two containers rather than one wrapping row: wrapping would put the
+          link on line two only by arithmetic, and the moment a label grew it
+          would climb back up and push a button down instead. This is the
+          arrangement stated outright.
+        */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={startOutreach} className="w-auto">
             Contact
           </Button>
 
           {/*
-            Another round. Shown before the two endings because on a live
+            Another round. Listed before the two endings because on a live
             chase it is much the commonest thing to press: most weeks the
             answer to "has anything happened?" is no, and you send again.
+
+            "Sent again" rather than "Try again", though it is a letter
+            longer. Past tense is the whole meaning: pressing this sends
+            nothing — you have already sent it, in your own mail client, and
+            this is you telling the book so. On a card full of buttons that
+            do things, "Try again" would read as "send it for me", which is
+            the one thing it cannot do.
           */}
           {canSendAnother(outreach) && (
             <Button
               variant="secondary"
-              size="md"
+              size="sm"
               onClick={sendAnother}
               disabled={isPending}
               className="w-auto"
             >
-              {/*
-                A circular arrow, for "again". Not a stopwatch: the waiting is
-                the reminder's job and it is already spelled out at the foot of
-                this card, while the thing this button is about is that another
-                email has gone.
-
-                And "Sent again" rather than "Try again", though it is a
-                letter longer. Past tense is the whole meaning: pressing this
-                does not send anything — you have already sent it, in your own
-                mail client, and this is you telling the book so. A button
-                labelled "Try again" on a screen full of buttons that do things
-                would read as "send it for me", which is the one thing it
-                cannot do.
-              */}
-              <RotateCw aria-hidden className="size-5" strokeWidth={1.75} />
               Sent again
             </Button>
           )}
@@ -313,45 +330,46 @@ export function OutreachSection({
             has finished. The database holds the same rules — these hide
             buttons that would otherwise be refused, rather than being the
             rules themselves.
+
+            "Replied" rather than "They replied": you are on their page, so
+            the subject was never in doubt, and the two words it saves are
+            what let the row hold three buttons on a phone.
           */}
           {canConfirm && !outcome && (
             <Button
               variant="secondary"
-              size="md"
+              size="sm"
               onClick={() => startDeciding("in_touch")}
               disabled={isPending}
               className="w-auto"
             >
-              {/*
-                Two ticks, matching the In touch pill exactly — one tick sent,
-                two ticks came back. The button and the state it produces now
-                carry the same mark, so the gesture and its result are legible
-                as the same thing.
-              */}
-              <CheckCheck aria-hidden className="size-5" strokeWidth={1.75} />
-              They replied
-            </Button>
-          )}
-
-          {/*
-            Giving up, in the quietest treatment the row has: a link rather
-            than a button. It is a real decision and it should be reachable in
-            one tap, but it should never be the thing your thumb finds first
-            on a chase that still has life in it.
-          */}
-          {canGiveUp(outreach) && (
-            <Button variant="link" onClick={() => startDeciding("no_reply")} disabled={isPending}>
-              <CircleSlash aria-hidden className="size-[18px]" strokeWidth={1.75} />
-              No reply
-            </Button>
-          )}
-
-          {canConfirm && outcome && (
-            <Button variant="link" onClick={() => record(null)} disabled={isPending}>
-              {outcome === "in_touch" ? "Not in touch after all" : "Chase them again"}
+              Replied
             </Button>
           )}
         </div>
+
+        {/*
+          Giving up, and taking an ending back — the two quiet ones, kept
+          below the row and drawn as links rather than buttons. Giving up is a
+          real decision and should be reachable in one tap, but it should
+          never be what a thumb finds first on a chase that still has life
+          in it.
+        */}
+        {(canGiveUp(outreach) || (canConfirm && outcome)) && (
+          <div className="flex flex-wrap items-center gap-4">
+            {canGiveUp(outreach) && (
+              <Button variant="link" onClick={() => startDeciding("no_reply")} disabled={isPending}>
+                <CircleSlash aria-hidden className="size-[18px]" strokeWidth={1.75} />
+                No reply
+              </Button>
+            )}
+            {canConfirm && outcome && (
+              <Button variant="link" onClick={() => record(null)} disabled={isPending}>
+                {outcome === "in_touch" ? "Not in touch after all" : "Chase them again"}
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Who the ending counts for, when the email went to more than one. */}
         {deciding !== null && (

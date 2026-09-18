@@ -4,7 +4,7 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 type Variant = "primary" | "secondary" | "destructive" | "ghost" | "link";
-type Size = "lg" | "md";
+type Size = "lg" | "md" | "sm";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -58,9 +58,19 @@ const variants: Record<Variant, string> = {
   link: "bg-transparent text-brand underline underline-offset-[3px] p-0 h-auto",
 };
 
+/*
+  Three sizes, and `sm` exists for one situation: a row of actions inside a
+  card, on a phone, where `md` cannot fit them.
+
+  44px rather than something smaller, because that is the floor for a thing
+  a thumb has to hit and going under it to win a few pixels of layout is a
+  bad trade. Everything below that floor in this app is a chip you read, not
+  a control you press.
+*/
 const sizes: Record<Size, string> = {
   lg: "h-[60px] px-5 text-[20px] leading-7 w-full",
   md: "h-14 px-4 text-chip",
+  sm: "h-11 px-3 text-timestamp",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
