@@ -271,32 +271,37 @@ export function OutreachSection({
         )}
 
         {/*
-          The actions, with their icons, and the parking decision below them.
+          The actions, with their icons, in one row that wraps where it must.
 
           Measured rather than eyeballed: at a 360px phone the row inside this
-          card has 290px, and these three at `sm` with icons need 346px. So on
-          a phone they take two lines and from about 430px up they take one.
-          That is Marcelo's call, made after seeing both — the icons say what
-          the button does at a glance, and a second line costs nothing but a
-          second line.
+          card has 290px, and the three buttons at `sm` with icons need 348px.
+          So they wrap, and the point is where. Letting all four flow in a
+          single container puts Contact and Sent again on the first line and
+          Replied and No reply together on the second — which is what Marcelo
+          asked for, and it is also simply better: a lone link on a third line
+          was a line spent on nothing.
 
-          The earlier attempt to win a single line everywhere did it by taking
-          the icons off, which bought 66px and spent something worth more.
-          Recorded because the arithmetic was right and the trade was wrong:
-          fitting is not the same as being better.
+          It has been three arrangements now, and each correction was his:
+          bigger buttons on three lines, then no icons to force one line, now
+          this. The icons stayed because they carry meaning every time the
+          card is opened, and a second line costs only a second line. Fitting
+          is not the same as being better.
 
-          Two containers rather than one wrapping row. The endings belong
-          below the actions, and wrapping would only put them there by
-          arithmetic — grow a label and a link climbs up while a button drops
-          down. This states the arrangement outright.
+          One container rather than two, which reverses the note that used to
+          sit here arguing for two. The reasoning then was that wrapping puts
+          the link on its own line only by arithmetic — true, but the
+          arithmetic is the point: what should share a line depends on how
+          much room there is, and stating it outright is what produced the
+          wasted third line on a phone.
 
-          Every label and icon here is 15px and 16px, the same as the buttons.
-          The `link` variant deliberately takes no size class, since a link in
-          a paragraph should be the size of that paragraph — which meant these
-          two inherited the card's body size and stood a good deal larger than
-          the buttons they sit under. Said explicitly here instead.
+          Every label and icon here is 15px and 16px, the buttons and the
+          links alike. The `link` variant deliberately takes no size class,
+          since a link in a paragraph should be the size of that paragraph —
+          which meant these two inherited the card's body size and rendered at
+          18px, a fifth larger than the buttons beside them. Said explicitly
+          instead.
         */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" size="sm" onClick={startOutreach} className="w-auto">
             <Send aria-hidden className="size-4" strokeWidth={1.75} />
             Contact
@@ -354,40 +359,37 @@ export function OutreachSection({
               Replied
             </Button>
           )}
-        </div>
 
-        {/*
-          Giving up, and taking an ending back — the two quiet ones, kept
-          below the row and drawn as links rather than buttons. Giving up is a
-          real decision and should be reachable in one tap, but it should
-          never be what a thumb finds first on a chase that still has life
-          in it.
-        */}
-        {(canGiveUp(outreach) || (canConfirm && outcome)) && (
-          <div className="flex flex-wrap items-center gap-4">
-            {canGiveUp(outreach) && (
-              <Button
-                variant="link"
-                onClick={() => startDeciding("no_reply")}
-                disabled={isPending}
-                className="text-timestamp"
-              >
-                <CircleSlash aria-hidden className="size-4" strokeWidth={1.75} />
-                No reply
-              </Button>
-            )}
-            {canConfirm && outcome && (
-              <Button
-                variant="link"
-                onClick={() => record(null)}
-                disabled={isPending}
-                className="text-timestamp"
-              >
-                {outcome === "in_touch" ? "Not in touch after all" : "Chase them again"}
-              </Button>
-            )}
-          </div>
-        )}
+          {/*
+            Giving up, and taking an ending back — the two quiet ones, drawn
+            as links rather than buttons and last in the row. Giving up is a
+            real decision and should be reachable in one tap, but it should
+            never be what a thumb finds first on a chase that still has life
+            in it. Being a link among buttons does that without hiding it.
+          */}
+          {canGiveUp(outreach) && (
+            <Button
+              variant="link"
+              onClick={() => startDeciding("no_reply")}
+              disabled={isPending}
+              className="text-timestamp"
+            >
+              <CircleSlash aria-hidden className="size-4" strokeWidth={1.75} />
+              No reply
+            </Button>
+          )}
+
+          {canConfirm && outcome && (
+            <Button
+              variant="link"
+              onClick={() => record(null)}
+              disabled={isPending}
+              className="text-timestamp"
+            >
+              {outcome === "in_touch" ? "Not in touch after all" : "Chase them again"}
+            </Button>
+          )}
+        </div>
 
         {/* Who the ending counts for, when the email went to more than one. */}
         {deciding !== null && (

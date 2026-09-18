@@ -263,43 +263,55 @@ does not run under the permissions it is testing proves nothing; an audit of
 every non-SECURITY-DEFINER trigger function that writes to a `public.` table
 found exactly these two and nothing else.
 
-## The action row, measured (and one trade reversed)
+## The action row, measured — and three corrections
 
-At a 360px phone the row inside the outreach card has **290px** — the page's
-`px-5` and the card's `p-3.5` and border take the other 70px. Against that:
+At a 360px phone the row inside the outreach card has **290px**; the page's
+`px-5` and the card's `p-3.5` and border take the other 70px. The three
+buttons at `sm` with icons need 348px. So they wrap, and the only real
+question was *where*.
 
-| | width |
+Where it lands now, with all four actions in one wrapping container:
+
+| width | lines |
 |---|---|
-| three buttons, `md`, with icons | 445px |
-| three buttons, `sm`, with icons | 352px |
-| three buttons, `sm`, no icons | 280px |
+| 320 – 412px (every phone) | `Contact · Sent again` / `Replied · No reply` |
+| 430px | the three buttons / `No reply` |
+| 560px and up | all four on one line |
 
-So four actions on one line is arithmetically impossible on a phone, and three
-with icons is too. The first attempt took the icons off to win a single line
-everywhere. Marcelo reversed it: **keep the icons, two lines on a phone is
-fine.** He is right, and the mistake is worth recording — the arithmetic was
-sound and the trade was wrong. Fitting is not the same as being better, and a
+**Three arrangements, each corrected by Marcelo**, and the corrections are the
+useful part. First: `md` buttons with icons, which took three lines on a phone
+and two on his desktop. Second: icons removed to force a single line
+everywhere — the arithmetic was right and the trade was wrong, because a
 second line costs a second line while an icon carries meaning every time the
-card is opened.
+card is opened. Third: two containers, so the link was *stated* to be on its
+own row — which spent a whole third line on one link. One container, and the
+wrapping decides; what should share a line depends on how much room there is.
 
-Where it lands now: two lines from 360px to about 412px, one line from 430px
-up. `They replied` stays shortened to `Replied` — you are on their page, so
-the subject was never in doubt.
-
-A new `sm` size on Button: `h-11 px-3 text-timestamp`. 44px rather than
-smaller because that is the floor for something a thumb has to hit; going
-under it to win layout pixels is a bad trade. Everything shorter in this app
-is a chip you read, not a control you press.
+`sm` is `h-11 px-3 text-timestamp`. 44px rather than smaller because that is
+the floor for something a thumb has to hit; going under it to win layout
+pixels is a bad trade. Everything shorter in this app is a chip you read, not
+a control you press.
 
 **The `link` variant had no size at all.** It deliberately takes no size class
 — a link inside a paragraph should be the size of that paragraph — so when the
 buttons dropped to 15px, "No reply" and "Chase them again" carried on
 inheriting the card's body size and rendered at **18px**, a fifth larger than
-the buttons directly above them. Measured, not guessed: 18px/98px wide against
-the buttons' 15px/80px. They now say `text-timestamp` explicitly.
+the buttons beside them. Measured: 18px/98px wide against the buttons'
+15px/80px. They now say `text-timestamp` explicitly.
 
-**How it is measured**, since an earlier round got this wrong by measuring a
-hand-written mock: the probe reads the `base`, `secondary`, `link` and `sm`
-class strings out of button.tsx itself and reproduces the real nesting
-(`px-5` → `max-w` → card `p-3.5 border-[1.5px]` → row) against the built CSS
-in `.next`. If the component changes, the probe changes with it.
+### Two ways this measurement went wrong
+
+Worth recording, because both produced confident and false readings.
+
+**Measuring a mock instead of the component.** An earlier round measured a
+hand-written approximation of the pill and declared it fine while the real one
+was wrong. The probe now reads the `base`, `secondary`, `link` and `sm` class
+strings out of button.tsx itself and reproduces the real nesting (`px-5` →
+`max-w` → card `p-3.5 border-[1.5px]` → row) against the built CSS in `.next`.
+
+**Grouping flex items by `top` to count lines.** This reported three lines at
+every width and "No reply on its own line even at 1280px", which was nonsense —
+the link is 20px tall and the buttons 44px, so items on the *same* flex line
+have different tops. Grouping by vertical centre gives the truth. A layout
+probe needs checking against a case whose answer is already known, or it will
+report failures that are entirely its own.
