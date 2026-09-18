@@ -263,41 +263,43 @@ does not run under the permissions it is testing proves nothing; an audit of
 every non-SECURITY-DEFINER trigger function that writes to a `public.` table
 found exactly these two and nothing else.
 
-## Three buttons on one line (measured)
-
-Marcelo asked for all four actions on one line, or failing that three plus
-"No reply" below, on mobile too. The measurement settles which:
+## The action row, measured (and one trade reversed)
 
 At a 360px phone the row inside the outreach card has **290px** — the page's
-`px-5` and the card's `p-3.5` and border take the other 70px. The three
-buttons at `md` with icons need **445px**, which is why they were landing on
-three lines on a phone and two on a desktop. At a new `sm` size with icons
-they still need **328px**. There is no label short enough to close a 38px gap
-without turning "Sent again" into something nobody can read, so **four on one
-line is arithmetically impossible on a phone, and three with icons is too**.
+`px-5` and the card's `p-3.5` and border take the other 70px. Against that:
 
-So the icons come off those three. The rename did their job anyway: the icon
-was added because "Sent another" was unclear, and "Sent again" says it in
-words. "They replied" becomes "Replied" — you are on their page, the subject
-was never in doubt. Three plain labels at 44px tall total **280px** and fit
-from 360px up with 10px of headroom, which is what stops this being a layout
-that works until a phone renders a font a shade wider. At 320px they wrap to
-2 + 1, which is a rare width and a graceful failure.
+| | width |
+|---|---|
+| three buttons, `md`, with icons | 445px |
+| three buttons, `sm`, with icons | 352px |
+| three buttons, `sm`, no icons | 280px |
 
-"No reply" keeps its mark: it is on its own row where there is room, and a
-stop sign is worth most on the one control here you cannot undo by accident.
+So four actions on one line is arithmetically impossible on a phone, and three
+with icons is too. The first attempt took the icons off to win a single line
+everywhere. Marcelo reversed it: **keep the icons, two lines on a phone is
+fine.** He is right, and the mistake is worth recording — the arithmetic was
+sound and the trade was wrong. Fitting is not the same as being better, and a
+second line costs a second line while an icon carries meaning every time the
+card is opened.
 
-Two containers rather than one wrapping row. Wrapping would put the link on
-the second line only by arithmetic, and the moment a label grew it would climb
-back up and push a button down instead. The arrangement is stated outright.
+Where it lands now: two lines from 360px to about 412px, one line from 430px
+up. `They replied` stays shortened to `Replied` — you are on their page, so
+the subject was never in doubt.
 
-`sm` is 44px rather than something smaller because that is the floor for
-something a thumb has to hit; going under it to win layout pixels is a bad
-trade. Everything shorter in this app is a chip you read, not a control you
-press.
+A new `sm` size on Button: `h-11 px-3 text-timestamp`. 44px rather than
+smaller because that is the floor for something a thumb has to hit; going
+under it to win layout pixels is a bad trade. Everything shorter in this app
+is a chip you read, not a control you press.
 
-**How it was measured**, since a previous round got this wrong by measuring a
+**The `link` variant had no size at all.** It deliberately takes no size class
+— a link inside a paragraph should be the size of that paragraph — so when the
+buttons dropped to 15px, "No reply" and "Chase them again" carried on
+inheriting the card's body size and rendered at **18px**, a fifth larger than
+the buttons directly above them. Measured, not guessed: 18px/98px wide against
+the buttons' 15px/80px. They now say `text-timestamp` explicitly.
+
+**How it is measured**, since an earlier round got this wrong by measuring a
 hand-written mock: the probe reads the `base`, `secondary`, `link` and `sm`
 class strings out of button.tsx itself and reproduces the real nesting
-(`px-5` → `max-w` → card `p-3.5 border-[1.5px]` → row), against the built CSS
-found in `.next`. If the component changes, the probe changes with it.
+(`px-5` → `max-w` → card `p-3.5 border-[1.5px]` → row) against the built CSS
+in `.next`. If the component changes, the probe changes with it.

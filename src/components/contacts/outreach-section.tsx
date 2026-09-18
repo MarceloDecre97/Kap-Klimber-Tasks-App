@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, CircleSlash } from "lucide-react";
+import { Check, CheckCheck, CircleSlash, RotateCw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OutreachPill } from "@/components/contacts/outreach-pill";
 import { useToast } from "@/components/ui/toast";
@@ -271,33 +271,34 @@ export function OutreachSection({
         )}
 
         {/*
-          Three buttons on one line, and the parking decision on its own below.
+          The actions, with their icons, and the parking decision below them.
 
-          Measured, because the eye is a bad judge of this: at a 360px phone
-          the row inside this card has 290px. The three buttons at `md` with
-          icons need 445px — which is why they were landing on three lines on
-          a phone and two on Marcelo's desktop. At `sm` with icons they still
-          need 328px. There is no label short enough to close a 38px gap
-          without turning "Sent again" into something nobody can read.
+          Measured rather than eyeballed: at a 360px phone the row inside this
+          card has 290px, and these three at `sm` with icons need 346px. So on
+          a phone they take two lines and from about 430px up they take one.
+          That is Marcelo's call, made after seeing both — the icons say what
+          the button does at a glance, and a second line costs nothing but a
+          second line.
 
-          So the icons come off these three. The rename did their job anyway:
-          the icon was added because "Sent another" was unclear, and "Sent
-          again" says it in words. Three plain labels at 44px tall total 280px
-          and fit from 360px up, with the ten pixels of headroom that stops
-          this being a layout that works until somebody's phone renders a
-          font a shade wider.
+          The earlier attempt to win a single line everywhere did it by taking
+          the icons off, which bought 66px and spent something worth more.
+          Recorded because the arithmetic was right and the trade was wrong:
+          fitting is not the same as being better.
 
-          "No reply" keeps its mark, because it is on its own row where there
-          is room, and because a stop sign is worth more on the one control
-          here you cannot undo by accident.
+          Two containers rather than one wrapping row. The endings belong
+          below the actions, and wrapping would only put them there by
+          arithmetic — grow a label and a link climbs up while a button drops
+          down. This states the arrangement outright.
 
-          Two containers rather than one wrapping row: wrapping would put the
-          link on line two only by arithmetic, and the moment a label grew it
-          would climb back up and push a button down instead. This is the
-          arrangement stated outright.
+          Every label and icon here is 15px and 16px, the same as the buttons.
+          The `link` variant deliberately takes no size class, since a link in
+          a paragraph should be the size of that paragraph — which meant these
+          two inherited the card's body size and stood a good deal larger than
+          the buttons they sit under. Said explicitly here instead.
         */}
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={startOutreach} className="w-auto">
+            <Send aria-hidden className="size-4" strokeWidth={1.75} />
             Contact
           </Button>
 
@@ -321,6 +322,9 @@ export function OutreachSection({
               disabled={isPending}
               className="w-auto"
             >
+              {/* A circular arrow, for "again" — the waiting is the reminder's
+                  job and is already spelled out at the foot of this card. */}
+              <RotateCw aria-hidden className="size-4" strokeWidth={1.75} />
               Sent again
             </Button>
           )}
@@ -343,6 +347,10 @@ export function OutreachSection({
               disabled={isPending}
               className="w-auto"
             >
+              {/* Two ticks, exactly the In touch pill's mark — one tick sent,
+                  two ticks came back. The gesture and the state it produces
+                  carry the same sign. */}
+              <CheckCheck aria-hidden className="size-4" strokeWidth={1.75} />
               Replied
             </Button>
           )}
@@ -358,13 +366,23 @@ export function OutreachSection({
         {(canGiveUp(outreach) || (canConfirm && outcome)) && (
           <div className="flex flex-wrap items-center gap-4">
             {canGiveUp(outreach) && (
-              <Button variant="link" onClick={() => startDeciding("no_reply")} disabled={isPending}>
-                <CircleSlash aria-hidden className="size-[18px]" strokeWidth={1.75} />
+              <Button
+                variant="link"
+                onClick={() => startDeciding("no_reply")}
+                disabled={isPending}
+                className="text-timestamp"
+              >
+                <CircleSlash aria-hidden className="size-4" strokeWidth={1.75} />
                 No reply
               </Button>
             )}
             {canConfirm && outcome && (
-              <Button variant="link" onClick={() => record(null)} disabled={isPending}>
+              <Button
+                variant="link"
+                onClick={() => record(null)}
+                disabled={isPending}
+                className="text-timestamp"
+              >
                 {outcome === "in_touch" ? "Not in touch after all" : "Chase them again"}
               </Button>
             )}
