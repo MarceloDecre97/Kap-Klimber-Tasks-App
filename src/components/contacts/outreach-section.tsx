@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, CircleSlash, Send, SendHorizontal } from "lucide-react";
+import { Check, CheckCheck, CircleSlash, RotateCw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OutreachPill } from "@/components/contacts/outreach-pill";
 import { useToast } from "@/components/ui/toast";
@@ -289,8 +289,22 @@ export function OutreachSection({
               disabled={isPending}
               className="w-auto"
             >
-              <SendHorizontal aria-hidden className="size-5" strokeWidth={1.75} />
-              Sent another
+              {/*
+                A circular arrow, for "again". Not a stopwatch: the waiting is
+                the reminder's job and it is already spelled out at the foot of
+                this card, while the thing this button is about is that another
+                email has gone.
+
+                And "Sent again" rather than "Try again", though it is a
+                letter longer. Past tense is the whole meaning: pressing this
+                does not send anything — you have already sent it, in your own
+                mail client, and this is you telling the book so. A button
+                labelled "Try again" on a screen full of buttons that do things
+                would read as "send it for me", which is the one thing it
+                cannot do.
+              */}
+              <RotateCw aria-hidden className="size-5" strokeWidth={1.75} />
+              Sent again
             </Button>
           )}
 
@@ -308,6 +322,13 @@ export function OutreachSection({
               disabled={isPending}
               className="w-auto"
             >
+              {/*
+                Two ticks, matching the In touch pill exactly — one tick sent,
+                two ticks came back. The button and the state it produces now
+                carry the same mark, so the gesture and its result are legible
+                as the same thing.
+              */}
+              <CheckCheck aria-hidden className="size-5" strokeWidth={1.75} />
               They replied
             </Button>
           )}

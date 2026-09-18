@@ -509,16 +509,34 @@ function Row({
  * makes that rule safe rather than alarming.
  */
 function Activity({ events }: { events: ContactEvent[] }) {
+  /*
+    Collapsed to the single most recent entry, the same as Task Activity.
+
+    A contact accumulates these faster than a task does — every outreach
+    round, every correction to a phone number — and the outreach work made it
+    obvious: half a dozen "Outreach · set to / cleared" lines between you and
+    everything below them. The full history is worth keeping and worth reading
+    occasionally; it is not worth eight lines of every contact, every time.
+  */
+  const [open, setOpen] = useState(false);
+
   // One entry per save, and the "added this contact" event dropped — the
   // line above already says who added them, two lines up.
   const entries = groupContactEvents(events);
   if (entries.length === 0) return null;
 
+  /*
+    Newest first folded and open alike, so opening it extends the list
+    downwards rather than turning it upside down. groupContactEvents already
+    returns them newest first.
+  */
+  const shown = open ? entries : entries.slice(0, 1);
+
   return (
     <div className="flex flex-col gap-2">
       <h2 className="text-field-label text-sub">Activity</h2>
       <ol className="flex flex-col divide-y-[1.5px] divide-border rounded-2xl border-[1.5px] border-border bg-card">
-        {entries.map((entry) => (
+        {shown.map((entry) => (
           <li key={entry.id} className="flex flex-col gap-1 px-4 py-3">
             <span className="text-[17px] leading-6 font-bold text-fg text-pretty">
               {entry.headline}
@@ -539,6 +557,20 @@ function Activity({ events }: { events: ContactEvent[] }) {
           </li>
         ))}
       </ol>
+      {/*
+        Only offered when there is genuinely more than the one line already on
+        screen — a "Read more" that reveals nothing is worse than no control
+        at all. Same wording as the task card, so the two read as one idea.
+      */}
+      {entries.length > 1 && (
+        <button
+          type="button"
+          onClick={() => setOpen((wasOpen) => !wasOpen)}
+          className="self-start text-[16px] leading-[22px] font-bold text-brand cursor-pointer bg-transparent border-none p-0"
+        >
+          {open ? "Show less" : "Read more....."}
+        </button>
+      )}
     </div>
   );
 }

@@ -223,3 +223,42 @@ rejected by the constraint. The local tests all passed because none of them
 exercised a deletion or a nudge; it was caught by comparing the app's
 `TaskEventKind` against the migration and then reading 0014 and 0034. There is
 now a test that inserts all eleven kinds.
+
+## The reminder cleanups had never deleted anything (0045)
+
+Marcelo found it in one line of a test list: complete an ordinary task, and
+its reminder chip is still on the card. It should have gone since 0034.
+
+`clear_reminders_on_complete` and `clear_reminder_on_unassign` both do
+`delete from public.task_reminders`, and **neither was SECURITY DEFINER**.
+`task_reminders` has RLS enabled and exactly one policy —
+`task_reminders_select`, for SELECT. Under RLS a DELETE with no policy does
+not raise: it matches no rows and reports success. So both triggers had been
+running, finding nothing, and returning happily for as long as they existed.
+
+Everything that *writes* reminders is SECURITY DEFINER already
+(`set_task_reminder`, `set_reminder_dismissed`, `clear_task_reminder`), which
+is why setting one always worked and only the automatic clearing was silently
+dead. The deliberate absence of write policies is the right design — reminders
+are written through functions that check permission, never by direct table
+access. These two triggers were never let in on it.
+
+The reported symptom was the mild one. The twin was worse: taking somebody off
+a task never removed their reminder either, which 0034's own comment calls
+"worse than none". It had produced no rows in production yet, and 0044 is what
+made it urgent — outreach reminders now survive completion, so an unassigned
+person could have been nagged indefinitely about a chase that was not theirs.
+
+**Why it got through.** The migration test harness runs as the superuser,
+which bypasses RLS, so the local run of this exact scenario passed. An
+RLS-dependent failure is invisible to a test that is not subject to RLS. The
+tests for 0045 `set role authenticated` first, and the diagnosis was proved by
+running the same script against a database built without 0045 (reminder
+survives) and with it (reminder goes, outreach one stays).
+
+**Two lessons, recorded because they will recur.** Anything that writes to an
+RLS-protected table from inside a trigger needs SECURITY DEFINER or a policy —
+there is no third option, and the failure is silent. And a permission test that
+does not run under the permissions it is testing proves nothing; an audit of
+every non-SECURITY-DEFINER trigger function that writes to a `public.` table
+found exactly these two and nothing else.
