@@ -692,8 +692,32 @@ export interface Database {
         };
         Returns: string;
       };
-      /** The author's, with the inactive-author escape hatch. */
+      /** The author's, with the inactive-author escape hatch. The minutes. */
       can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean };
+      /**
+       * The author, or anybody from Opus Kap who was at the meeting. Governs
+       * the details around the minutes, never the minutes. See 0051.
+       */
+      can_edit_meeting_details: { Args: { p_meeting_id: string }; Returns: boolean };
+      /**
+       * The only way to change who was at a meeting. One permission check,
+       * taken before the delete — see 0051 for the trap this avoids.
+       */
+      set_meeting_attendees: {
+        Args: { p_meeting_id: string; p_contact_ids: string[]; p_member_ids: string[] };
+        Returns: void;
+      };
+      /** Erases binned minutes for good. Tasks that came out of it survive. */
+      purge_meeting: {
+        Args: { p_meeting_id: string };
+        Returns: {
+          title: string;
+          characters: number;
+          comments: number;
+          people: number;
+          tasks: number;
+        };
+      };
       /** Set by hand, or the one company every external attendee shares. */
       meeting_company: { Args: { p_meeting_id: string }; Returns: string | null };
       delete_meeting: { Args: { p_meeting_id: string; p_deleted: boolean }; Returns: void };

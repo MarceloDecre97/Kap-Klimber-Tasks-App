@@ -9,6 +9,15 @@ export interface FilterOption<T extends string> {
   value: T;
   label: string;
   icon?: ReactNode;
+  /**
+   * A line drawn above this row, naming the group it starts.
+   *
+   * The meetings filter needs it: "Internal" and a list of companies are one
+   * question — whose meetings am I looking at — but they are not the same
+   * KIND of answer, and a heading is how a menu says so without becoming two
+   * menus. Optional, and no existing filter uses one.
+   */
+  heading?: string;
 }
 
 const PANEL_WIDTH = 256;
@@ -20,12 +29,15 @@ export function FilterDropdown<T extends string>({
   selected,
   onChange,
   single = false,
+  className,
 }: {
   label: string;
   icon?: ReactNode;
   options: FilterOption<T>[];
   selected: T[];
   onChange: (next: T[]) => void;
+  /** For a trigger that has to share a line — see the meetings list. */
+  className?: string;
   /**
    * One choice at a time, so the count is dropped from the chip.
    *
@@ -40,6 +52,9 @@ export function FilterDropdown<T extends string>({
 
   function toggle(value: T) {
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+    /* One choice means the question is answered; leaving it open is a menu
+       covering the list it just filtered. */
+    if (single) setOpen(false);
   }
 
   return (
@@ -52,11 +67,12 @@ export function FilterDropdown<T extends string>({
         aria-haspopup="listbox"
         className={cn(
           "flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] px-4 text-[16px] leading-[22px] font-bold cursor-pointer transition-transform duration-150 active:scale-[0.97]",
-          selected.length > 0 ? "border-prim bg-prim text-on-prim" : "border-border bg-card text-fg"
+          selected.length > 0 ? "border-prim bg-prim text-on-prim" : "border-border bg-card text-fg",
+          className
         )}
       >
         {icon}
-        {label}
+        <span className="min-w-0 truncate">{label}</span>
         {!single && selected.length > 0 && (
           <span className="tabular-nums">· {selected.length}</span>
         )}
@@ -73,8 +89,13 @@ export function FilterDropdown<T extends string>({
           {options.map((option) => {
             const isSelected = selected.includes(option.value);
             return (
+              <div key={option.value}>
+                {option.heading && (
+                  <p className="mt-1 border-t-[1.5px] border-border px-3 pb-1 pt-2 text-timestamp font-bold uppercase tracking-wider text-sub">
+                    {option.heading}
+                  </p>
+                )}
               <button
-                key={option.value}
                 type="button"
                 role="option"
                 aria-selected={isSelected}
@@ -88,6 +109,7 @@ export function FilterDropdown<T extends string>({
                 <span className="flex-1 truncate">{option.label}</span>
                 {isSelected && <Check aria-hidden className="size-4 shrink-0" />}
               </button>
+              </div>
             );
           })}
           {options.length === 0 && <p className="px-3 py-2.5 text-[16px] text-sub">Nothing here yet.</p>}

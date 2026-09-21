@@ -211,3 +211,94 @@ sat at `order-4`. Equal order is DOM order, the switcher came first, and
 boxes are laid out in, not by how much room they need. Measured again after
 the fix: two rows, 126px, with the clock now exactly the same 44px square as
 the bell and the gear beside it.
+
+## Round three: two permissions, one dropdown, and a month
+
+**The minutes and the details are different things.** Marcelo's correction
+after using round two: "meeting details like participants, time, description
+and title can be modified by any assigned Opus Kap user; the actual meeting
+minutes textbox is only for the creator." 0051 draws that line. Dee
+remembering that Keith was there too is a correction to the record of a
+meeting she sat in, not an edit to Marcelo's paper. "Assigned" means listed in
+`meeting_members` — not the whole team, because a meeting Keith never attended
+is not Keith's to relabel.
+
+**Which turned a wasteful save into a trap.** Attendees were four statements:
+delete the contacts, delete the members, insert the contacts, insert the
+members. Under the old rule that merely cost three extra round trips. Under
+the new one, statement two deletes the row that *gives Dee her permission*,
+and statement four is then refused — she would have wiped the attendee list
+and been unable to put it back. It is one `set_meeting_attendees` function
+now, with the permission check taken before anything is deleted, and the write
+policies on both tables are gone so there is no second path to keep in step.
+The local test proves the whole sequence from Dee's side.
+
+**One consequence worth knowing:** taking yourself off a meeting you did not
+create is a one-way door — being on it is what lets you edit it. The screen
+does not offer the X for your own name unless you wrote the minutes.
+
+**Erasing for good** (`purge_meeting`). The bin made binning reversible; this
+is the other end, and the only irreversible thing about a meeting. Same shape
+as `purge_contact`: it refuses anything not already binned, so it is always
+the second of two deliberate acts, and it returns what it destroyed so the
+screen can name it. Tasks that came out of the meeting survive —
+`tasks.meeting_id` is `on delete set null`, so the work stays and only its
+origin is forgotten.
+
+**One app, one dropdown.** The meetings screen was using the browser's own
+`<select>`, which on Windows is a grey rectangle in a typeface this app does
+not otherwise use, sitting two inches from the address book's filter menus.
+The filter is the Tasklist's `FilterDropdown` now, with an optional group
+heading added for "Companies"; the attendee and company fields are the same
+floating panel underneath. All of them portal into `document.body`, which
+is not decoration: the details panel lives in a column with `overflow-y:
+auto`, and per the CSS spec overflow on one axis clips the other too, so a
+menu drawn inside it would be silently cut off.
+
+**The pickers open on a press, and the company leads.** They listed every
+option the moment the panel opened, which for the team meant three names and
+a face each taking a third of the screen above the thing you were trying to
+reach. Now: press the box, get a menu. The address book's menu shows the
+chosen company's people when you have typed nothing and the whole book the
+moment you type — you know who you met before you know their name is spelled
+Housman, and the supplier who brought somebody from another firm is exactly
+the meeting you would otherwise have to undo the company to record. When a
+company has nobody linked to it, the menu says so rather than being empty,
+which is what the first version did and what made this look broken.
+
+**Two companies, finally honest.** `MeetingSummary.companies` is every
+company in the room; `company_id` stays the single one a meeting *belongs*
+to, null when two firms were present. The card draws the list, so a meeting
+with somebody from AAA and somebody from ADV Mobil stops claiming ADV Mobil,
+and the filter matches against the list, so that meeting turns up under both
+rather than under neither.
+
+**Typing, round two.** Three things Marcelo found. A line is usually finished
+before it is left — "- called eric." and Enter has the caret after a full
+stop, not a letter — so the trailing punctuation is captured rather than
+ending the match, and leaving a line now also settles its first word. `1- `
+is a numbered list, not only `1. ` and `1) `. And `autoCapitalize` is off:
+Android's own sentence capitals fire on the *first letter* of a word, before
+there is a word to judge, so "iPhone" became "IPhone" on the phone while
+staying "iPhone" on the desktop. Ours waits for the space or the Enter, by
+which time it can see the whole word and leave anything carrying a capital
+alone. Thirty-three cases are measured in a real browser against the shipped
+source.
+
+**The month, where the empty right pane was.** It said "Pick a meeting, or
+start a new one", which is a sentence telling you to do the thing you were
+already trying to do. The list on the left is ordered by recency, which finds
+the meeting you had this morning; a month finds the one you had sometime
+before the Louisville trip. Built from the meetings already on the page, with
+days compared as the plain `YYYY-MM-DD` strings the database stores — a
+calendar day has no time zone, and turning one into a `Date` is how a meeting
+held on the 1st starts showing on the 31st.
+
+**A probe that measured itself.** The layout check reported the New meeting
+button shrinking and a horizontal scrollbar. Both were the probe: `Button`'s
+base class is three string literals joined with `+`, and taking the span from
+the first quote to the last kept the `" + "` between them — those quotes then
+terminated the `class` attribute in the probe's HTML, so everything after,
+including `shrink-0`, never reached the button. Measured properly: the button
+holds 161px at every width from 320 to 768, the dropdown gives up the
+difference, and there is no horizontal scroll.

@@ -79,7 +79,7 @@ function revalidateMeetingViews(meetingId?: string) {
 function rpcError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : "";
   /* The database's own refusals are written to be read by a person. */
-  if (message && /minutes|team|exist|long/i.test(message)) return message;
+  if (message && /minutes|team|exist|long|meeting|bin/i.test(message)) return message;
   return fallback;
 }
 
@@ -114,7 +114,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
       .single();
     if (error) throw error;
 
-    await syncAttendees(supabase, meeting.id, member.id, v.contactIds, v.memberIds);
+    await syncAttendees(supabase, meeting.id, v.contactIds, v.memberIds);
 
     revalidateMeetingViews(meeting.id);
     return { ok: true, meetingId: meeting.id };
@@ -137,15 +137,15 @@ export async function updateMeeting(
   }
 
   try {
-    const { supabase, member } = await getCurrentMember();
+    const { supabase } = await getCurrentMember();
     const v = parsed.data;
 
-    const { data: allowed, error: canError } = await supabase.rpc("can_edit_meeting", {
+    const { data: allowed, error: canError } = await supabase.rpc("can_edit_meeting_details", {
       p_meeting_id: meetingId.data,
     });
     if (canError) throw canError;
     if (!allowed) {
-      return { ok: false, error: "Only the person who wrote these minutes can change them." };
+      return { ok: false, error: "Only somebody who was at this meeting can change it." };
     }
 
     const { error } = await supabase
@@ -160,7 +160,7 @@ export async function updateMeeting(
       .eq("id", meetingId.data);
     if (error) throw error;
 
-    await syncAttendees(supabase, meetingId.data, member.id, v.contactIds, v.memberIds);
+    await syncAttendees(supabase, meetingId.data, v.contactIds, v.memberIds);
 
     revalidateMeetingViews(meetingId.data);
     return { ok: true, meetingId: meetingId.data };
@@ -291,45 +291,27 @@ export async function meetingActivity(
 /**
  * Who was in the room, brought in line with what was picked.
  *
- * Deleted and re-inserted rather than diffed. The lists are a handful of
- * rows, the table has no columns worth preserving across a change, and a
- * diff would be three round trips to save one.
+ * One call, and since 0051 the only way in — the write policies on those two
+ * tables are gone. It was four statements: delete the contacts, delete the
+ * members, insert the contacts, insert the members. That was merely wasteful
+ * while only the author could edit. Once anybody who was AT the meeting can,
+ * it is a trap: statement two deletes the row that gives Dee her permission,
+ * and statement four is then refused. She would have wiped the attendee list
+ * and been unable to put it back. The function checks once, before anything
+ * is deleted.
  */
 async function syncAttendees(
   supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
   meetingId: string,
-  meId: string,
   contactIds: string[],
   memberIds: string[]
 ): Promise<void> {
-  const contacts = [...new Set(contactIds)];
-  const members = [...new Set(memberIds)];
-
-  const { error: clearContacts } = await supabase
-    .from("meeting_contacts")
-    .delete()
-    .eq("meeting_id", meetingId);
-  if (clearContacts) throw clearContacts;
-
-  const { error: clearMembers } = await supabase
-    .from("meeting_members")
-    .delete()
-    .eq("meeting_id", meetingId);
-  if (clearMembers) throw clearMembers;
-
-  if (contacts.length > 0) {
-    const { error } = await supabase
-      .from("meeting_contacts")
-      .insert(contacts.map((contact_id) => ({ meeting_id: meetingId, contact_id, added_by: meId })));
-    if (error) throw error;
-  }
-
-  if (members.length > 0) {
-    const { error } = await supabase
-      .from("meeting_members")
-      .insert(members.map((member_id) => ({ meeting_id: meetingId, member_id, added_by: meId })));
-    if (error) throw error;
-  }
+  const { error } = await supabase.rpc("set_meeting_attendees", {
+    p_meeting_id: meetingId,
+    p_contact_ids: [...new Set(contactIds)],
+    p_member_ids: [...new Set(memberIds)],
+  });
+  if (error) throw error;
 }
 
 /**
@@ -477,7 +459,7 @@ export async function saveMeeting(
   }
 
   try {
-    const { supabase, member } = await getCurrentMember();
+    const { supabase } = await getCurrentMember();
     const v = parsed.data;
 
     const { data, error } = await supabase.rpc("save_meeting", {
@@ -498,7 +480,7 @@ export async function saveMeeting(
     });
     if (error) throw error;
 
-    await syncAttendees(supabase, meetingId.data, member.id, v.contactIds, v.memberIds);
+    await syncAttendees(supabase, meetingId.data, v.contactIds, v.memberIds);
 
     revalidateMeetingViews(meetingId.data);
     return { ok: true, savedAt: data as unknown as string };
@@ -533,5 +515,39 @@ export async function binnedMeetings(): Promise<
   } catch (error) {
     console.error("binnedMeetings failed", error);
     return { ok: false, error: "Couldn't open the bin. Try again." };
+  }
+}
+
+/**
+ * Erasing binned minutes for good.
+ *
+ * The other end of the bin, and the only irreversible thing about a meeting.
+ * The database refuses anything not already binned, so this is always the
+ * second of two deliberate acts, and it hands back what it destroyed so the
+ * screen can name it. Tasks that came out of the meeting survive — the work
+ * stays, only its origin is forgotten.
+ */
+export interface ErasedMeeting {
+  title: string;
+  characters: number;
+  comments: number;
+  people: number;
+  tasks: number;
+}
+
+export async function eraseMeeting(
+  meetingIdInput: string
+): Promise<{ ok: true; erased: ErasedMeeting | null } | { ok: false; error: string }> {
+  const meetingId = idSchema.safeParse(meetingIdInput);
+  if (!meetingId.success) return { ok: false, error: "Invalid meeting." };
+  try {
+    const { supabase } = await getCurrentMember();
+    const { data, error } = await supabase.rpc("purge_meeting", { p_meeting_id: meetingId.data });
+    if (error) throw error;
+    revalidateMeetingViews();
+    return { ok: true, erased: (data as unknown as ErasedMeeting) ?? null };
+  } catch (error) {
+    console.error("eraseMeeting failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't erase those minutes. Try again.") };
   }
 }

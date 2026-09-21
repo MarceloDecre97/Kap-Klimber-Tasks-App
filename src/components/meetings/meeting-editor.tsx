@@ -69,7 +69,8 @@ function continuationFor(line: string): { prefix: string; markerLength: number }
   if (bullet) {
     return { prefix: `${bullet[1]}${bullet[2]} `, markerLength: bullet[0].length };
   }
-  const numbered = /^(\s*)(\d+)([.)])\s+/.exec(line);
+  /* `1. `, `1) ` and `1- ` all mean a numbered list. Marcelo types the third. */
+  const numbered = /^(\s*)(\d+)([-.)])\s+/.exec(line);
   if (numbered) {
     const next = Number(numbered[2]) + 1;
     return { prefix: `${numbered[1]}${next}${numbered[3]} `, markerLength: numbered[0].length };
@@ -85,21 +86,48 @@ function continuationFor(line: string): { prefix: string; markerLength: number }
  * for a word that already contains a capital anywhere in it — which is what
  * keeps "iPhone", "eLog" and "mySQL" as they were typed. Word would capitalise
  * those; we know more about what gets written here than Word does.
+ *
+ * The trailing punctuation is captured rather than ignored, because a line is
+ * very often finished before it is left: "- called eric." and Enter has the
+ * caret sitting after a full stop, not after a letter, and the first version
+ * of this simply gave up there. It is the commonest way a bullet gets typed.
  */
-function sentenceWordAt(before: string): { word: string; start: number } | null {
+function sentenceWordAt(before: string): { word: string; trail: string; start: number } | null {
   const patterns = [
-    /(?:^|\n)[ \t]*(?:[-*]|\d+[.)])[ \t]+([a-z][A-Za-z'’-]*)$/,
-    /(?:^|\n)[ \t]*([a-z][A-Za-z'’-]*)$/,
-    /[.!?]["'’)\]]?[ \t]+([a-z][A-Za-z'’-]*)$/,
+    /(?:^|\n)[ \t]*(?:[-*]|\d+[-.)])[ \t]+([a-z][A-Za-z'’-]*)([.,;:!?)"'’]*)$/,
+    /(?:^|\n)[ \t]*([a-z][A-Za-z'’-]*)([.,;:!?)"'’]*)$/,
+    /[.!?]["'’)\]]?[ \t]+([a-z][A-Za-z'’-]*)([.,;:!?)"'’]*)$/,
   ];
   for (const pattern of patterns) {
     const match = pattern.exec(before);
     const word = match?.[1];
     if (!word) continue;
     if (/[A-Z]/.test(word)) return null;
-    return { word, start: before.length - word.length };
+    const trail = match?.[2] ?? "";
+    return { word, trail, start: before.length - word.length - trail.length };
   }
   return null;
+}
+
+/**
+ * The first word of the line the caret is on, when it needs a capital.
+ *
+ * A second rule, and only for Enter. The rule above capitalises the word you
+ * have just finished, which is right for Space and not enough for Enter:
+ * "- called eric." leaves the caret after a full stop three words along, and
+ * the word wanting a capital is back at the start of the line. Leaving a line
+ * is the moment its first word is settled, so that is when it is fixed.
+ *
+ * Same protection: a word that already carries a capital is never touched.
+ */
+function lineFirstWordAt(value: string, caret: number): { word: string; start: number } | null {
+  const lineStart = value.lastIndexOf("\n", caret - 1) + 1;
+  const line = value.slice(lineStart, caret);
+  const match = /^([ \t]*(?:[-*]|\d+[-.)])?[ \t]*)([a-z][A-Za-z'’-]*)/.exec(line);
+  const word = match?.[2];
+  if (!match || !word) return null;
+  if (/[A-Z]/.test(word)) return null;
+  return { word, start: lineStart + (match[1] ?? "").length };
 }
 
 export function MeetingEditor({
@@ -172,14 +200,31 @@ export function MeetingEditor({
       el.setSelectionRange(sentenceWord.start, before.length);
       typeInto(
         el,
-        sentenceWord.word.charAt(0).toUpperCase() + sentenceWord.word.slice(1),
+        sentenceWord.word.charAt(0).toUpperCase() + sentenceWord.word.slice(1) + sentenceWord.trail,
         onChange
       );
     }
 
     if (event.key !== "Enter" || event.shiftKey) return;
 
-    /* Re-read: the capital above may have just rewritten this line. */
+    /*
+      Leaving the line settles its first word. Done after the rule above
+      because both can apply to one line and the later edit does not move the
+      earlier one: capitalising changes a letter, never a length. The caret is
+      put back afterwards — the replacement leaves it inside the word.
+    */
+    const caretBeforeLine = el.selectionStart;
+    const firstWord = lineFirstWordAt(el.value, caretBeforeLine);
+    if (firstWord) {
+      el.setSelectionRange(firstWord.start, firstWord.start + firstWord.word.length);
+      typeInto(
+        el,
+        firstWord.word.charAt(0).toUpperCase() + firstWord.word.slice(1),
+        onChange
+      );
+      el.setSelectionRange(caretBeforeLine, caretBeforeLine);
+    }
+
     const caret = el.selectionStart;
     const lineStart = el.value.lastIndexOf("\n", caret - 1) + 1;
     const line = el.value.slice(lineStart, caret);
@@ -211,9 +256,18 @@ export function MeetingEditor({
         onBlur={onBlur}
         placeholder={placeholder}
         spellCheck
-        /* Android's own sentence capitals, which cost nothing and agree with
-           the rule above — a word it has already capitalised is left alone. */
-        autoCapitalize="sentences"
+        /*
+          Off, and the rule above does this job instead.
+
+          Android's own sentence capitals fire on the FIRST letter of a word,
+          before there is a word to judge — so "iPhone" was becoming "IPhone"
+          on the phone while staying "iPhone" on the desktop. Ours waits for
+          the space or the Enter, by which time it can see the whole word and
+          leave alone anything that already carries a capital. Nothing is lost
+          by turning the keyboard's version off: every case it handled, the
+          rule above handles, and one of them is right about product names.
+        */
+        autoCapitalize="off"
         className={cn(
           "w-full resize-none rounded-2xl border-[1.5px] border-border bg-card p-4",
           /*

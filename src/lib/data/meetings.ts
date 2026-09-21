@@ -39,6 +39,7 @@ const ATTENDEE_SELECT = `
     )
   ),
   members:meeting_members(
+    member_id,
     member:members!meeting_members_member_id_fkey(id, display_name, initials, color)
   )
 `;
@@ -75,7 +76,7 @@ type Row = {
         } | null;
       }[]
     | null;
-  members: { member: MemberSummary | null }[] | null;
+  members: { member_id: string; member: MemberSummary | null }[] | null;
 };
 
 /**
@@ -127,16 +128,28 @@ function attendeesOf(row: Row): Attendee[] {
  * with Eric from ADV Mobil and an empty company field was showing as
  * Internal: it has a company, nobody had just typed one.
  */
-function companyOf(row: Row): { id: string; name: string } | null {
-  if (row.company) return row.company;
+function companiesOf(row: Row): { id: string; name: string }[] {
   const companies = new Map<string, string>();
+  if (row.company) companies.set(row.company.id, row.company.name);
   for (const link of row.contacts ?? []) {
     const company = link.contact?.company;
     if (company) companies.set(company.id, company.name);
   }
-  if (companies.size !== 1) return null;
-  const only = [...companies.entries()][0];
-  return only ? { id: only[0], name: only[1] } : null;
+  return [...companies.entries()].map(([id, name]) => ({ id, name }));
+}
+
+/**
+ * The one company a meeting BELONGS to, or none.
+ *
+ * Set by hand wins. Otherwise the single company every external attendee
+ * shares — two in the room and it is nobody's, because naming one would be a
+ * guess. `companiesOf` above is the honest list, and the card draws that;
+ * this is what the meeting files under.
+ */
+function companyOf(row: Row): { id: string; name: string } | null {
+  if (row.company) return row.company;
+  const companies = companiesOf(row);
+  return companies.length === 1 ? companies[0]! : null;
 }
 
 function toSummary(row: Row, meId: string): MeetingSummary {
@@ -150,6 +163,7 @@ function toSummary(row: Row, meId: string): MeetingSummary {
     /* What the meeting belongs to, set or derived. */
     company_id: company?.id ?? null,
     company_name: company?.name ?? null,
+    companies: companiesOf(row),
     /* Only what was typed into the field, which the form shows back. */
     explicit_company_id: row.company_id,
     created_by: row.created_by,
@@ -159,6 +173,7 @@ function toSummary(row: Row, meId: string): MeetingSummary {
     attendees: attendeesOf(row),
     snippet: snippetOf(row.body),
     mine: row.created_by?.id === meId,
+    attended: (row.members ?? []).some((m) => m.member_id === meId),
   };
 }
 

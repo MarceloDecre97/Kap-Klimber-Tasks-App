@@ -64,7 +64,9 @@ export function MeetingPane({
   companies,
   roster,
   tasks,
-  canEdit,
+  canEditBody,
+  canEditDetails,
+  meId,
   isPending,
   onBin,
   onClose,
@@ -75,7 +77,11 @@ export function MeetingPane({
   companies: CompanySummary[];
   roster: MemberSummary[];
   tasks: MeetingTask[];
-  canEdit: boolean;
+  /** The minutes are the author's. See 0051. */
+  canEditBody: boolean;
+  /** The details belong to everybody who was in the room. See 0051. */
+  canEditDetails: boolean;
+  meId: string;
   isPending: boolean;
   onBin: () => void;
   onClose: () => void;
@@ -86,10 +92,17 @@ export function MeetingPane({
   const [reading, setReading] = useState(false);
   const [draftDismissed, setDraftDismissed] = useState(false);
 
+  /*
+    One save for the whole meeting, so the button is live for anybody who may
+    change any part of it. What each person's save actually writes is the
+    database's decision, not this screen's: `save_meeting` takes the details
+    from anybody who was there and the body only from its author, and
+    `guard_meeting_edit` pins the rest whatever the caller sends.
+  */
   const saver = useMeetingSave({
     meetingId: meeting.id,
     initialStamp: meeting.updated_at,
-    canEdit,
+    canEdit: canEditBody || canEditDetails,
     onSaved,
   });
 
@@ -131,7 +144,16 @@ export function MeetingPane({
   */
   const saveOnLeaving = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
-      if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget)) return;
+      const next = event.relatedTarget;
+      if (next && event.currentTarget.contains(next)) return;
+      /*
+        The attendee and company menus are portalled into `document.body` so
+        the scrolling column cannot clip them, which means picking a name
+        moves focus OUT of this box by the DOM's reckoning. Without this,
+        every name chosen from a list would post a save — three attendees,
+        three round trips, none of them what "clicking out" meant.
+      */
+      if (next?.closest('[role="listbox"]')) return;
       if (saver.dirty) void saver.save();
     },
     [saver]
@@ -228,14 +250,16 @@ export function MeetingPane({
             read-only list, and doing that for a second while a transition
             settled would flash the form away under whoever was typing in it.
           */
-          disabled={!canEdit}
+          disabled={!canEditDetails}
+          meId={meId}
+          isAuthor={canEditBody}
           onChange={(next) => edit(next, body)}
           contacts={contacts}
           companies={companies}
           roster={roster}
         />
 
-        {canEdit && body.trim() !== "" && (
+        {canEditBody && body.trim() !== "" && (
           <div className="flex gap-1 self-start rounded-full bg-muted p-1">
             <ModeTab on={!reading} onClick={() => setReading(false)}>
               <PenLine aria-hidden className="size-4" strokeWidth={1.75} />
@@ -248,7 +272,7 @@ export function MeetingPane({
           </div>
         )}
 
-        {canEdit && !reading ? (
+        {canEditBody && !reading ? (
           <MeetingEditor
             value={body}
             onChange={(next) => edit(details, next)}
@@ -264,6 +288,19 @@ export function MeetingPane({
           */
           <MeetingReader body={body} />
         )}
+
+        {/*
+          Said once, where the box is, rather than left to be discovered. The
+          details above are editable for anybody who was in the room; this is
+          not, and a text area you cannot type in owes you a reason.
+        */}
+        {!canEditBody && canEditDetails && (
+          <p className="text-timestamp text-sub text-pretty">
+            The minutes belong to{" "}
+            {meeting.created_by?.display_name ?? "whoever wrote them"} — you can correct the
+            details above and add a comment below.
+          </p>
+        )}
       </div>
 
       {/*
@@ -271,7 +308,7 @@ export function MeetingPane({
         saving. Pressable means there is something unsaved; greyed means
         there is not. Nothing else to read and nothing to interpret.
       */}
-      {canEdit && (
+      {(canEditBody || canEditDetails) && (
         <div className="flex flex-wrap items-center gap-3">
           <Button
             size="md"
@@ -352,7 +389,7 @@ export function MeetingPane({
         and the comments, at the end of everything you would read before
         deciding you no longer need any of it.
       */}
-      {canEdit && (
+      {canEditBody && (
         <div className="flex flex-col gap-1.5 border-t-[1.5px] border-border pt-4">
           <Button
             variant="secondary"

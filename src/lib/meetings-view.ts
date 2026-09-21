@@ -27,6 +27,17 @@ export interface MeetingSummary {
   company_id: string | null;
   company_name: string | null;
   /**
+   * Every company that was in the room, set or derived.
+   *
+   * `company_id` above is the single one a meeting BELONGS to, and is null
+   * when two firms were present, because naming one of them would be a
+   * guess. This is the honest list. The card draws it — Marcelo had a meeting
+   * with somebody from AAA and somebody from ADV Mobil and the card claimed
+   * ADV Mobil — and the filter matches against it, so a two-company meeting
+   * turns up under both of them rather than under neither.
+   */
+  companies: { id: string; name: string }[];
+  /**
    * Only what was typed into the company field.
    *
    * Kept apart from `company_id` because the form must show back what was
@@ -53,6 +64,23 @@ export interface MeetingSummary {
   snippet: string;
   /** Whether the viewer wrote it, so the editor knows before it asks. */
   mine: boolean;
+  /**
+   * Whether the viewer is one of the Opus Kap people on it.
+   *
+   * What 0051 hangs the details permission on: being at the meeting is what
+   * earns you the right to correct the record of it.
+   */
+  attended: boolean;
+}
+
+/** The minutes are the author's. See 0051. */
+export function canEditBody(meeting: MeetingSummary): boolean {
+  return meeting.mine || !meeting.created_by;
+}
+
+/** The details around them belong to everybody who was there. See 0051. */
+export function canEditDetails(meeting: MeetingSummary): boolean {
+  return canEditBody(meeting) || meeting.attended;
 }
 
 /** A meeting with its paper, for the editor. */
@@ -158,7 +186,7 @@ export function attendeeLine(attendees: Attendee[]): string {
  * company field is not internal, and used to read as one.
  */
 export function isInternal(meeting: MeetingSummary): boolean {
-  return !meeting.company_id && !meeting.attendees.some((a) => a.kind === "contact");
+  return meeting.companies.length === 0 && !meeting.attendees.some((a) => a.kind === "contact");
 }
 
 /**
@@ -282,7 +310,8 @@ export function activeFilterCount(f: MeetingFilters): number {
 export function matchesFilters(m: MeetingSummary, f: MeetingFilters): boolean {
   if (!f.scope) return true;
   if (f.scope === INTERNAL_SCOPE) return isInternal(m);
-  return m.company_id === f.scope;
+  /* Every company in the room, not only the one the meeting belongs to. */
+  return m.companies.some((c) => c.id === f.scope);
 }
 
 /**
@@ -294,7 +323,7 @@ export function matchesFilters(m: MeetingSummary, f: MeetingFilters): boolean {
 export function companiesIn(meetings: MeetingSummary[]): { id: string; name: string }[] {
   const seen = new Map<string, string>();
   for (const m of meetings) {
-    if (m.company_id && m.company_name) seen.set(m.company_id, m.company_name);
+    for (const c of m.companies) seen.set(c.id, c.name);
   }
   return [...seen.entries()]
     .map(([id, name]) => ({ id, name }))

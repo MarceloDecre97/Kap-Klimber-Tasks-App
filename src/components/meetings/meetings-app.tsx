@@ -2,16 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronLeft, Plus, RotateCcw, Search, Trash2, Users } from "lucide-react";
+import { ChevronDown, ChevronLeft, Flame, Plus, RotateCcw, Search, Trash2, Users } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { MeetingCalendar } from "@/components/meetings/meeting-calendar";
 import { MeetingPane } from "@/components/meetings/meeting-pane";
 import { MeetingDetails, type DetailValues } from "@/components/meetings/meeting-details";
+import { FilterDropdown } from "@/components/tasks/filter-dropdown";
 import {
   binnedMeetings,
   createMeeting,
+  eraseMeeting,
   findMeetings,
   loadMeeting,
   meetingTasks,
@@ -21,6 +24,8 @@ import {
   INTERNAL_SCOPE,
   NO_MEETING_FILTERS,
   activeFilterCount,
+  canEditBody,
+  canEditDetails,
   companiesIn,
   groupMeetings,
   matchesFilters,
@@ -55,6 +60,9 @@ import type { NotificationFeed } from "@/lib/data/notifications";
 /** Matches the Tasklist and the address book. Nothing is erased at the end of it. */
 const BIN_DAYS = 14;
 
+/** The "no filter" row. Its own value rather than "", which reads as unset. */
+const ALL_SCOPE = "all";
+
 export function MeetingsApp({
   meetings,
   contacts,
@@ -85,6 +93,8 @@ export function MeetingsApp({
   /* The bin: fetched when it is opened, not carried by every page load. */
   const [binOpen, setBinOpen] = useState(false);
   const [binned, setBinned] = useState<MeetingSummary[] | null>(null);
+  /** The binned meeting whose "erase for good" has been asked but not answered. */
+  const [erasing, setErasing] = useState<string | null>(null);
   /* The create form, when one is open instead of a meeting. */
   const [creating, setCreating] = useState<DetailValues | null>(null);
   const [tasks, setTasks] = useState<MeetingTask[]>([]);
@@ -244,6 +254,31 @@ export function MeetingsApp({
   );
 
   /*
+    The only irreversible thing about a meeting, and it is asked twice: once
+    by pressing Erase, once by pressing it again on the row that replaces it.
+    No toast offering an Undo afterwards — there would be nothing to bring
+    back and the button would be a lie.
+  */
+  const eraseIt = useCallback(
+    (id: string) => {
+      startTransition(async () => {
+        const result = await eraseMeeting(id);
+        if (!result.ok) {
+          showToast({ message: result.error });
+          return;
+        }
+        setBinned((rows) => (rows ?? []).filter((m) => m.id !== id));
+        setErasing(null);
+        showToast({
+          message: result.erased ? `Erased "${result.erased.title}"` : "Erased for good",
+        });
+        router.refresh();
+      });
+    },
+    [router, showToast]
+  );
+
+  /*
     A link from a company or a contact pane lands here with ?open=<id>.
     Followed once per id: re-running it every render would reopen the meeting
     the moment somebody pressed Back, which is the opposite of what Back means.
@@ -256,7 +291,36 @@ export function MeetingsApp({
     openMeeting(wanted);
   }, [wanted, openMeeting]);
 
-  const canEdit = open ? open.mine || !open.created_by : false;
+  /*
+    Two permissions since 0051: the minutes are their author's, the details
+    around them belong to everybody who was in the room. Mirrored from the
+    database rather than decided here — `save_meeting` and
+    `guard_meeting_edit` are what actually enforce it, and this is only so
+    the screen does not offer a control that would be refused.
+  */
+  const mayEditBody = open ? canEditBody(open) : false;
+  const mayEditDetails = open ? canEditDetails(open) : false;
+
+  /*
+    One question — whose meetings am I looking at — and one list of answers.
+    "Internal" is not a property a meeting has ALONGSIDE a company, it is what
+    it has instead of one, so it belongs in the same list, above the rule.
+  */
+  const scopeOptions = useMemo(
+    () => [
+      { value: ALL_SCOPE, label: "All meetings" },
+      { value: INTERNAL_SCOPE, label: "Internal — Opus Kap only" },
+      ...companyOptions.map((company, i) => ({
+        value: company.id,
+        label: company.name,
+        heading: i === 0 ? "Companies" : undefined,
+      })),
+    ],
+    [companyOptions]
+  );
+
+  const scopeLabel =
+    scopeOptions.find((option) => option.value === filters.scope)?.label ?? "All meetings";
 
   const list = (
     <div className="flex flex-col gap-3">
@@ -280,40 +344,33 @@ export function MeetingsApp({
 
       {/*
         One row, two controls: start one, or narrow to the ones you want.
+        `flex` rather than `flex-wrap`, so they stay on the line Marcelo
+        asked for — the dropdown gives up width instead, and its label
+        truncates rather than the pair breaking apart.
 
-        The filter is a single list — every meeting, then ours alone, then a
-        rule and the companies. `optgroup` is what draws that rule, and it is
-        the platform's own control on a phone: Android opens it as a full
-        sheet with the heading in place, which no styled dropdown of ours
-        would match for nothing.
+        The menu is the app's own, not the browser's. A native `<select>` on
+        Windows is a grey rectangle in a typeface this app does not otherwise
+        use, and it sat two inches from the address book's filter menus. One
+        app, one dropdown: this is the same component the Tasklist and the
+        book use, with a heading added so "Internal" and the companies read
+        as the two kinds of answer they are.
       */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="md" onClick={startMeeting} disabled={isPending} className="w-auto">
+      <div className="flex items-center gap-2">
+        <Button size="md" onClick={startMeeting} disabled={isPending} className="w-auto shrink-0">
           <Plus aria-hidden className="size-5" strokeWidth={2.2} />
           New meeting
         </Button>
-
-        <label htmlFor="meeting-scope-filter" className="sr-only">
-          Show meetings with
-        </label>
-        <select
-          id="meeting-scope-filter"
-          value={filters.scope ?? ""}
-          onChange={(event) => setFilters({ scope: event.target.value || null })}
-          className="h-11 min-w-0 max-w-full grow rounded-full border-[1.5px] border-border bg-card px-3 text-timestamp font-bold text-fg"
-        >
-          <option value="">All meetings</option>
-          <option value={INTERNAL_SCOPE}>Internal — Opus Kap only</option>
-          {companyOptions.length > 0 && (
-            <optgroup label="Companies">
-              {companyOptions.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+        <FilterDropdown
+          label={scopeLabel}
+          single
+          className="min-w-0 shrink"
+          options={scopeOptions}
+          selected={filters.scope ? [filters.scope] : []}
+          onChange={(next) => {
+            const picked = next[next.length - 1] ?? null;
+            setFilters({ scope: picked === ALL_SCOPE ? null : picked });
+          }}
+        />
       </div>
 
       {searching && <p className="text-timestamp text-sub">Looking through every meeting…</p>}
@@ -393,18 +450,54 @@ export function MeetingsApp({
                         {meeting.company_name ? ` · ${meeting.company_name}` : ""}
                       </span>
                     </span>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="w-auto shrink-0 px-3"
-                      disabled={isPending}
-                      onClick={() => restoreMeeting(meeting.id)}
-                    >
-                      <RotateCcw aria-hidden className="size-4" strokeWidth={1.75} />
-                      Put back
-                    </Button>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="w-auto px-3"
+                        disabled={isPending}
+                        onClick={() => restoreMeeting(meeting.id)}
+                      >
+                        <RotateCcw aria-hidden className="size-4" strokeWidth={1.75} />
+                        Put back
+                      </Button>
+                      {erasing === meeting.id ? (
+                        <span className="flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            className="w-auto px-3"
+                            disabled={isPending}
+                            onClick={() => eraseIt(meeting.id)}
+                          >
+                            <Flame aria-hidden className="size-4" strokeWidth={1.75} />
+                            Erase it
+                          </Button>
+                          <Button
+                            variant="link"
+                            className="text-timestamp"
+                            onClick={() => setErasing(null)}
+                          >
+                            Keep
+                          </Button>
+                        </span>
+                      ) : (
+                        <Button
+                          variant="link"
+                          className="text-timestamp"
+                          onClick={() => setErasing(meeting.id)}
+                        >
+                          Erase for good
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
+                {erasing && (
+                  <p className="px-1 text-timestamp text-sub text-pretty">
+                    Erasing destroys the minutes, the comments and the record of who was there.
+                    Tasks that came out of the meeting stay. Nothing brings it back.
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -504,7 +597,9 @@ export function MeetingsApp({
                   companies={companies}
                   roster={roster}
                   tasks={tasks}
-                  canEdit={canEdit}
+                  canEditBody={mayEditBody}
+                  canEditDetails={mayEditDetails}
+                  meId={meId}
                   isPending={isPending}
                   onBin={binMeeting}
                   onClose={() => setOpen(null)}
@@ -513,9 +608,13 @@ export function MeetingsApp({
               )}
             </div>
           ) : (
-            <p className="mx-auto mt-12 max-w-[36ch] text-center text-[17px] leading-6 text-sub text-pretty">
-              Pick a meeting, or start a new one.
-            </p>
+            /*
+              Nothing open: the month. It used to be a line telling you to
+              pick a meeting, which is a sentence telling you to do the thing
+              you were already trying to do. The X on an open meeting brings
+              you back here.
+            */
+            <MeetingCalendar meetings={meetings} onOpen={openMeeting} />
           )}
         </div>
       </div>
@@ -547,13 +646,22 @@ function MeetingCard({
       </span>
 
       <span className="flex flex-wrap items-center gap-2">
+        {/*
+          Every company that was in the room, not just the one the meeting
+          files under. Marcelo had a meeting with somebody from AAA and
+          somebody from ADV Mobil, and the card said ADV Mobil.
+        */}
         {internal ? (
           <Chip className="border-accent text-accent">
             <Users aria-hidden className="size-4" strokeWidth={1.75} />
             Internal
           </Chip>
         ) : (
-          meeting.company_name && <Chip className="border-tag text-tag">{meeting.company_name}</Chip>
+          meeting.companies.map((company) => (
+            <Chip key={company.id} className="border-tag text-tag">
+              {company.name}
+            </Chip>
+          ))
         )}
         <Chip className="border-border text-sub tabular-nums">
           {meetingWhen(meeting.met_on, meeting.met_at, formatMeetingDay)}
