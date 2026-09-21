@@ -3,7 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronLeft, ListPlus, Plus, Search, Trash2, Users } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  ChevronLeft,
+  ListPlus,
+  PenLine,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -84,6 +94,19 @@ export function MeetingsApp({
   const [details, setDetails] = useState<DetailValues | null>(null);
   const [detailsDirty, setDetailsDirty] = useState(false);
   const [tasks, setTasks] = useState<MeetingTask[]>([]);
+  /*
+    Writing or reading your own minutes.
+
+    The author only ever saw a text area, which means the one person who
+    types "- " at the start of a line was the one person who never saw it
+    become a bullet. Reading is also what you do after the meeting — you
+    write during it and read it back before sending the follow-up.
+
+    Defaults to writing, because that is what you opened it for; and it
+    resets whenever a different meeting is opened, since the mode belongs to
+    what you are doing rather than to the app.
+  */
+  const [reading, setReading] = useState(false);
 
   /*
     Two searches over the same fields. The list already in hand is narrowed
@@ -136,6 +159,7 @@ export function MeetingsApp({
         setOpen(result.meeting);
         setDetails(detailsFrom(result.meeting));
         setDetailsDirty(false);
+        setReading(false);
         const withTasks = await meetingTasks(id);
         setTasks(withTasks.ok ? withTasks.tasks : []);
       });
@@ -407,7 +431,20 @@ export function MeetingsApp({
         )}
       </div>
 
-      {canEdit ? (
+      {canEdit && open.body.trim() !== "" && (
+        <div className="flex gap-1 self-start rounded-full bg-muted p-1">
+          <ModeTab on={!reading} onClick={() => setReading(false)}>
+            <PenLine aria-hidden className="size-4" strokeWidth={1.75} />
+            Write
+          </ModeTab>
+          <ModeTab on={reading} onClick={() => setReading(true)}>
+            <BookOpen aria-hidden className="size-4" strokeWidth={1.75} />
+            Read
+          </ModeTab>
+        </div>
+      )}
+
+      {canEdit && !reading ? (
         <MeetingEditor
           meetingId={open.id}
           initialBody={open.body}
@@ -590,6 +627,30 @@ function MeetingReader({ body }: { body: string }) {
         );
       })}
     </div>
+  );
+}
+
+function ModeTab({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cn(
+        "inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border-none px-3.5 text-timestamp font-bold",
+        on ? "bg-prim text-on-prim" : "bg-transparent text-muted-fg hover:text-fg"
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
