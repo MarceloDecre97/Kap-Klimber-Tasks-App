@@ -47,6 +47,9 @@ function initialState(
     assigneeIds: string[];
     categoryId: string | null;
     isOutreach: boolean;
+    /** The meeting this came out of, when the form was opened from one. */
+    meetingId?: string;
+    meetingTitle?: string;
   }
 ): FormState {
   return {
@@ -87,6 +90,9 @@ export function TaskForm({
     assigneeIds: string[];
     categoryId: string | null;
     isOutreach: boolean;
+    /** The meeting this came out of, when the form was opened from one. */
+    meetingId?: string;
+    meetingTitle?: string;
   };
   /** The whole book, for the picker to search. Never a fetch per keystroke. */
   contacts: ContactSummary[];
@@ -174,6 +180,13 @@ export function TaskForm({
     const input = {
       title,
       isOutreach: prefill?.isOutreach === true,
+      /*
+        Only ever from the prefill, which the server read out of the URL and
+        checked against the database. 0047 pins this column after insert, so
+        a wrong value here would be permanent — which is exactly why the form
+        does not offer it as a field.
+      */
+      meetingId: prefill?.meetingId ?? null,
       description: form.description,
       categoryId: form.useOtherCategory ? null : form.categoryId,
       newCategoryLabel: form.useOtherCategory ? form.newCategoryLabel : undefined,

@@ -122,6 +122,8 @@ export const taskInputSchema = z.object({
     see 0041. The database pins it afterwards, so a lie here is a lie once.
   */
   isOutreach: z.boolean().optional(),
+  /* The meeting this task came out of. Honoured on create only — see 0047. */
+  meetingId: z.string().uuid().nullable().optional(),
   /*
     Three at most, the same cap the database enforces with a trigger. This
     copy exists so the form can say so in words rather than letting somebody

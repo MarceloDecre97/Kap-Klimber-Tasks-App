@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, Plus, Search, Trash2, Users } from "lucide-react";
+import { Check, ChevronLeft, ListPlus, Plus, Search, Trash2, Users } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import {
   createMeeting,
   findMeetings,
   loadMeeting,
+  meetingTasks,
   setMeetingDeleted,
   updateMeeting,
 } from "@/app/meetings/actions";
@@ -30,6 +32,7 @@ import { cn } from "@/lib/utils";
 import type { ContactSummary } from "@/lib/data/contacts";
 import type { CompanySummary } from "@/lib/companies-view";
 import type { MemberSummary } from "@/lib/data/tasks";
+import type { MeetingTask } from "@/lib/data/meetings";
 import type { NotificationFeed } from "@/lib/data/notifications";
 
 /**
@@ -73,6 +76,7 @@ export function MeetingsApp({
   const [open, setOpen] = useState<Meeting | null>(null);
   const [details, setDetails] = useState<DetailValues | null>(null);
   const [detailsDirty, setDetailsDirty] = useState(false);
+  const [tasks, setTasks] = useState<MeetingTask[]>([]);
 
   /*
     Two searches over the same fields. The list already in hand is narrowed
@@ -120,6 +124,8 @@ export function MeetingsApp({
         setOpen(result.meeting);
         setDetails(detailsFrom(result.meeting));
         setDetailsDirty(false);
+        const withTasks = await meetingTasks(id);
+        setTasks(withTasks.ok ? withTasks.tasks : []);
       });
     },
     [showToast]
@@ -287,6 +293,57 @@ export function MeetingsApp({
         </Button>
       )}
 
+      {/*
+          What came out of it, and the way to add to that.
+
+          Below the paper rather than above: during the meeting the paper is
+          the only thing that matters, and the action items are what you
+          reach for once the talking has stopped.
+      */}
+      <div className="flex flex-col gap-2">
+        <Link
+          href={`/tasks/new?meeting=${open.id}&from=/meetings`}
+          className="inline-flex h-11 w-auto items-center gap-2 self-start rounded-xl border-[1.5px] border-fg bg-card px-3 text-timestamp font-bold text-fg no-underline hover:bg-muted"
+        >
+          <ListPlus aria-hidden className="size-4" strokeWidth={1.75} />
+          Task from this meeting
+        </Link>
+
+        {tasks.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {tasks.map((task) => (
+              <li key={task.id}>
+                <Link
+                  href={`/tasks?task=${task.id}`}
+                  className="flex flex-col gap-1.5 rounded-2xl border-[1.5px] border-border bg-card p-3 no-underline hover:bg-muted"
+                >
+                  <span className="flex flex-wrap items-center gap-2">
+                    {task.status === "complete" ? (
+                      <Chip className="border-ok text-ok">
+                        <Check aria-hidden className="size-4" strokeWidth={2.5} />
+                        Done
+                      </Chip>
+                    ) : (
+                      <Chip className="border-accent text-accent">
+                        {TASK_STATUS_WORDS[task.status] ?? "Open"}
+                      </Chip>
+                    )}
+                    {task.due_date && (
+                      <Chip className="border-border text-sub tabular-nums">
+                        Due {formatMeetingDay(task.due_date)}
+                      </Chip>
+                    )}
+                  </span>
+                  <span className="text-[17px] leading-6 text-fg text-pretty wrap-anywhere">
+                    {task.title}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {canEdit ? (
         <MeetingEditor
           meetingId={open.id}
@@ -357,6 +414,15 @@ export function MeetingsApp({
     </div>
   );
 }
+
+/** The status words, matching what the Tasklist calls them. */
+const TASK_STATUS_WORDS: Record<string, string> = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  for_review: "For review",
+  waiting: "Waiting",
+  complete: "Done",
+};
 
 function MeetingCard({
   meeting,

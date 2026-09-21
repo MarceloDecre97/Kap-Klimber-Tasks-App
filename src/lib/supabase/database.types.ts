@@ -122,6 +122,12 @@ export interface Database {
           due_date: string | null;
           /** Set once by the Contact button, pinned by trigger. See 0041. */
           is_outreach: boolean;
+          /**
+           * The meeting this task came out of, if any. Set once on insert
+           * and pinned by the trigger thereafter — a task's origin is a fact
+           * about how it came to exist, not a field. See 0047.
+           */
+          meeting_id: string | null;
           created_by: string;
           completed_at: string | null;
           completed_by: string | null;

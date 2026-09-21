@@ -295,3 +295,32 @@ export async function listMeetingEvents(
   if (error) throw error;
   return (data ?? []) as unknown as MeetingEvent[];
 }
+
+/**
+ * What came out of a meeting.
+ *
+ * Live status rather than a count, because "two tasks" answers nothing you
+ * would open a meeting to ask. The question is always whether the thing you
+ * promised has been done.
+ */
+export interface MeetingTask {
+  id: string;
+  title: string;
+  status: string;
+  due_date: string | null;
+  completed_at: string | null;
+}
+
+export async function listMeetingTasks(
+  supabase: SupabaseClient<Database>,
+  meetingId: string
+): Promise<MeetingTask[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("id, title, status, due_date, completed_at, created_at")
+    .eq("meeting_id", meetingId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as unknown as MeetingTask[];
+}

@@ -8,9 +8,11 @@ import {
   listCompanyMeetings,
   listContactMeetings,
   listMeetingEvents,
+  listMeetingTasks,
   searchMeetings,
   type MeetingEvent,
 } from "@/lib/data/meetings";
+import type { MeetingTask } from "@/lib/data/meetings";
 import type { Meeting, MeetingSummary } from "@/lib/meetings-view";
 
 /**
@@ -348,5 +350,20 @@ export async function contactMeetings(
   } catch (error) {
     console.error("contactMeetings failed", error);
     return { ok: false, error: "Couldn't load the meetings." };
+  }
+}
+
+/** What came out of a meeting, with live status. */
+export async function meetingTasks(
+  meetingIdInput: string
+): Promise<{ ok: true; tasks: MeetingTask[] } | { ok: false; error: string }> {
+  const meetingId = idSchema.safeParse(meetingIdInput);
+  if (!meetingId.success) return { ok: false, error: "Invalid meeting." };
+  try {
+    const { supabase } = await getCurrentMember();
+    return { ok: true, tasks: await listMeetingTasks(supabase, meetingId.data) };
+  } catch (error) {
+    console.error("meetingTasks failed", error);
+    return { ok: false, error: "Couldn't load the tasks." };
   }
 }

@@ -1,6 +1,7 @@
 import { getCurrentMember } from "@/lib/get-current-member";
 import { listCategories, listRoster } from "@/lib/data/tasks";
 import { listContacts } from "@/lib/data/contacts";
+import { getMeeting } from "@/lib/data/meetings";
 import { TaskForm } from "@/components/tasks/task-form";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +17,9 @@ const OUTREACH_CATEGORY = "client outreach";
 export default async function NewTaskPage({
   searchParams,
 }: {
-  searchParams: Promise<{ contacts?: string; outreach?: string }>;
+  searchParams: Promise<{ contacts?: string; outreach?: string; meeting?: string }>;
 }) {
-  const { contacts: contactParam, outreach } = await searchParams;
+  const { contacts: contactParam, outreach, meeting } = await searchParams;
   const { supabase, member } = await getCurrentMember();
   const [roster, categories, contacts] = await Promise.all([
     listRoster(supabase),
@@ -41,6 +42,16 @@ export default async function NewTaskPage({
     .filter((id) => contacts.some((c) => c.id === id))
     .slice(0, MAX_CONTACTS);
 
+  /*
+    A task started from a meeting. Checked the same way as everything else
+    from the URL: the id is shape-checked and then looked up, so a stale or
+    invented one is dropped rather than written onto the task. It is also
+    read here rather than trusted from the form, because 0047 pins the column
+    after insert and a wrong value would be permanent.
+  */
+  const meetingId = meeting && UUID.test(meeting.trim()) ? meeting.trim() : null;
+  const fromMeeting = meetingId ? await getMeeting(supabase, member.id, meetingId) : null;
+
   const prefill =
     isOutreach && contactIds.length > 0
       ? {
@@ -51,7 +62,25 @@ export default async function NewTaskPage({
             categories.find((c) => c.label.toLowerCase() === OUTREACH_CATEGORY)?.id ?? null,
           isOutreach: true,
         }
-      : undefined;
+      : fromMeeting
+        ? {
+            /*
+              The people who were in the room come with it, capped the same
+              way. An action item out of a call with Eric and Sheena is about
+              Eric and Sheena, and re-picking them from a book of hundreds is
+              the kind of small friction that stops things being written down.
+            */
+            contactIds: fromMeeting.attendees
+              .filter((a) => a.kind === "contact")
+              .map((a) => a.id)
+              .slice(0, MAX_CONTACTS),
+            assigneeIds: [member.id],
+            categoryId: null,
+            isOutreach: false,
+            meetingId: fromMeeting.id,
+            meetingTitle: fromMeeting.title,
+          }
+        : undefined;
 
   return (
     <TaskForm

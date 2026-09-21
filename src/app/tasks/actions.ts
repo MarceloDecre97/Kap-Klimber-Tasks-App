@@ -215,6 +215,13 @@ export async function createTask(input: unknown): Promise<ActionResult> {
           "fix their address" from claiming somebody was emailed. See 0041.
         */
         is_outreach: data.isOutreach === true,
+        /*
+          Same rule, same reason: only on create. The trigger pins it from
+          here on, so a finished "fix their address" can never be recast as
+          an action item from a conversation it was not part of, and a
+          meeting's list of what it produced cannot quietly stop being true.
+        */
+        meeting_id: data.meetingId ?? null,
         created_by: member.id,
       })
       .select("id")

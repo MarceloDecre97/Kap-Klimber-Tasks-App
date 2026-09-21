@@ -13,6 +13,7 @@ import {
   Contact,
   Link as LinkIcon,
   MessageSquare,
+  NotebookPen,
   Pencil,
   ThumbsUp,
   Trash2,
@@ -615,6 +616,26 @@ export function TaskPill({
             0033 an assignee cannot open the form, so without a control here
             that permission would exist on paper and nowhere else.
           */}
+          {/*
+            Where this came from, when it came out of a meeting.
+
+            One line, above the links: the minutes are the context this task
+            used to have to carry in its own description, and the whole point
+            of 0047 is that the description no longer has to. A link rather
+            than the text itself — what was said belongs where it was written.
+          */}
+          {task.meeting && (
+            <Link
+              href={`/meetings?open=${task.meeting.id}`}
+              className="inline-flex w-auto items-center gap-2 self-start rounded-xl border-[1.5px] border-border bg-card px-3 py-2 text-timestamp font-bold text-fg no-underline hover:bg-muted"
+            >
+              <NotebookPen aria-hidden className="size-4 shrink-0 text-sub" strokeWidth={1.75} />
+              <span className="min-w-0 wrap-anywhere">
+                From <span className="text-link underline underline-offset-2">{task.meeting.title}</span>
+              </span>
+            </Link>
+          )}
+
           <TaskLinks taskId={task.id} links={task.links} />
 
           {/*

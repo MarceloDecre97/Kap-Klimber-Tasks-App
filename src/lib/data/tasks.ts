@@ -113,6 +113,14 @@ export interface TaskWithRelations {
   updated_at: string;
   completed_at: string | null;
   created_by: string;
+  /**
+   * The meeting this came out of, when it did.
+   *
+   * Carried on the task rather than looked up when the card opens, because
+   * it is one line on a card that is already loaded — and a task whose
+   * origin appears a beat after the rest of it reads like a bug.
+   */
+  meeting: { id: string; title: string; met_on: string } | null;
   category: { id: string; label: string } | null;
   assignees: MemberSummary[];
   /**
@@ -155,6 +163,8 @@ const TASK_SELECT = `
   deletion_requested_by, deletion_requested_at, deletion_reason, deleted_at,
   due_date, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
+  /* Where this came from, when it came out of a meeting. See 0047. */
+  meeting:meetings(id, title, met_on),
   reads:task_reads(last_read_at),
   events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
@@ -181,6 +191,7 @@ type RawTask = {
   description: string | null;
   priority: Priority;
   status: TaskStatus;
+  meeting: { id: string; title: string; met_on: string } | null;
   deletion_requested_by: string | null;
   deletion_requested_at: string | null;
   deletion_reason: string | null;
