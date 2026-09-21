@@ -7,12 +7,13 @@ import {
   getMeeting,
   listCompanyMeetings,
   listContactMeetings,
+  listMeetingComments,
   listMeetingEvents,
   listMeetingTasks,
   searchMeetings,
   type MeetingEvent,
 } from "@/lib/data/meetings";
-import type { MeetingTask } from "@/lib/data/meetings";
+import type { MeetingComment, MeetingTask } from "@/lib/data/meetings";
 import type { Meeting, MeetingSummary } from "@/lib/meetings-view";
 
 /**
@@ -365,5 +366,72 @@ export async function meetingTasks(
   } catch (error) {
     console.error("meetingTasks failed", error);
     return { ok: false, error: "Couldn't load the tasks." };
+  }
+}
+
+/** The margin notes on a meeting. */
+export async function meetingComments(
+  meetingIdInput: string
+): Promise<{ ok: true; comments: MeetingComment[] } | { ok: false; error: string }> {
+  const meetingId = idSchema.safeParse(meetingIdInput);
+  if (!meetingId.success) return { ok: false, error: "Invalid meeting." };
+  try {
+    const { supabase, member } = await getCurrentMember();
+    return { ok: true, comments: await listMeetingComments(supabase, member.id, meetingId.data) };
+  } catch (error) {
+    console.error("meetingComments failed", error);
+    return { ok: false, error: "Couldn't load the comments." };
+  }
+}
+
+/**
+ * Add one.
+ *
+ * Anyone on the team, including on their own minutes — a note to self about
+ * what to chase is exactly what this is for. The author of the minutes is
+ * told; nobody else is, because a comment is addressed to them.
+ */
+export async function addMeetingComment(
+  meetingIdInput: string,
+  body: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const meetingId = idSchema.safeParse(meetingIdInput);
+  if (!meetingId.success) return { ok: false, error: "Invalid meeting." };
+  const text = typeof body === "string" ? body.trim() : "";
+  if (text.length === 0) return { ok: false, error: "Write something first." };
+  if (text.length > 4000) return { ok: false, error: "That comment is too long." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+    const { error } = await supabase
+      .from("meeting_comments")
+      .insert({ meeting_id: meetingId.data, member_id: member.id, body: text });
+    if (error) throw error;
+    revalidateMeetingViews(meetingId.data);
+    return { ok: true };
+  } catch (error) {
+    console.error("addMeetingComment failed", error);
+    return { ok: false, error: "Couldn't add that comment. Try again." };
+  }
+}
+
+/** Take your own back. The guard in 0048 refuses anybody else's. */
+export async function removeMeetingComment(
+  commentIdInput: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const commentId = idSchema.safeParse(commentIdInput);
+  if (!commentId.success) return { ok: false, error: "Invalid comment." };
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase
+      .from("meeting_comments")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", commentId.data);
+    if (error) throw error;
+    revalidateMeetingViews();
+    return { ok: true };
+  } catch (error) {
+    console.error("removeMeetingComment failed", error);
+    return { ok: false, error: "Couldn't remove that comment. Try again." };
   }
 }

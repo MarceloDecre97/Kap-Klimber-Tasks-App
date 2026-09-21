@@ -324,3 +324,47 @@ export async function listMeetingTasks(
   if (error) throw error;
   return (data ?? []) as unknown as MeetingTask[];
 }
+
+/**
+ * A margin note on somebody's minutes.
+ *
+ * Its own thing rather than a task note: this carries no replies, no likes
+ * and no mentions, because a comment on minutes is not a conversation — it
+ * is Dee remembering the bit about the second depot.
+ */
+export interface MeetingComment {
+  id: string;
+  body: string;
+  created_at: string;
+  edited_at: string | null;
+  member: MemberSummary | null;
+  /** Whether the viewer wrote it — only its author may change it. */
+  mine: boolean;
+}
+
+export async function listMeetingComments(
+  supabase: SupabaseClient<Database>,
+  meId: string,
+  meetingId: string
+): Promise<MeetingComment[]> {
+  const { data, error } = await supabase
+    .from("meeting_comments")
+    .select(
+      `id, body, created_at, edited_at, member_id,
+       member:members(id, display_name, initials, color)`
+    )
+    .eq("meeting_id", meetingId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  type CommentRow = Omit<MeetingComment, "mine"> & { member_id: string };
+  return ((data ?? []) as unknown as CommentRow[]).map((row) => ({
+    id: row.id,
+    body: row.body,
+    created_at: row.created_at,
+    edited_at: row.edited_at,
+    member: row.member,
+    mine: row.member_id === meId,
+  }));
+}

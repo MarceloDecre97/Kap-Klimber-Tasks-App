@@ -75,6 +75,22 @@ export function describeNotification(item: NotificationItem): NotificationCopy {
     wording says what happened rather than softening it — and the detail
     says the part that matters most: it is not in the bin, it is gone.
   */
+  /*
+    Somebody wrote in the margin of your minutes.
+
+    Only the author is told, so "on your minutes" is always true, and the
+    title is carried in the payload rather than joined: the meeting may since
+    have been renamed or binned, and a bell entry should say what it said
+    when it was sent.
+  */
+  if (item.kind === "meeting_comment") {
+    const title = typeof item.payload.title === "string" ? item.payload.title.trim() : "";
+    return {
+      headline: `${who} commented on your minutes`,
+      detail: title || "A meeting you wrote up",
+    };
+  }
+
   if (item.kind === "contact_erased") {
     const company = typeof item.payload.company === "string" ? item.payload.company.trim() : "";
     return {

@@ -223,6 +223,59 @@ export function renderBody(body: string): BodyLine[] {
 }
 
 /**
+ * What the list is narrowed by, beyond the search box.
+ *
+ * Three, and no more. The filters that earn their place are the ones that
+ * answer a question somebody actually asks: "what did we say to Royal
+ * Truck", "what did I write", "what were the internal ones". A date-range
+ * picker would answer a question the date groups already answer by scrolling.
+ *
+ * As with the contacts book since the outreach round: no filter narrows the
+ * options of another. Every company that has a meeting is offered whatever
+ * else is switched on, and an impossible combination shows an empty list
+ * with the line that says so, rather than a control quietly vanishing
+ * mid-thought.
+ */
+export interface MeetingFilters {
+  companyId: string | null;
+  mineOnly: boolean;
+  internalOnly: boolean;
+}
+
+export const NO_MEETING_FILTERS: MeetingFilters = {
+  companyId: null,
+  mineOnly: false,
+  internalOnly: false,
+};
+
+export function activeFilterCount(f: MeetingFilters): number {
+  return (f.companyId ? 1 : 0) + (f.mineOnly ? 1 : 0) + (f.internalOnly ? 1 : 0);
+}
+
+export function matchesFilters(m: MeetingSummary, f: MeetingFilters): boolean {
+  if (f.companyId && m.company_id !== f.companyId) return false;
+  if (f.mineOnly && !m.mine) return false;
+  if (f.internalOnly && !isInternal(m)) return false;
+  return true;
+}
+
+/**
+ * The companies that have meetings, for the filter to offer.
+ *
+ * Taken from the meetings rather than from the company book, because a
+ * dropdown of forty companies you have never met is forty rows of nothing.
+ */
+export function companiesIn(meetings: MeetingSummary[]): { id: string; name: string }[] {
+  const seen = new Map<string, string>();
+  for (const m of meetings) {
+    if (m.company_id && m.company_name) seen.set(m.company_id, m.company_name);
+  }
+  return [...seen.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
  * What the search box matches.
  *
  * Kept here as well as in the database because the list already in hand can

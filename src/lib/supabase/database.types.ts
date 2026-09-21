@@ -24,7 +24,9 @@ export type NotificationKind =
   | "due_soon"
   | "overdue"
   /** The one that is not about a task at all. See 0025_contact_erased.sql. */
-  | "contact_erased";
+  | "contact_erased"
+  /** Somebody wrote in the margin of your minutes. See 0048. */
+  | "meeting_comment";
 
 /**
  * Everything a task's Activity can record. The deletion kinds are what make
@@ -572,6 +574,27 @@ export interface Database {
           "meeting_id" | "member_id" | "added_by"
         >;
         Update: never;
+        Relationships: [];
+      };
+      meeting_comments: {
+        Row: {
+          id: string;
+          meeting_id: string;
+          member_id: string;
+          body: string;
+          created_at: string;
+          edited_at: string | null;
+          deleted_at: string | null;
+        };
+        Insert: Pick<
+          Database["public"]["Tables"]["meeting_comments"]["Row"],
+          "meeting_id" | "member_id" | "body"
+        > &
+          Partial<Pick<Database["public"]["Tables"]["meeting_comments"]["Row"], "id">>;
+        /* edited_at is stamped by the trigger, never sent. */
+        Update: Partial<
+          Pick<Database["public"]["Tables"]["meeting_comments"]["Row"], "body" | "deleted_at">
+        >;
         Relationships: [];
       };
       meeting_events: {

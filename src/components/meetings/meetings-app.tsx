@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { MeetingEditor } from "@/components/meetings/meeting-editor";
+import { MeetingComments } from "@/components/meetings/meeting-comments";
 import { MeetingDetails, detailsFrom, type DetailValues } from "@/components/meetings/meeting-details";
 import {
   createMeeting,
@@ -19,13 +20,18 @@ import {
   updateMeeting,
 } from "@/app/meetings/actions";
 import {
+  NO_MEETING_FILTERS,
+  activeFilterCount,
+  companiesIn,
   groupMeetings,
+  matchesFilters,
   renderBody,
   isInternal,
   matchesMeeting,
   formatMeetingDay,
   meetingWhen,
   type Meeting,
+  type MeetingFilters,
   type MeetingSummary,
 } from "@/lib/meetings-view";
 import { cn } from "@/lib/utils";
@@ -72,6 +78,7 @@ export function MeetingsApp({
   /** Meetings the server found that the list in hand didn't have. */
   const [found, setFound] = useState<MeetingSummary[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [filters, setFilters] = useState<MeetingFilters>(NO_MEETING_FILTERS);
 
   const [open, setOpen] = useState<Meeting | null>(null);
   const [details, setDetails] = useState<DetailValues | null>(null);
@@ -85,16 +92,21 @@ export function MeetingsApp({
     same things, so they cannot disagree about what a word means.
   */
   const narrowed = useMemo(
-    () => meetings.filter((m) => matchesMeeting(m, query)),
-    [meetings, query]
+    () => meetings.filter((m) => matchesMeeting(m, query) && matchesFilters(m, filters)),
+    [meetings, query, filters]
   );
 
   const shown = useMemo(() => {
     if (!found) return narrowed;
     const byId = new Map(narrowed.map((m) => [m.id, m]));
-    for (const m of found) if (!byId.has(m.id)) byId.set(m.id, m);
+    /* What the server found is still subject to the filters on screen. */
+    for (const m of found) if (!byId.has(m.id) && matchesFilters(m, filters)) byId.set(m.id, m);
     return [...byId.values()];
-  }, [narrowed, found]);
+  }, [narrowed, found, filters]);
+
+  /* Offered from every meeting loaded, never narrowed by the other filters. */
+  const companyOptions = useMemo(() => companiesIn(meetings), [meetings]);
+  const activeFilters = activeFilterCount(filters);
 
   const groups = useMemo(() => groupMeetings(shown), [shown]);
 
@@ -229,11 +241,62 @@ export function MeetingsApp({
         New meeting
       </Button>
 
+      {/*
+        No filter narrows another's options — the rule the contacts book
+        arrived at the hard way. Every company that has a meeting stays on
+        offer whatever else is switched on, and an impossible combination
+        shows the empty line below rather than a control that disappears
+        while you are still using it.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="meeting-company-filter" className="sr-only">
+          Filter by company
+        </label>
+        <select
+          id="meeting-company-filter"
+          value={filters.companyId ?? ""}
+          onChange={(event) =>
+            setFilters((f) => ({ ...f, companyId: event.target.value || null }))
+          }
+          className="h-11 max-w-full rounded-full border-[1.5px] border-border bg-card px-3 text-timestamp font-bold text-fg"
+        >
+          <option value="">Any company</option>
+          {companyOptions.map((company) => (
+            <option key={company.id} value={company.id}>
+              {company.name}
+            </option>
+          ))}
+        </select>
+
+        <FilterToggle
+          on={filters.mineOnly}
+          onClick={() => setFilters((f) => ({ ...f, mineOnly: !f.mineOnly }))}
+        >
+          Mine
+        </FilterToggle>
+        <FilterToggle
+          on={filters.internalOnly}
+          onClick={() => setFilters((f) => ({ ...f, internalOnly: !f.internalOnly }))}
+        >
+          Internal
+        </FilterToggle>
+
+        {activeFilters > 0 && (
+          <button
+            type="button"
+            onClick={() => setFilters(NO_MEETING_FILTERS)}
+            className="h-11 cursor-pointer border-none bg-transparent px-2 text-timestamp font-bold text-brand underline underline-offset-[3px]"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       {searching && <p className="text-timestamp text-sub">Looking through every meeting…</p>}
 
       {shown.length === 0 && (
         <p className="rounded-2xl border-[1.5px] border-border bg-card px-4 py-6 text-[17px] leading-6 text-sub text-pretty">
-          {query
+          {query || activeFilters > 0
             ? "Nothing matches that. Try part of a title, a company, or a word you remember writing."
             : "No meetings yet. The first one takes about three seconds."}
         </p>
@@ -361,6 +424,14 @@ export function MeetingsApp({
         */
         <MeetingReader body={open.body} />
       )}
+
+      {/*
+        Last on the card. The minutes are what you came for; the margin is
+        what somebody else added afterwards, and putting it above the paper
+        would make every meeting open on the commentary rather than the
+        record.
+      */}
+      <MeetingComments meetingId={open.id} />
     </div>
   );
 
@@ -519,6 +590,30 @@ function MeetingReader({ body }: { body: string }) {
         );
       })}
     </div>
+  );
+}
+
+function FilterToggle({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cn(
+        "h-11 cursor-pointer rounded-full border-[1.5px] px-3.5 text-timestamp font-bold",
+        on ? "border-fg bg-prim text-on-prim" : "border-border bg-card text-sub hover:bg-muted"
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

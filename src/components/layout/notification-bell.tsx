@@ -9,6 +9,7 @@ import {
   CalendarClock,
   CircleDot,
   MessageSquare,
+  NotebookPen,
   RotateCcw,
   Trash2,
   Undo2,
@@ -49,6 +50,8 @@ const KIND_ICON: Record<NotificationKind, LucideIcon> = {
   reminder_nudge: BellRing,
   /* The address book's own icon, so it does not read as a deleted task. */
   contact_erased: UserRoundX,
+  /* A pen on a page: somebody wrote in the margin of your minutes. */
+  meeting_comment: NotebookPen,
   due_soon: CalendarClock,
   overdue: AlertTriangle,
 };
@@ -244,6 +247,24 @@ function NotificationRow({
       </span>
     </>
   );
+
+  /*
+    A comment on your minutes has somewhere to go, even though it names no
+    task: the meeting it was written on. Handled before the check below,
+    which would otherwise file it under "nothing to open" and leave the one
+    notification whose entire purpose is to be followed as a dead end.
+  */
+  const meetingId =
+    item.kind === "meeting_comment" && typeof item.payload.meeting_id === "string"
+      ? item.payload.meeting_id
+      : null;
+  if (meetingId) {
+    return (
+      <Link href={`/meetings?open=${meetingId}`} onClick={onNavigate} className={className}>
+        {inner}
+      </Link>
+    );
+  }
 
   // Nothing to open: the task is gone, and for everyone but its creator it is
   // gone for good — or there was never a task, as with an erased contact,
