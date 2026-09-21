@@ -53,6 +53,14 @@ export type TaskEventKind =
 /** Everything a contact's Activity can record. */
 export type ContactEventKind = "created" | "edited" | "deleted" | "restored";
 
+/**
+ * Everything a meeting's Activity can record.
+ *
+ * Note what is missing: the body. Autosave would write a line every few
+ * seconds, and a history nobody can read is worse than none. See 0046.
+ */
+export type MeetingEventKind = "created" | "edited" | "deleted" | "restored";
+
 export interface RosterEntry {
   id: string;
   display_name: string;
@@ -491,6 +499,91 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["task_reads"]["Row"]>;
         Relationships: [];
       };
+
+      /* ------------------------------------------------------------------
+         Meetings — 0046. The minutes, the people in the room, and the log.
+         ------------------------------------------------------------------ */
+      meetings: {
+        Row: {
+          id: string;
+          title: string;
+          /** The day it happened. May be in the future — an agenda. */
+          met_on: string;
+          /** Optional; minutes are filed by day. */
+          met_at: string | null;
+          /** Set by hand, or left null and derived from the attendees. */
+          company_id: string | null;
+          /** The paper. Plain text, empty is legal. */
+          body: string;
+          created_by: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          created_at: string;
+          /** The autosave stamp the stale-screen check compares against. */
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["meetings"]["Row"],
+          | "id"
+          | "body"
+          | "deleted_at"
+          | "deleted_by"
+          | "created_at"
+          | "updated_at"
+        > &
+          Partial<Pick<Database["public"]["Tables"]["meetings"]["Row"], "id" | "body">>;
+        Update: Partial<
+          Pick<
+            Database["public"]["Tables"]["meetings"]["Row"],
+            "title" | "met_on" | "met_at" | "company_id"
+          >
+        >;
+        Relationships: [];
+      };
+      meeting_contacts: {
+        Row: {
+          meeting_id: string;
+          contact_id: string;
+          added_by: string | null;
+          added_at: string;
+        };
+        Insert: Pick<
+          Database["public"]["Tables"]["meeting_contacts"]["Row"],
+          "meeting_id" | "contact_id" | "added_by"
+        >;
+        Update: never;
+        Relationships: [];
+      };
+      meeting_members: {
+        Row: {
+          meeting_id: string;
+          member_id: string;
+          added_by: string | null;
+          added_at: string;
+        };
+        Insert: Pick<
+          Database["public"]["Tables"]["meeting_members"]["Row"],
+          "meeting_id" | "member_id" | "added_by"
+        >;
+        Update: never;
+        Relationships: [];
+      };
+      meeting_events: {
+        Row: {
+          id: string;
+          meeting_id: string;
+          member_id: string | null;
+          kind: MeetingEventKind;
+          field: string | null;
+          from_value: string | null;
+          to_value: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+
     };
     Views: Record<string, never>;
     Functions: {
@@ -532,6 +625,20 @@ export interface Database {
        * follow-up reminder moved a week on. See 0044.
        */
       record_outreach_sent: { Args: { p_task_id: string }; Returns: void };
+      /**
+       * Autosave. Returns the new updated_at. Raises SQLSTATE 40001 when the
+       * row moved on since the caller last read it, so a second open screen
+       * offers to reload rather than flattening the first. See 0046.
+       */
+      save_meeting_body: {
+        Args: { p_meeting_id: string; p_body: string; p_expected: string | null };
+        Returns: string;
+      };
+      /** The author's, with the inactive-author escape hatch. */
+      can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean };
+      /** Set by hand, or the one company every external attendee shares. */
+      meeting_company: { Args: { p_meeting_id: string }; Returns: string | null };
+      delete_meeting: { Args: { p_meeting_id: string; p_deleted: boolean }; Returns: void };
       /** Refused while anyone is still at the company. See 0024_companies.sql. */
       delete_company: { Args: { p_company_id: string }; Returns: void };
       company_contact_count: { Args: { p_company_id: string }; Returns: number };

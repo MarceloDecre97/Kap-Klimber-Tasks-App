@@ -3,10 +3,22 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
+/*
+  Four segments since meetings arrived, and the labels shortened to pay for
+  it. "Tasklist" and "Dashboard" were nine letters each against a row that
+  had already dropped to px-2 to fit three; a fourth needed the words to give
+  ground rather than the padding. Measured at 360px before it shipped.
+
+  "Tasks" and "Board" say the same thing in half the width, and "Meetings"
+  earns its place on the row rather than hiding behind Contacts: it is opened
+  mid-call with a customer waiting, which is the one screen in this app where
+  a second tap is a real cost.
+*/
 const VIEWS = [
-  { href: "/tasks", label: "Tasklist" },
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/tasks", label: "Tasks" },
+  { href: "/dashboard", label: "Board" },
   { href: "/contacts", label: "Contacts" },
+  { href: "/meetings", label: "Meetings" },
 ] as const;
 
 export type ViewHref = (typeof VIEWS)[number]["href"];
@@ -31,10 +43,10 @@ export function ViewNav({ current, className }: { current: ViewHref; className?:
             href={view.href}
             aria-current={isCurrent ? "page" : undefined}
             className={cn(
-              // px-2 below sm, because a third segment arrived: at 360px
-              // "Dashboard" is the widest label and px-3 pushed the row over.
-              "flex h-12 flex-1 items-center justify-center whitespace-nowrap rounded-full px-2 sm:px-3 lg:px-5",
-              "text-[15px] leading-6 font-bold transition-colors duration-150 lg:text-[17px]",
+              // px-1.5 below sm, because a fourth segment arrived. The labels
+              // shortened at the same time; between them the row fits 360px.
+              "flex h-12 flex-1 items-center justify-center whitespace-nowrap rounded-full px-1.5 sm:px-3 lg:px-5",
+              "text-[14px] leading-6 font-bold transition-colors duration-150 sm:text-[15px] lg:text-[17px]",
               isCurrent ? "bg-prim text-on-prim" : "text-muted-fg hover:text-fg"
             )}
           >

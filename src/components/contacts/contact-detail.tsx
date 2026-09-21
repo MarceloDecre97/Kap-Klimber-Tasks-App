@@ -28,6 +28,7 @@ import {
 import { cn, formatTimestamp, formatTimestampWithYear } from "@/lib/utils";
 import { OutreachSection } from "@/components/contacts/outreach-section";
 import type { Outreach } from "@/lib/outreach";
+import { MeetingsSection } from "@/components/meetings/meetings-section";
 import type { ContactEvent, ContactSummary } from "@/lib/data/contacts";
 
 /**
@@ -397,6 +398,13 @@ export function ContactDetail({
               </>
             )}
           </div>
+
+          {/*
+            The meetings this person sat in, above their edit history: what
+            was said is worth more than what somebody corrected in a phone
+            number, and it is the thing you open a contact to remember.
+          */}
+          <MeetingsSection contactId={contact.id} title="Meetings with them" />
 
           <Activity events={events} />
         </div>

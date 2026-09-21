@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Field, Group } from "@/components/contacts/form-field";
+import { MeetingsSection } from "@/components/meetings/meetings-section";
 import { CompanyFields, type CompanyDetails as Details } from "@/components/companies/company-fields";
 import { countryUnmatched } from "@/components/ui/country-field";
 import { ContactRow } from "@/components/contacts/contact-row";
@@ -405,6 +406,14 @@ export function CompanyDetail({
               </div>
             </div>
           )}
+
+          {/*
+            Every meeting with this company, newest first — the running
+            document Marcelo described, without being one. Each line is still
+            its own record, so a task can point at one and search can return
+            one on its own.
+          */}
+          <MeetingsSection companyId={company.id} />
         </div>
       </div>
     </div>
