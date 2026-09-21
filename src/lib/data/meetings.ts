@@ -20,12 +20,23 @@ import { snippetOf, type Attendee, type Meeting, type MeetingSummary } from "@/l
  * ships only the snippet. The editor is the one query that carries the paper.
  */
 
+/*
+  Every embed names its foreign key. `meeting_members` reaches `members`
+  through two of them — `member_id` for who was in the room and `added_by`
+  for who put them there — so an unqualified `members(...)` is ambiguous and
+  PostgREST refuses the whole query. The others are unambiguous today and are
+  named anyway: a second foreign key added later should not silently break a
+  query that has been working for a year.
+
+  And, as in tasks.ts: this string is a column list posted to the API, not
+  SQL. No comments inside the backticks.
+*/
 const ATTENDEE_SELECT = `
   contacts:meeting_contacts(
-    contact:contacts(id, first_name, last_name, deleted_at)
+    contact:contacts!meeting_contacts_contact_id_fkey(id, first_name, last_name, deleted_at)
   ),
   members:meeting_members(
-    member:members(id, display_name, initials, color)
+    member:members!meeting_members_member_id_fkey(id, display_name, initials, color)
   )
 `;
 
@@ -33,7 +44,7 @@ const MEETING_SELECT = `
   id, title, met_on, met_at, company_id, body,
   created_at, updated_at, deleted_at,
   created_by:members!meetings_created_by_fkey(id, display_name, initials, color),
-  company:companies(id, name),
+  company:companies!meetings_company_id_fkey(id, name),
   ${ATTENDEE_SELECT}
 `;
 
@@ -287,7 +298,7 @@ export async function listMeetingEvents(
     .from("meeting_events")
     .select(
       `id, kind, field, from_value, to_value, created_at,
-       member:members(id, display_name, initials, color)`
+       member:members!meeting_events_member_id_fkey(id, display_name, initials, color)`
     )
     .eq("meeting_id", meetingId)
     .order("created_at", { ascending: false })
@@ -351,7 +362,7 @@ export async function listMeetingComments(
     .from("meeting_comments")
     .select(
       `id, body, created_at, edited_at, member_id,
-       member:members(id, display_name, initials, color)`
+       member:members!meeting_comments_member_id_fkey(id, display_name, initials, color)`
     )
     .eq("meeting_id", meetingId)
     .is("deleted_at", null)

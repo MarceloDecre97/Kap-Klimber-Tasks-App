@@ -158,13 +158,26 @@ export interface TaskWithRelations {
   last_read_at: string | null;
 }
 
+/*
+  Sent verbatim as PostgREST's `select=` parameter, which is a column list and
+  NOT SQL. Nothing but columns and embeds may appear between these backticks:
+  a `/* … *\/` comment in here is not stripped by anything — it is posted to
+  the API, parsed as column names, and every task query comes back 400. That
+  is exactly what happened when `meeting:` was added, and it took out the
+  Tasklist and the Dashboard together. Notes about this string go here, above
+  it, where they are code rather than data.
+
+  Embeds name their foreign key explicitly wherever the target table can be
+  reached by more than one, because PostgREST refuses an ambiguous one — and
+  naming it even where it is currently unambiguous means adding a second
+  foreign key later cannot silently break a query.
+*/
 const TASK_SELECT = `
   id, title, description, priority, status,
   deletion_requested_by, deletion_requested_at, deletion_reason, deleted_at,
   due_date, created_at, updated_at, completed_at, created_by,
   category:categories(id, label),
-  /* Where this came from, when it came out of a meeting. See 0047. */
-  meeting:meetings(id, title, met_on),
+  meeting:meetings!tasks_meeting_id_fkey(id, title, met_on),
   reads:task_reads(last_read_at),
   events:task_events(id, kind, from_value, to_value, created_at, member:members!task_events_member_id_fkey(id, display_name, initials, color)),
   assignees:task_assignees(member:members(id, display_name, initials, color)),
