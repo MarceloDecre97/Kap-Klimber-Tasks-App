@@ -515,6 +515,12 @@ export interface Database {
         Row: {
           id: string;
           title: string;
+          /**
+           * One line about what it was, for the card in the list. Written
+           * rather than derived; null when nobody wrote one, and the card
+           * then shows nothing rather than quoting the minutes. See 0050.
+           */
+          description: string | null;
           /** The day it happened. May be in the future — an agenda. */
           met_on: string;
           /** Optional; minutes are filed by day. */
@@ -534,16 +540,19 @@ export interface Database {
           Database["public"]["Tables"]["meetings"]["Row"],
           | "id"
           | "body"
+          | "description"
           | "deleted_at"
           | "deleted_by"
           | "created_at"
           | "updated_at"
         > &
-          Partial<Pick<Database["public"]["Tables"]["meetings"]["Row"], "id" | "body">>;
+          Partial<
+            Pick<Database["public"]["Tables"]["meetings"]["Row"], "id" | "body" | "description">
+          >;
         Update: Partial<
           Pick<
             Database["public"]["Tables"]["meetings"]["Row"],
-            "title" | "met_on" | "met_at" | "company_id"
+            "title" | "description" | "met_on" | "met_at" | "company_id" | "deleted_at"
           >
         >;
         Relationships: [];
@@ -666,7 +675,8 @@ export interface Database {
       /**
        * One write for everything a meeting is. Replaces the split that let
        * the details panel and the paper disagree about what "saved" meant.
-       * Raises SQLSTATE 40001 when the row moved on. See 0049.
+       * Raises SQLSTATE 40001 when the row moved on. See 0049, and 0050 for
+       * the description.
        */
       save_meeting: {
         Args: {
@@ -678,6 +688,7 @@ export interface Database {
           p_clear_company: boolean;
           p_body: string;
           p_expected: string | null;
+          p_description: string | null;
         };
         Returns: string;
       };

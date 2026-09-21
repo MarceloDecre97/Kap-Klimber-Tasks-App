@@ -17,8 +17,9 @@ import type { DetailValues } from "@/components/meetings/meeting-details";
  * - **The button IS the indicator.** Enabled means there is something
  *   unsaved; disabled means there is not. No separate status line to read,
  *   and nothing to interpret: if it is pressable, press it.
- * - **A minute of quiet saves it anyway.** The button is the fast path, not
- *   the only path — walk away mid-sentence and it lands by itself.
+ * - **A minute of quiet saves it anyway**, and so does clicking out of what
+ *   you were typing in. The button is the fast path, not the only path —
+ *   walk away mid-sentence and it lands by itself.
  *
  * What is kept from the first version is the part that actually stops work
  * being lost: a copy in this browser on every keystroke, offered back if a
@@ -41,6 +42,24 @@ function draftKey(meetingId: string): string {
   return `kk.meeting.draft.${meetingId}`;
 }
 
+/*
+  localStorage has no change event for the tab that wrote it, so the draft is
+  a store this file keeps: written here, and everything reading it is told.
+
+  This is not housekeeping. Without it `useStoredDraft` handed back whatever
+  it read when the pane mounted, for ever — so clearing the draft after a
+  successful save changed nothing on screen, and the "this device kept a newer
+  copy" panel appeared straight after every save Marcelo made. The message was
+  right about the data it had and wrong about the world.
+*/
+const listeners = new Set<() => void>();
+let revision = 0;
+
+function announce(): void {
+  revision += 1;
+  for (const listener of listeners) listener();
+}
+
 /** Every localStorage touch is wrapped: private windows and blocked data throw. */
 function readDraft(meetingId: string): MeetingDraft | null {
   try {
@@ -60,6 +79,7 @@ function writeDraft(meetingId: string, draft: MeetingDraft): void {
   } catch {
     /* Out of quota or blocked. The server save is still the real one. */
   }
+  announce();
 }
 
 export function clearDraft(meetingId: string): void {
@@ -68,6 +88,7 @@ export function clearDraft(meetingId: string): void {
   } catch {
     /* Nothing to do, and nothing worth telling anybody about. */
   }
+  announce();
 }
 
 /**
@@ -75,15 +96,22 @@ export function clearDraft(meetingId: string): void {
  *
  * `useSyncExternalStore` rather than an effect: localStorage does not exist
  * while this renders on the server, and an effect that calls setState to
- * correct that is a cascading render. The snapshot is cached because
- * getSnapshot must return a stable reference or React re-renders for ever.
+ * correct that is a cascading render. The snapshot is cached against the
+ * revision above, because getSnapshot must return a stable reference or React
+ * re-renders for ever — and must return a FRESH one when the draft has
+ * actually changed, or a cleared draft stays on screen.
  */
 export function useStoredDraft(meetingId: string): MeetingDraft | null {
-  const cache = useRef<{ key: string; value: MeetingDraft | null } | null>(null);
-  const subscribe = useCallback(() => () => {}, []);
+  const cache = useRef<{ key: string; at: number; value: MeetingDraft | null } | null>(null);
+  const subscribe = useCallback((notify: () => void) => {
+    listeners.add(notify);
+    return () => {
+      listeners.delete(notify);
+    };
+  }, []);
   const getSnapshot = useCallback(() => {
-    if (cache.current?.key !== meetingId) {
-      cache.current = { key: meetingId, value: readDraft(meetingId) };
+    if (cache.current?.key !== meetingId || cache.current.at !== revision) {
+      cache.current = { key: meetingId, at: revision, value: readDraft(meetingId) };
     }
     return cache.current.value;
   }, [meetingId]);

@@ -81,9 +81,10 @@ export function MeetingsSection({
               <span className="text-[17px] leading-6 font-bold text-fg text-pretty wrap-anywhere">
                 {meeting.title}
               </span>
-              {meeting.snippet && (
+              {/* The description, as on the card in the list. See 0050. */}
+              {meeting.description && (
                 <span className="line-clamp-2 text-timestamp text-sub text-pretty">
-                  {meeting.snippet}
+                  {meeting.description}
                 </span>
               )}
             </Link>

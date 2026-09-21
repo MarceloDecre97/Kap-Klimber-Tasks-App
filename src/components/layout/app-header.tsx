@@ -34,15 +34,23 @@ import type { NotificationFeed } from "@/lib/data/notifications";
  * took three separate concessions to make them fit, each measured at 360px
  * where 320px of width is all there is:
  *
- *   - the clock stacked to two characters (44px, was 74) and went 24-hour,
- *     because "11:40 AM" on one line has no shorter form;
+ *   - the clock stacked to two characters and went 24-hour, because
+ *     "11:40 AM" on one line has no shorter form; it is now 44px square,
+ *     the same as the two buttons beside it;
  *   - the bell and the gear dropped to 44px, still the floor for a thumb;
  *   - the logo stopped growing at 360px and stays at its smallest step.
  *
- * Together: 286px against 320px. Before them the total was exactly 320px,
- * which rounding pushed over, and the gear fell to a third row — a 183px
- * header where this layout exists to produce a 127px one. At 320px it is
- * three rows again, which is rare and is where it already was.
+ * Together: 286px against 320px. At 320px it is three rows again, which is
+ * rare and is where it already was.
+ *
+ * And the ORDER has to say so. The concessions above were all made and the
+ * gear still fell to a third row, because it and the view switcher both sat
+ * at `order-4`: equal order is DOM order, the switcher came first, and
+ * `grow` then had it fill the whole of row two with the gear behind it.
+ * Wrapping is decided by the order the boxes are laid out in, not by how
+ * much room they need — so the gear is ordered ahead of the switcher, and
+ * the switcher, which is the one thing here that is happy on a row of its
+ * own, goes last.
  *
  * The theme toggle stays off the phone entirely. Nothing is lost: the same
  * toggle sits on the Settings screen, one tap away, and it is a control you
@@ -74,13 +82,14 @@ export function AppHeader({
         </div>
 
         {/*
-          `grow`, never `flex-1`: a zero flex-basis would make the switcher
-          look like it always fits on the first line, so it would stay there
-          and squash to nothing instead of wrapping. With the default `auto`
-          basis its real width decides the wrap, and `grow` then lets it fill
-          the rest of the second row beside the clock.
+          Last on a phone — after the gear — so it wraps to row two and the
+          three controls stay on row one. See the note at the top of this
+          file: it is the order, not the width, that put the gear on a third
+          row. `grow`, never `flex-1`: a zero flex-basis would make the
+          switcher look like it always fits on the first line, so it would
+          stay there and squash to nothing instead of wrapping.
         */}
-        <div className="order-4 grow lg:order-2 lg:grow-0">
+        <div className="order-5 grow lg:order-2 lg:grow-0">
           <ViewNav current={current} />
         </div>
 

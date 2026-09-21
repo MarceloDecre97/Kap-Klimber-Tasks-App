@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
 import {
   getMeeting,
+  listBinnedMeetings,
   listCompanyMeetings,
   listContactMeetings,
   listMeetingComments,
@@ -41,6 +42,18 @@ const meetingInputSchema = z.object({
     .trim()
     .min(1, "Give these minutes a title — it's what makes them findable later.")
     .max(200, "That title is too long."),
+  /*
+    The line the card shows. Its own field rather than the opening of the
+    minutes, which is whatever happened to be typed first. Empty is normal —
+    a meeting created thirty seconds before it starts has nothing to
+    summarise — and empty means the card shows the title alone.
+  */
+  description: z
+    .string()
+    .trim()
+    .max(200, "That description is too long — keep it to a line.")
+    .optional()
+    .default(""),
   metOn: dateSchema,
   /* Optional, and an empty string from an untouched <input type="time">. */
   metAt: z
@@ -91,6 +104,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
       .from("meetings")
       .insert({
         title: v.title,
+        description: v.description || null,
         met_on: v.metOn,
         met_at: v.metAt ? v.metAt : null,
         company_id: v.companyId ?? null,
@@ -138,6 +152,7 @@ export async function updateMeeting(
       .from("meetings")
       .update({
         title: v.title,
+        description: v.description || null,
         met_on: v.metOn,
         met_at: v.metAt ? v.metAt : null,
         company_id: v.companyId ?? null,
@@ -479,6 +494,7 @@ export async function saveMeeting(
       p_clear_company: !v.companyId,
       p_body: body,
       p_expected: expected,
+      p_description: v.description || null,
     });
     if (error) throw error;
 
@@ -497,5 +513,25 @@ export async function saveMeeting(
     }
     console.error("saveMeeting failed", error);
     return { ok: false, error: rpcError(error, "Couldn't save just now — your text is still here.") };
+  }
+}
+
+/**
+ * What is in the bin.
+ *
+ * Fetched when the bin is opened rather than loaded with the page: most
+ * visits to Meetings never open it, and a list nobody is looking at is not
+ * worth a phone's bandwidth. `setMeetingDeleted(id, false)` is what puts one
+ * back — the same call that put it in, with the boolean the other way round.
+ */
+export async function binnedMeetings(): Promise<
+  { ok: true; meetings: MeetingSummary[] } | { ok: false; error: string }
+> {
+  try {
+    const { supabase, member } = await getCurrentMember();
+    return { ok: true, meetings: await listBinnedMeetings(supabase, member.id) };
+  } catch (error) {
+    console.error("binnedMeetings failed", error);
+    return { ok: false, error: "Couldn't open the bin. Try again." };
   }
 }

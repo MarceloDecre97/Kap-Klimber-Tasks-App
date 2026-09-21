@@ -34,6 +34,12 @@ import {
  * characters wide instead of "11:40 AM" on one line. Marcelo's shape. It
  * costs a glance to read a stacked time and buys the gear its place on row
  * one, which is the better trade on the screen where rows are expensive.
+ *
+ * On a phone it is now 44px square — exactly the bell and the gear beside
+ * it. Marcelo's call, and the digits gave up the 2px it needed: three
+ * unequal boxes in a row of three read as three things, and three equal ones
+ * read as a set. 13px is still above the size at which two tabular digits
+ * stop being legible at arm's length, which is what this has to be.
  */
 export function AppClock({ className }: { className?: string }) {
   const [now, setNow] = useState<Date | null>(null);
@@ -56,7 +62,7 @@ export function AppClock({ className }: { className?: string }) {
     <div
       className={cn(
         "flex shrink-0 flex-col justify-center whitespace-nowrap border-[1.5px] border-border bg-muted",
-        "h-12 w-11 items-center rounded-xl px-1",
+        "size-11 items-center rounded-xl px-1",
         "lg:h-14 lg:min-w-[214px] lg:items-stretch lg:gap-0.5 lg:rounded-2xl lg:px-4",
         className
       )}
@@ -78,9 +84,9 @@ export function AppClock({ className }: { className?: string }) {
         */}
         <span className="sr-only">{now ? formatClockTime(now) : ""}</span>
         <span aria-hidden className="flex flex-col items-center leading-none lg:hidden">
-          <span className="text-[15px] font-bold text-fg tabular-nums">{stacked?.hour ?? ""}</span>
+          <span className="text-[13px] font-bold text-fg tabular-nums">{stacked?.hour ?? ""}</span>
           <span className="my-[2px] h-[1.5px] w-4 bg-line" />
-          <span className="text-[15px] font-bold text-fg tabular-nums">{stacked?.minute ?? ""}</span>
+          <span className="text-[13px] font-bold text-fg tabular-nums">{stacked?.minute ?? ""}</span>
         </span>
         <span
           aria-hidden

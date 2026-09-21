@@ -44,7 +44,7 @@ const ATTENDEE_SELECT = `
 `;
 
 const MEETING_SELECT = `
-  id, title, met_on, met_at, company_id, body,
+  id, title, description, met_on, met_at, company_id, body,
   created_at, updated_at, deleted_at,
   created_by:members!meetings_created_by_fkey(id, display_name, initials, color),
   company:companies!meetings_company_id_fkey(id, name),
@@ -54,6 +54,7 @@ const MEETING_SELECT = `
 type Row = {
   id: string;
   title: string;
+  description: string | null;
   met_on: string;
   met_at: string | null;
   company_id: string | null;
@@ -143,6 +144,7 @@ function toSummary(row: Row, meId: string): MeetingSummary {
   return {
     id: row.id,
     title: row.title,
+    description: row.description,
     met_on: row.met_on,
     met_at: row.met_at,
     /* What the meeting belongs to, set or derived. */
@@ -190,6 +192,36 @@ export async function listMeetings(
     ? await query.eq("company_id", options.companyId)
     : await query;
 
+  if (error) throw error;
+  return ((data ?? []) as unknown as Row[]).map((row) => toSummary(row, meId));
+}
+
+/**
+ * The bin.
+ *
+ * A plain query rather than a function of its own, because 0046's select
+ * policy already admits the team to every row, binned or not — the bin was
+ * never hidden, there was simply nowhere to look at it. Same shape as the
+ * list, so a binned meeting shows the people and the company it always did
+ * and is recognisable as the one you meant to put back.
+ *
+ * A fortnight, matching the Tasklist and the address book. Nothing is
+ * destroyed when it drops out of this list; the row stays for ever, so a
+ * restore is always possible for somebody who asks.
+ */
+export async function listBinnedMeetings(
+  supabase: SupabaseClient<Database>,
+  meId: string,
+  days = 14
+): Promise<MeetingSummary[]> {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data, error } = await supabase
+    .from("meetings")
+    .select(MEETING_SELECT)
+    .not("deleted_at", "is", null)
+    .gt("deleted_at", since)
+    .order("deleted_at", { ascending: false })
+    .limit(100);
   if (error) throw error;
   return ((data ?? []) as unknown as Row[]).map((row) => toSummary(row, meId));
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, Plus, Search, Users } from "lucide-react";
+import { ChevronDown, ChevronLeft, Plus, RotateCcw, Search, Trash2, Users } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { MeetingPane } from "@/components/meetings/meeting-pane";
 import { MeetingDetails, type DetailValues } from "@/components/meetings/meeting-details";
 import {
+  binnedMeetings,
   createMeeting,
   findMeetings,
   loadMeeting,
@@ -17,6 +18,7 @@ import {
   setMeetingDeleted,
 } from "@/app/meetings/actions";
 import {
+  INTERNAL_SCOPE,
   NO_MEETING_FILTERS,
   activeFilterCount,
   companiesIn,
@@ -50,6 +52,9 @@ import type { NotificationFeed } from "@/lib/data/notifications";
  * has to work on a phone too — a laptop dies, a call is on speaker — so the
  * paper gets the full width and nothing floats over it.
  */
+/** Matches the Tasklist and the address book. Nothing is erased at the end of it. */
+const BIN_DAYS = 14;
+
 export function MeetingsApp({
   meetings,
   contacts,
@@ -77,6 +82,9 @@ export function MeetingsApp({
   const [filters, setFilters] = useState<MeetingFilters>(NO_MEETING_FILTERS);
 
   const [open, setOpen] = useState<Meeting | null>(null);
+  /* The bin: fetched when it is opened, not carried by every page load. */
+  const [binOpen, setBinOpen] = useState(false);
+  const [binned, setBinned] = useState<MeetingSummary[] | null>(null);
   /* The create form, when one is open instead of a meeting. */
   const [creating, setCreating] = useState<DetailValues | null>(null);
   const [tasks, setTasks] = useState<MeetingTask[]>([]);
@@ -162,6 +170,7 @@ export function MeetingsApp({
     setOpen(null);
     setCreating({
       title: "",
+      description: "",
       metOn,
       metAt: "",
       companyId: null,
@@ -195,9 +204,44 @@ export function MeetingsApp({
       }
       setOpen(null);
       showToast({ message: "Minutes binned" });
+      setBinned(null);
       router.refresh();
     });
   }, [open, router, showToast]);
+
+  const loadBin = useCallback(() => {
+    startTransition(async () => {
+      const result = await binnedMeetings();
+      if (!result.ok) {
+        showToast({ message: result.error });
+        return;
+      }
+      setBinned(result.meetings);
+    });
+  }, [showToast]);
+
+  const toggleBin = useCallback(() => {
+    setBinOpen((wasOpen) => {
+      if (!wasOpen && binned === null) loadBin();
+      return !wasOpen;
+    });
+  }, [binned, loadBin]);
+
+  const restoreMeeting = useCallback(
+    (id: string) => {
+      startTransition(async () => {
+        const result = await setMeetingDeleted(id, false);
+        if (!result.ok) {
+          showToast({ message: result.error });
+          return;
+        }
+        setBinned((rows) => (rows ?? []).filter((m) => m.id !== id));
+        showToast({ message: "Back in the list" });
+        router.refresh();
+      });
+    },
+    [router, showToast]
+  );
 
   /*
     A link from a company or a contact pane lands here with ?open=<id>.
@@ -234,60 +278,42 @@ export function MeetingsApp({
         />
       </div>
 
-      <Button size="md" onClick={startMeeting} disabled={isPending} className="w-auto self-start">
-        <Plus aria-hidden className="size-5" strokeWidth={2.2} />
-        New meeting
-      </Button>
-
       {/*
-        No filter narrows another's options — the rule the contacts book
-        arrived at the hard way. Every company that has a meeting stays on
-        offer whatever else is switched on, and an impossible combination
-        shows the empty line below rather than a control that disappears
-        while you are still using it.
+        One row, two controls: start one, or narrow to the ones you want.
+
+        The filter is a single list — every meeting, then ours alone, then a
+        rule and the companies. `optgroup` is what draws that rule, and it is
+        the platform's own control on a phone: Android opens it as a full
+        sheet with the heading in place, which no styled dropdown of ours
+        would match for nothing.
       */}
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="meeting-company-filter" className="sr-only">
-          Filter by company
+        <Button size="md" onClick={startMeeting} disabled={isPending} className="w-auto">
+          <Plus aria-hidden className="size-5" strokeWidth={2.2} />
+          New meeting
+        </Button>
+
+        <label htmlFor="meeting-scope-filter" className="sr-only">
+          Show meetings with
         </label>
         <select
-          id="meeting-company-filter"
-          value={filters.companyId ?? ""}
-          onChange={(event) =>
-            setFilters((f) => ({ ...f, companyId: event.target.value || null }))
-          }
-          className="h-11 max-w-full rounded-full border-[1.5px] border-border bg-card px-3 text-timestamp font-bold text-fg"
+          id="meeting-scope-filter"
+          value={filters.scope ?? ""}
+          onChange={(event) => setFilters({ scope: event.target.value || null })}
+          className="h-11 min-w-0 max-w-full grow rounded-full border-[1.5px] border-border bg-card px-3 text-timestamp font-bold text-fg"
         >
-          <option value="">Any company</option>
-          {companyOptions.map((company) => (
-            <option key={company.id} value={company.id}>
-              {company.name}
-            </option>
-          ))}
+          <option value="">All meetings</option>
+          <option value={INTERNAL_SCOPE}>Internal — Opus Kap only</option>
+          {companyOptions.length > 0 && (
+            <optgroup label="Companies">
+              {companyOptions.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
-
-        <FilterToggle
-          on={filters.mineOnly}
-          onClick={() => setFilters((f) => ({ ...f, mineOnly: !f.mineOnly }))}
-        >
-          Mine
-        </FilterToggle>
-        <FilterToggle
-          on={filters.internalOnly}
-          onClick={() => setFilters((f) => ({ ...f, internalOnly: !f.internalOnly }))}
-        >
-          Internal
-        </FilterToggle>
-
-        {activeFilters > 0 && (
-          <button
-            type="button"
-            onClick={() => setFilters(NO_MEETING_FILTERS)}
-            className="h-11 cursor-pointer border-none bg-transparent px-2 text-timestamp font-bold text-brand underline underline-offset-[3px]"
-          >
-            Clear
-          </button>
-        )}
       </div>
 
       {searching && <p className="text-timestamp text-sub">Looking through every meeting…</p>}
@@ -313,6 +339,77 @@ export function MeetingsApp({
           ))}
         </div>
       ))}
+
+      {/*
+        The bin, which Marcelo asked for three times.
+
+        Binning something with nowhere to look at it afterwards is worse than
+        having no bin at all, and that is what this was. It sits at the foot
+        of the list, folded, like Recently deleted on the Tasklist — the same
+        place, the same fortnight and the same promise: nothing is erased,
+        and anyone can put anything back.
+      */}
+      <div className="mt-2 flex flex-col gap-2 border-t-[1.5px] border-border pt-4">
+        <button
+          type="button"
+          onClick={toggleBin}
+          aria-expanded={binOpen}
+          className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-1 text-left text-timestamp font-bold text-sub"
+        >
+          <ChevronDown
+            aria-hidden
+            className={cn("size-4 transition-transform duration-150", !binOpen && "-rotate-90")}
+            strokeWidth={2.2}
+          />
+          <Trash2 aria-hidden className="size-4" strokeWidth={1.75} />
+          Bin{binned ? ` (${binned.length})` : ""}
+        </button>
+
+        {binOpen && (
+          <div className="flex flex-col gap-2">
+            {binned === null ? (
+              <p className="px-1 text-timestamp text-sub">Looking…</p>
+            ) : binned.length === 0 ? (
+              <p className="px-1 text-timestamp text-sub text-pretty">
+                Nothing in the bin. Minutes stay here for {BIN_DAYS} days after they are binned,
+                and the record itself is never erased.
+              </p>
+            ) : (
+              <>
+                <p className="px-1 text-timestamp text-sub text-pretty">
+                  Binned in the last {BIN_DAYS} days. Anyone can put these back.
+                </p>
+                {binned.map((meeting) => (
+                  <div
+                    key={meeting.id}
+                    className="flex items-center gap-3 rounded-2xl border-[1.5px] border-border bg-card p-3"
+                  >
+                    <span className="flex min-w-0 grow flex-col">
+                      <span className="line-clamp-2 text-[16px] leading-[22px] text-fg text-pretty wrap-anywhere">
+                        {meeting.title}
+                      </span>
+                      <span className="text-timestamp text-sub tabular-nums">
+                        {meetingWhen(meeting.met_on, meeting.met_at, formatMeetingDay)}
+                        {meeting.company_name ? ` · ${meeting.company_name}` : ""}
+                      </span>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="w-auto shrink-0 px-3"
+                      disabled={isPending}
+                      onClick={() => restoreMeeting(meeting.id)}
+                    >
+                      <RotateCcw aria-hidden className="size-4" strokeWidth={1.75} />
+                      Put back
+                    </Button>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -326,7 +423,6 @@ export function MeetingsApp({
         contacts={contacts}
         companies={companies}
         roster={roster}
-        disabled={isPending}
         alwaysOpen
       />
       <div className="flex flex-wrap items-center gap-3">
@@ -411,6 +507,7 @@ export function MeetingsApp({
                   canEdit={canEdit}
                   isPending={isPending}
                   onBin={binMeeting}
+                  onClose={() => setOpen(null)}
                   onSaved={() => router.refresh()}
                 />
               )}
@@ -463,14 +560,32 @@ function MeetingCard({
         </Chip>
       </span>
 
-      {meeting.snippet && (
-        <span className="line-clamp-2 text-timestamp text-sub text-pretty">{meeting.snippet}</span>
+      {/*
+        The description, written on purpose — not the opening of the minutes.
+        The snippet was whatever happened to be typed first, which on a set of
+        minutes is a register of who was in the room, so every card read the
+        same. Nothing at all when nobody wrote one: a card with a title and a
+        date says more than a card quoting its own first line.
+      */}
+      {meeting.description && (
+        <span className="line-clamp-2 text-timestamp text-sub text-pretty">
+          {meeting.description}
+        </span>
       )}
 
       {meeting.attendees.length > 0 && (
         <span className="flex items-center">
           {meeting.attendees.slice(0, 5).map((a) => (
-            <span key={`${a.kind}-${a.id}`} className="-mr-2 last:mr-0 rounded-full ring-2 ring-card">
+            /*
+              `inline-flex`, not the default inline: an inline box takes the
+              line's height, not its content's, so the ring was drawn around a
+              26px circle inside a taller box and stood off it at the top and
+              bottom. Marcelo's SS4 — the outline bigger than the icon.
+            */
+            <span
+              key={`${a.kind}-${a.id}`}
+              className="-mr-2 inline-flex rounded-full ring-2 ring-card last:mr-0"
+            >
               <Avatar initials={a.initials} color={a.color ?? "#87252b"} size={26} />
             </span>
           ))}
@@ -479,30 +594,6 @@ function MeetingCard({
           )}
         </span>
       )}
-    </button>
-  );
-}
-
-function FilterToggle({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={cn(
-        "h-11 cursor-pointer rounded-full border-[1.5px] px-3.5 text-timestamp font-bold",
-        on ? "border-fg bg-prim text-on-prim" : "border-border bg-card text-sub hover:bg-muted"
-      )}
-    >
-      {children}
     </button>
   );
 }

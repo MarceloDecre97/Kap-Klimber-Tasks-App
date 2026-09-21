@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, type FocusEvent } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -10,8 +10,10 @@ import {
   RotateCcw,
   Save,
   Trash2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
 import { MeetingComments } from "@/components/meetings/meeting-comments";
 import { MeetingEditor } from "@/components/meetings/meeting-editor";
 import { MeetingReader } from "@/components/meetings/meeting-reader";
@@ -65,6 +67,7 @@ export function MeetingPane({
   canEdit,
   isPending,
   onBin,
+  onClose,
   onSaved,
 }: {
   meeting: Meeting;
@@ -75,6 +78,7 @@ export function MeetingPane({
   canEdit: boolean;
   isPending: boolean;
   onBin: () => void;
+  onClose: () => void;
   onSaved: () => void;
 }) {
   const [details, setDetails] = useState<DetailValues>(() => detailsFrom(meeting));
@@ -90,14 +94,45 @@ export function MeetingPane({
   });
 
   const storedDraft = useStoredDraft(meeting.id);
-  const recovered =
-    !draftDismissed && storedDraft && storedDraft.body !== meeting.body ? storedDraft : null;
+  /*
+    Compared against what is ON SCREEN, not against what the server last sent.
+
+    Against the server's copy it was true of every unsaved keystroke and of
+    every saved one too, so Marcelo met "this device kept a newer copy" after
+    ordinary typing and after ordinary saving — a warning that cried wolf
+    until it meant nothing. Against the text in front of him it is true of
+    exactly one thing: a draft this browser wrote that is not what he is
+    looking at, which only happens when a save never landed. That is the case
+    the panel was built for, and now the only one it appears for.
+  */
+  const recovered = !draftDismissed && storedDraft && storedDraft.body !== body ? storedDraft : null;
 
   const edit = useCallback(
     (nextDetails: DetailValues, nextBody: string) => {
       setDetails(nextDetails);
       setBody(nextBody);
       saver.touch({ details: nextDetails, body: nextBody });
+    },
+    [saver]
+  );
+
+  /*
+    Clicking out of what you were typing in saves it.
+
+    A minute of quiet already did, and a minute is a long time to be wrong
+    about — the answer to "did that save?" should be "yes" by the time you
+    have looked away. `relatedTarget` is where the focus went: moving from the
+    title to the date is still editing, and saving between every field would
+    be a write per keystroke-group and a revalidate of three routes with it.
+    Leaving the group altogether is the moment that counts.
+
+    `relatedTarget` is null when focus leaves for the browser chrome or
+    nothing at all, which is exactly the walking-away case — so that saves too.
+  */
+  const saveOnLeaving = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget)) return;
+      if (saver.dirty) void saver.save();
     },
     [saver]
   );
@@ -113,12 +148,20 @@ export function MeetingPane({
             {meeting.created_by ? ` · ${meeting.created_by.display_name}` : ""}
           </p>
         </div>
-        {canEdit && (
-          <Button variant="link" onClick={onBin} disabled={isPending} className="text-timestamp">
-            <Trash2 aria-hidden className="size-4" strokeWidth={1.75} />
-            Bin
-          </Button>
-        )}
+        {/*
+          Close, not bin. The top-right corner is where every window in the
+          world puts "I'm done looking at this", and it had the one control
+          here that destroys something. Binning is at the very bottom now,
+          past everything you would have read first — Marcelo's arrangement,
+          and the right way round.
+        */}
+        <IconButton
+          aria-label="Close these minutes"
+          onClick={onClose}
+          className="size-11 shrink-0"
+        >
+          <X aria-hidden className="size-5" strokeWidth={2} />
+        </IconButton>
       </div>
 
       {recovered && (
@@ -172,44 +215,56 @@ export function MeetingPane({
         </div>
       )}
 
-      <MeetingDetails
-        values={details}
-        disabled={!canEdit || isPending}
-        onChange={(next) => edit(next, body)}
-        contacts={contacts}
-        companies={companies}
-        roster={roster}
-      />
-
-      {canEdit && body.trim() !== "" && (
-        <div className="flex gap-1 self-start rounded-full bg-muted p-1">
-          <ModeTab on={!reading} onClick={() => setReading(false)}>
-            <PenLine aria-hidden className="size-4" strokeWidth={1.75} />
-            Write
-          </ModeTab>
-          <ModeTab on={reading} onClick={() => setReading(true)}>
-            <BookOpen aria-hidden className="size-4" strokeWidth={1.75} />
-            Read
-          </ModeTab>
-        </div>
-      )}
-
-      {canEdit && !reading ? (
-        <MeetingEditor
-          value={body}
-          onChange={(next) => edit(details, next)}
-          placeholder={"Write the minutes here.\n\nA line starting “- ” shows as a bullet when you press Read."}
+      {/*
+        The details and the paper are one editing surface: they save together,
+        so they lose focus together. See saveOnLeaving.
+      */}
+      <div className="flex flex-col gap-4" onBlur={saveOnLeaving}>
+        <MeetingDetails
+          values={details}
+          /*
+            Only "somebody else's meeting" makes this read-only — never a
+            save in flight. `disabled` here swaps the whole panel for a
+            read-only list, and doing that for a second while a transition
+            settled would flash the form away under whoever was typing in it.
+          */
+          disabled={!canEdit}
+          onChange={(next) => edit(next, body)}
+          contacts={contacts}
+          companies={companies}
+          roster={roster}
         />
-      ) : (
-        /*
-          Somebody else's minutes, or your own read back. A rendered view
-          rather than a greyed-out box — a text area you cannot use still
-          looks like one you should be able to, and this is where a line
-          starting "- " becomes an actual bullet without the app reformatting
-          what its author is in the middle of typing.
-        */
-        <MeetingReader body={body} />
-      )}
+
+        {canEdit && body.trim() !== "" && (
+          <div className="flex gap-1 self-start rounded-full bg-muted p-1">
+            <ModeTab on={!reading} onClick={() => setReading(false)}>
+              <PenLine aria-hidden className="size-4" strokeWidth={1.75} />
+              Write
+            </ModeTab>
+            <ModeTab on={reading} onClick={() => setReading(true)}>
+              <BookOpen aria-hidden className="size-4" strokeWidth={1.75} />
+              Read
+            </ModeTab>
+          </div>
+        )}
+
+        {canEdit && !reading ? (
+          <MeetingEditor
+            value={body}
+            onChange={(next) => edit(details, next)}
+            placeholder={"Write the minutes here.\n\nStart a line with “- ” or “1. ” and Enter carries the list on."}
+          />
+        ) : (
+          /*
+            Somebody else's minutes, or your own read back. A rendered view
+            rather than a greyed-out box — a text area you cannot use still
+            looks like one you should be able to, and this is where a line
+            starting "- " becomes an actual bullet without the app reformatting
+            what its author is in the middle of typing.
+          */
+          <MeetingReader body={body} />
+        )}
+      </div>
 
       {/*
         The save button, and the only place the app says anything about
@@ -287,6 +342,34 @@ export function MeetingPane({
       </div>
 
       <MeetingComments meetingId={meeting.id} />
+
+      {/*
+        The last thing on the page, and deliberately the last thing.
+
+        It was in the top-right corner, a thumb's width from the close button
+        on a phone. Nothing that takes a meeting away should sit where you
+        reach without looking — so it is below the minutes, the action items
+        and the comments, at the end of everything you would read before
+        deciding you no longer need any of it.
+      */}
+      {canEdit && (
+        <div className="flex flex-col gap-1.5 border-t-[1.5px] border-border pt-4">
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={onBin}
+            disabled={isPending}
+            className="w-auto self-start"
+          >
+            <Trash2 aria-hidden className="size-5" strokeWidth={1.75} />
+            Move to the bin
+          </Button>
+          <p className="text-timestamp text-sub text-pretty">
+            Nothing is erased. It goes to the bin at the bottom of the list, where anyone can put
+            it back.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

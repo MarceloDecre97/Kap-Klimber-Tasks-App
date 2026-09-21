@@ -35,6 +35,15 @@ export interface MeetingSummary {
    * field, and it would stop being derived.
    */
   explicit_company_id: string | null;
+  /**
+   * What the meeting was about, in one line, written on purpose.
+   *
+   * The card used to print the first 160 characters of the minutes, which is
+   * whatever happened to be typed first — usually a register of who was in
+   * the room. Null when nobody wrote one, and the card then shows nothing
+   * rather than falling back to the body.
+   */
+  description: string | null;
   created_by: MemberSummary | null;
   created_at: string;
   updated_at: string;
@@ -241,38 +250,39 @@ export function renderBody(body: string): BodyLine[] {
 /**
  * What the list is narrowed by, beyond the search box.
  *
- * Three, and no more. The filters that earn their place are the ones that
- * answer a question somebody actually asks: "what did we say to Royal
- * Truck", "what did I write", "what were the internal ones". A date-range
- * picker would answer a question the date groups already answer by scrolling.
+ * One control, and one answer: whose meetings am I looking at. It was three —
+ * a company dropdown, a "Mine" toggle and an "Internal" toggle — which is
+ * three things to read and eight combinations, two of which ("Internal" plus
+ * a company) can never match anything. Marcelo asked for the one, and he is
+ * right: "Internal" is not a property a meeting has alongside a company, it
+ * is what a meeting has INSTEAD of one. So it belongs in the same list as the
+ * companies, at the top of it.
  *
- * As with the contacts book since the outreach round: no filter narrows the
- * options of another. Every company that has a meeting is offered whatever
- * else is switched on, and an impossible combination shows an empty list
- * with the line that says so, rather than a control quietly vanishing
- * mid-thought.
+ * "Mine" went with them. The team is four people and the author is on every
+ * card; filtering a list this short by who typed it answers a question
+ * nobody was asking.
  */
+export const INTERNAL_SCOPE = "internal";
+
 export interface MeetingFilters {
-  companyId: string | null;
-  mineOnly: boolean;
-  internalOnly: boolean;
+  /**
+   * `null` for every meeting, `INTERNAL_SCOPE` for ours alone, or a company
+   * id. A string rather than a union of shapes because it is one `<select>`
+   * value, and anything richer would be a thing to translate at both ends.
+   */
+  scope: string | null;
 }
 
-export const NO_MEETING_FILTERS: MeetingFilters = {
-  companyId: null,
-  mineOnly: false,
-  internalOnly: false,
-};
+export const NO_MEETING_FILTERS: MeetingFilters = { scope: null };
 
 export function activeFilterCount(f: MeetingFilters): number {
-  return (f.companyId ? 1 : 0) + (f.mineOnly ? 1 : 0) + (f.internalOnly ? 1 : 0);
+  return f.scope ? 1 : 0;
 }
 
 export function matchesFilters(m: MeetingSummary, f: MeetingFilters): boolean {
-  if (f.companyId && m.company_id !== f.companyId) return false;
-  if (f.mineOnly && !m.mine) return false;
-  if (f.internalOnly && !isInternal(m)) return false;
-  return true;
+  if (!f.scope) return true;
+  if (f.scope === INTERNAL_SCOPE) return isInternal(m);
+  return m.company_id === f.scope;
 }
 
 /**
@@ -305,6 +315,7 @@ export function matchesMeeting(m: MeetingSummary, query: string): boolean {
   const haystack = [
     m.title,
     m.company_name ?? "",
+    m.description ?? "",
     m.snippet,
     ...m.attendees.map((a) => a.name),
   ]
