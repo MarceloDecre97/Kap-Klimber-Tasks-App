@@ -23,8 +23,18 @@ export interface MeetingSummary {
   title: string;
   met_on: string;
   met_at: string | null;
+  /** Set on the meeting, or worked out from the attendees. What it belongs to. */
   company_id: string | null;
   company_name: string | null;
+  /**
+   * Only what was typed into the company field.
+   *
+   * Kept apart from `company_id` because the form must show back what was
+   * chosen, not what was inferred — otherwise opening a meeting whose company
+   * was derived and pressing Save would silently write the inference into the
+   * field, and it would stop being derived.
+   */
+  explicit_company_id: string | null;
   created_by: MemberSummary | null;
   created_at: string;
   updated_at: string;
@@ -131,7 +141,13 @@ export function attendeeLine(attendees: Attendee[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-/** Whether a meeting has no external attendees — an Opus Kap meeting. */
+/**
+ * Whether a meeting is ours alone — an Opus Kap meeting.
+ *
+ * No company, set or derived, and nobody from the book in the room. The
+ * derived half matters: a meeting with Eric from ADV Mobil and an empty
+ * company field is not internal, and used to read as one.
+ */
 export function isInternal(meeting: MeetingSummary): boolean {
   return !meeting.company_id && !meeting.attendees.some((a) => a.kind === "contact");
 }

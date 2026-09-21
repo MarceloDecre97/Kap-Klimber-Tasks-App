@@ -1,33 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  BookOpen,
-  Check,
-  ChevronLeft,
-  ListPlus,
-  PenLine,
-  Plus,
-  Search,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { ChevronLeft, Plus, Search, Users } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { MeetingEditor } from "@/components/meetings/meeting-editor";
-import { MeetingComments } from "@/components/meetings/meeting-comments";
-import { MeetingDetails, detailsFrom, type DetailValues } from "@/components/meetings/meeting-details";
+import { MeetingPane } from "@/components/meetings/meeting-pane";
+import { MeetingDetails, type DetailValues } from "@/components/meetings/meeting-details";
 import {
   createMeeting,
   findMeetings,
   loadMeeting,
   meetingTasks,
   setMeetingDeleted,
-  updateMeeting,
 } from "@/app/meetings/actions";
 import {
   NO_MEETING_FILTERS,
@@ -35,7 +22,6 @@ import {
   companiesIn,
   groupMeetings,
   matchesFilters,
-  renderBody,
   isInternal,
   matchesMeeting,
   formatMeetingDay,
@@ -91,22 +77,9 @@ export function MeetingsApp({
   const [filters, setFilters] = useState<MeetingFilters>(NO_MEETING_FILTERS);
 
   const [open, setOpen] = useState<Meeting | null>(null);
-  const [details, setDetails] = useState<DetailValues | null>(null);
-  const [detailsDirty, setDetailsDirty] = useState(false);
+  /* The create form, when one is open instead of a meeting. */
+  const [creating, setCreating] = useState<DetailValues | null>(null);
   const [tasks, setTasks] = useState<MeetingTask[]>([]);
-  /*
-    Writing or reading your own minutes.
-
-    The author only ever saw a text area, which means the one person who
-    types "- " at the start of a line was the one person who never saw it
-    become a bullet. Reading is also what you do after the meeting — you
-    write during it and read it back before sending the follow-up.
-
-    Defaults to writing, because that is what you opened it for; and it
-    resets whenever a different meeting is opened, since the mode belongs to
-    what you are doing rather than to the app.
-  */
-  const [reading, setReading] = useState(false);
 
   /*
     Two searches over the same fields. The list already in hand is narrowed
@@ -157,9 +130,7 @@ export function MeetingsApp({
           return;
         }
         setOpen(result.meeting);
-        setDetails(detailsFrom(result.meeting));
-        setDetailsDirty(false);
-        setReading(false);
+        setCreating(null);
         const withTasks = await meetingTasks(id);
         setTasks(withTasks.ok ? withTasks.tasks : []);
       });
@@ -173,43 +144,46 @@ export function MeetingsApp({
     is what makes it findable in six months, where "Royal Truck — 17 Sep"
     would not be. Today's date is already filled in.
   */
+  /*
+    A new meeting is a form, not a row.
+
+    The first version made the row immediately and dropped you into an
+    "Untitled meeting" — fast, and wrong in a way that only showed in use:
+    every abandoned thought left a card in the list, and the thing you had
+    actually come to do (say who it was with) was folded away behind a panel.
+    Marcelo asked for the reverse, and he is right. Say what it is, save it,
+    and then write.
+  */
   const startMeeting = useCallback(() => {
     const today = new Date();
     const metOn = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
       today.getDate()
     ).padStart(2, "0")}`;
+    setOpen(null);
+    setCreating({
+      title: "",
+      metOn,
+      metAt: "",
+      companyId: null,
+      contactIds: [],
+      /* You were at your own meeting. Everyone else is a choice. */
+      memberIds: [meId],
+    });
+  }, [meId]);
+
+  const createIt = useCallback(() => {
+    if (!creating) return;
     startTransition(async () => {
-      const result = await createMeeting({
-        title: "Untitled meeting",
-        metOn,
-        metAt: "",
-        companyId: null,
-        contactIds: [],
-        memberIds: [meId],
-      });
+      const result = await createMeeting(creating);
       if (!result.ok) {
         showToast({ message: result.error });
         return;
       }
+      setCreating(null);
       router.refresh();
       openMeeting(result.meetingId);
     });
-  }, [meId, openMeeting, router, showToast]);
-
-  const saveDetails = useCallback(() => {
-    if (!open || !details) return;
-    startTransition(async () => {
-      const result = await updateMeeting(open.id, details);
-      if (!result.ok) {
-        showToast({ message: result.error });
-        return;
-      }
-      setDetailsDirty(false);
-      showToast({ message: "Details saved" });
-      router.refresh();
-      openMeeting(open.id);
-    });
-  }, [open, details, openMeeting, router, showToast]);
+  }, [creating, openMeeting, router, showToast]);
 
   const binMeeting = useCallback(() => {
     if (!open) return;
@@ -342,133 +316,38 @@ export function MeetingsApp({
     </div>
   );
 
-  const paper = open && details && (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-section-heading text-fg text-pretty wrap-anywhere">{open.title}</h1>
-          <p className="text-timestamp text-sub">
-            {meetingWhen(open.met_on, open.met_at, formatMeetingDay)}
-            {open.company_name ? ` · ${open.company_name}` : ""}
-            {open.created_by ? ` · ${open.created_by.display_name}` : ""}
-          </p>
-        </div>
-        {canEdit && (
-          <Button variant="link" onClick={binMeeting} disabled={isPending} className="text-timestamp">
-            <Trash2 aria-hidden className="size-4" strokeWidth={1.75} />
-            Bin
-          </Button>
-        )}
-      </div>
-
+  /* The create form: the same fields, before there is anything to save into. */
+  const createForm = creating && (
+    <div className="flex flex-col gap-4">
+      <h1 className="text-section-heading text-fg">New meeting</h1>
       <MeetingDetails
-        values={details}
-        disabled={!canEdit || isPending}
-        onChange={(next) => {
-          setDetails(next);
-          setDetailsDirty(true);
-        }}
+        values={creating}
+        onChange={setCreating}
         contacts={contacts}
         companies={companies}
         roster={roster}
-        startOpen={open.title === "Untitled meeting"}
+        disabled={isPending}
+        alwaysOpen
       />
-
-      {detailsDirty && canEdit && (
-        <Button size="sm" onClick={saveDetails} disabled={isPending} className="w-auto self-start">
-          Save details
-        </Button>
-      )}
-
-      {/*
-          What came out of it, and the way to add to that.
-
-          Below the paper rather than above: during the meeting the paper is
-          the only thing that matters, and the action items are what you
-          reach for once the talking has stopped.
-      */}
-      <div className="flex flex-col gap-2">
-        <Link
-          href={`/tasks/new?meeting=${open.id}&from=/meetings`}
-          className="inline-flex h-11 w-auto items-center gap-2 self-start rounded-xl border-[1.5px] border-fg bg-card px-3 text-timestamp font-bold text-fg no-underline hover:bg-muted"
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          size="md"
+          onClick={createIt}
+          disabled={isPending || creating.title.trim().length === 0}
+          className="w-auto"
         >
-          <ListPlus aria-hidden className="size-4" strokeWidth={1.75} />
-          Task from this meeting
-        </Link>
-
-        {tasks.length > 0 && (
-          <ul className="flex flex-col gap-2">
-            {tasks.map((task) => (
-              <li key={task.id}>
-                <Link
-                  href={`/tasks?task=${task.id}`}
-                  className="flex flex-col gap-1.5 rounded-2xl border-[1.5px] border-border bg-card p-3 no-underline hover:bg-muted"
-                >
-                  <span className="flex flex-wrap items-center gap-2">
-                    {task.status === "complete" ? (
-                      <Chip className="border-ok text-ok">
-                        <Check aria-hidden className="size-4" strokeWidth={2.5} />
-                        Done
-                      </Chip>
-                    ) : (
-                      <Chip className="border-accent text-accent">
-                        {TASK_STATUS_WORDS[task.status] ?? "Open"}
-                      </Chip>
-                    )}
-                    {task.due_date && (
-                      <Chip className="border-border text-sub tabular-nums">
-                        Due {formatMeetingDay(task.due_date)}
-                      </Chip>
-                    )}
-                  </span>
-                  <span className="text-[17px] leading-6 text-fg text-pretty wrap-anywhere">
-                    {task.title}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+          Create meeting
+        </Button>
+        <Button variant="link" className="text-timestamp" onClick={() => setCreating(null)}>
+          Cancel
+        </Button>
       </div>
-
-      {canEdit && open.body.trim() !== "" && (
-        <div className="flex gap-1 self-start rounded-full bg-muted p-1">
-          <ModeTab on={!reading} onClick={() => setReading(false)}>
-            <PenLine aria-hidden className="size-4" strokeWidth={1.75} />
-            Write
-          </ModeTab>
-          <ModeTab on={reading} onClick={() => setReading(true)}>
-            <BookOpen aria-hidden className="size-4" strokeWidth={1.75} />
-            Read
-          </ModeTab>
-        </div>
+      {creating.title.trim().length === 0 && (
+        <p className="text-timestamp text-sub text-pretty">
+          A title is all that&apos;s needed to start — it&apos;s what makes these findable in six
+          months.
+        </p>
       )}
-
-      {canEdit && !reading ? (
-        <MeetingEditor
-          meetingId={open.id}
-          initialBody={open.body}
-          initialStamp={open.updated_at}
-          canEdit
-        />
-      ) : (
-        /*
-          Somebody else's minutes: read, never typed into. A rendered view
-          rather than a greyed-out box — a text area you cannot use still
-          looks like one you should be able to, and this is the one place a
-          line starting "- " can become an actual bullet without the app
-          reformatting what its author is in the middle of typing.
-        */
-        <MeetingReader body={open.body} />
-      )}
-
-      {/*
-        Last on the card. The minutes are what you came for; the margin is
-        what somebody else added afterwards, and putting it above the paper
-        would make every meeting open on the commentary rather than the
-        record.
-      */}
-      <MeetingComments meetingId={open.id} />
     </div>
   );
 
@@ -485,7 +364,7 @@ export function MeetingsApp({
         <div
           className={cn(
             "flex-1 overflow-y-auto px-5 py-6 lg:w-[356px] lg:flex-none lg:border-r-[1.5px] lg:border-border",
-            open && "hidden lg:block"
+            (open || creating) && "hidden lg:block"
           )}
         >
           <div className="mx-auto w-full max-w-[900px] lg:max-w-none">
@@ -496,25 +375,49 @@ export function MeetingsApp({
 
         <div
           className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-6",
-            !open && "hidden lg:flex"
+            "flex-1 overflow-y-auto px-5 py-6",
+            !open && !creating && "hidden lg:block"
           )}
         >
-          {open ? (
-            <div className="mx-auto flex min-h-0 w-full max-w-[900px] flex-1 flex-col gap-3">
+          {open || creating ? (
+            <div className="mx-auto w-full max-w-[900px]">
               <button
                 type="button"
-                onClick={() => setOpen(null)}
-                className="inline-flex h-11 w-auto cursor-pointer items-center gap-1 self-start rounded-xl border-none bg-transparent px-1 text-[17px] font-bold text-brand lg:hidden"
+                onClick={() => {
+                  setOpen(null);
+                  setCreating(null);
+                }}
+                className="mb-3 inline-flex h-11 w-auto cursor-pointer items-center gap-1 rounded-xl border-none bg-transparent px-1 text-[17px] font-bold text-brand lg:hidden"
               >
                 <ChevronLeft aria-hidden className="size-5" strokeWidth={2.2} />
                 Meetings
               </button>
-              {paper}
+              {creating ? (
+                createForm
+              ) : open && (
+                /*
+                  Keyed by the meeting. Everything in there — the text, whether
+                  it is saved, the timestamp the stale check compares against —
+                  belongs to one meeting, so switching starts over rather than
+                  resetting field by field.
+                */
+                <MeetingPane
+                  key={open.id}
+                  meeting={open}
+                  contacts={contacts}
+                  companies={companies}
+                  roster={roster}
+                  tasks={tasks}
+                  canEdit={canEdit}
+                  isPending={isPending}
+                  onBin={binMeeting}
+                  onSaved={() => router.refresh()}
+                />
+              )}
             </div>
           ) : (
-            <p className="m-auto max-w-[36ch] text-center text-[17px] leading-6 text-sub text-pretty">
-              Pick a meeting, or start a new one. It saves itself as you type.
+            <p className="mx-auto mt-12 max-w-[36ch] text-center text-[17px] leading-6 text-sub text-pretty">
+              Pick a meeting, or start a new one.
             </p>
           )}
         </div>
@@ -522,15 +425,6 @@ export function MeetingsApp({
     </div>
   );
 }
-
-/** The status words, matching what the Tasklist calls them. */
-const TASK_STATUS_WORDS: Record<string, string> = {
-  not_started: "Not started",
-  in_progress: "In progress",
-  for_review: "For review",
-  waiting: "Waiting",
-  complete: "Done",
-};
 
 function MeetingCard({
   meeting,
@@ -585,71 +479,6 @@ function MeetingCard({
           )}
         </span>
       )}
-    </button>
-  );
-}
-
-/**
- * Minutes as somebody else reads them.
- *
- * Bullets for lines that start "- " or "* ", because that is how these get
- * typed anyway; everything else exactly as written. No other formatting: a
- * record of what was said should look like what was written, not like a
- * document somebody designed.
- */
-function MeetingReader({ body }: { body: string }) {
-  const lines = renderBody(body);
-  if (body.trim() === "") {
-    return (
-      <p className="rounded-2xl border-[1.5px] border-border bg-card p-4 text-[17px] leading-6 text-sub">
-        Nothing written here yet.
-      </p>
-    );
-  }
-  return (
-    <div className="flex flex-col rounded-2xl border-[1.5px] border-border bg-card p-4 text-[17px] leading-[26px] text-fg">
-      {lines.map((line, i) => {
-        if (line.kind === "blank") return <span key={i} className="h-[13px]" aria-hidden />;
-        if (line.kind === "bullet") {
-          return (
-            <span key={i} className="flex gap-2 text-pretty">
-              <span aria-hidden className="select-none text-sub">
-                •
-              </span>
-              <span className="min-w-0 wrap-anywhere">{line.text}</span>
-            </span>
-          );
-        }
-        return (
-          <span key={i} className="text-pretty wrap-anywhere">
-            {line.text}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-function ModeTab({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={cn(
-        "inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border-none px-3.5 text-timestamp font-bold",
-        on ? "bg-prim text-on-prim" : "bg-transparent text-muted-fg hover:text-fg"
-      )}
-    >
-      {children}
     </button>
   );
 }

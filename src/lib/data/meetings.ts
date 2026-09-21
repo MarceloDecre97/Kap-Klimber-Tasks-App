@@ -33,7 +33,10 @@ import { snippetOf, type Attendee, type Meeting, type MeetingSummary } from "@/l
 */
 const ATTENDEE_SELECT = `
   contacts:meeting_contacts(
-    contact:contacts!meeting_contacts_contact_id_fkey(id, first_name, last_name, deleted_at)
+    contact:contacts!meeting_contacts_contact_id_fkey(
+      id, first_name, last_name, deleted_at,
+      company:companies!contacts_company_id_fkey(id, name)
+    )
   ),
   members:meeting_members(
     member:members!meeting_members_member_id_fkey(id, display_name, initials, color)
@@ -61,7 +64,15 @@ type Row = {
   created_by: MemberSummary | null;
   company: { id: string; name: string } | null;
   contacts:
-    | { contact: { id: string; first_name: string; last_name: string; deleted_at: string | null } | null }[]
+    | {
+        contact: {
+          id: string;
+          first_name: string;
+          last_name: string;
+          deleted_at: string | null;
+          company: { id: string; name: string } | null;
+        } | null;
+      }[]
     | null;
   members: { member: MemberSummary | null }[] | null;
 };
@@ -105,14 +116,40 @@ function attendeesOf(row: Row): Attendee[] {
   return [...members, ...contacts];
 }
 
+/**
+ * The company, worked out the same way meeting_company works it out in the
+ * database: the one set on the meeting, or the single company every external
+ * attendee shares. Two companies in the room and it is nobody's, because
+ * naming one of them would be a guess.
+ *
+ * Derived here as well as there because the card has to draw it. A meeting
+ * with Eric from ADV Mobil and an empty company field was showing as
+ * Internal: it has a company, nobody had just typed one.
+ */
+function companyOf(row: Row): { id: string; name: string } | null {
+  if (row.company) return row.company;
+  const companies = new Map<string, string>();
+  for (const link of row.contacts ?? []) {
+    const company = link.contact?.company;
+    if (company) companies.set(company.id, company.name);
+  }
+  if (companies.size !== 1) return null;
+  const only = [...companies.entries()][0];
+  return only ? { id: only[0], name: only[1] } : null;
+}
+
 function toSummary(row: Row, meId: string): MeetingSummary {
+  const company = companyOf(row);
   return {
     id: row.id,
     title: row.title,
     met_on: row.met_on,
     met_at: row.met_at,
-    company_id: row.company?.id ?? row.company_id,
-    company_name: row.company?.name ?? null,
+    /* What the meeting belongs to, set or derived. */
+    company_id: company?.id ?? null,
+    company_name: company?.name ?? null,
+    /* Only what was typed into the field, which the form shows back. */
+    explicit_company_id: row.company_id,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,

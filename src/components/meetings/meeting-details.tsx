@@ -33,7 +33,8 @@ export function detailsFrom(meeting: MeetingSummary): DetailValues {
     title: meeting.title,
     metOn: meeting.met_on,
     metAt: toTimeInput(meeting.met_at),
-    companyId: meeting.company_id,
+    /* What was typed, not what was inferred — see MeetingSummary. */
+    companyId: meeting.explicit_company_id,
     contactIds: meeting.attendees.filter((a) => a.kind === "contact").map((a) => a.id),
     memberIds: meeting.attendees.filter((a) => a.kind === "member").map((a) => a.id),
   };
@@ -47,6 +48,7 @@ export function MeetingDetails({
   roster,
   disabled,
   startOpen = false,
+  alwaysOpen = false,
 }: {
   values: DetailValues;
   onChange: (next: DetailValues) => void;
@@ -55,8 +57,11 @@ export function MeetingDetails({
   roster: MemberSummary[];
   disabled?: boolean;
   startOpen?: boolean;
+  /** The create form has nothing to fold away — the fields are the point. */
+  alwaysOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(startOpen);
+  const [collapsed, setCollapsed] = useState(!startOpen);
+  const open = alwaysOpen || !collapsed;
   const [peopleQuery, setPeopleQuery] = useState("");
 
   const set = <K extends keyof DetailValues>(key: K, value: DetailValues[K]) =>
@@ -66,20 +71,29 @@ export function MeetingDetails({
   const pickedMembers = roster.filter((m) => values.memberIds.includes(m.id));
 
   /*
-    The picker shows nothing until you type. The book runs to hundreds of
-    people and a list of all of them is a list nobody scrolls; two letters of
-    a surname is faster than any amount of browsing.
+    Who the picker offers.
+
+    With a company chosen, everybody who works there, listed without typing —
+    that list is a handful of people and making somebody search a set of four
+    is making them work for nothing. Without one, the book is hundreds deep,
+    so it stays quiet until two letters narrow it.
+
+    Either way, typing searches the whole book. Choosing a company is a
+    shortcut to the people you probably want, not a fence around them: the
+    supplier who brought somebody from another firm is exactly the meeting
+    you would otherwise have to undo the company to record.
   */
   const q = peopleQuery.trim().toLowerCase();
-  const contactMatches =
-    q.length > 0
-      ? contacts
-          .filter((c) => !values.contactIds.includes(c.id))
-          .filter((c) =>
-            `${fullName(c)} ${c.company ?? ""}`.toLowerCase().includes(q)
-          )
-          .slice(0, 6)
-      : [];
+  const atCompany = values.companyId
+    ? contacts.filter((c) => c.company_id === values.companyId)
+    : [];
+
+  const pool = q.length > 0 ? contacts : atCompany;
+  const contactMatches = pool
+    .filter((c) => !values.contactIds.includes(c.id))
+    .filter((c) => q.length === 0 || `${fullName(c)} ${c.company ?? ""}`.toLowerCase().includes(q))
+    .slice(0, q.length > 0 ? 6 : 8);
+
   const memberMatches =
     q.length > 0
       ? roster
@@ -107,9 +121,10 @@ export function MeetingDetails({
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-border bg-card p-3">
+      {!alwaysOpen && (
       <button
         type="button"
-        onClick={() => setOpen((wasOpen) => !wasOpen)}
+        onClick={() => setCollapsed((wasCollapsed) => !wasCollapsed)}
         aria-expanded={open}
         className="flex min-h-11 cursor-pointer items-center justify-between gap-3 border-none bg-transparent p-0 text-left"
       >
@@ -123,6 +138,7 @@ export function MeetingDetails({
           />
         </span>
       </button>
+      )}
 
       {open && (
         <div className="flex flex-col gap-3 border-t-[1.5px] border-border pt-3">
@@ -224,10 +240,15 @@ export function MeetingDetails({
               className="h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] text-fg placeholder:text-sub"
             />
 
-            {q.length > 0 && (
+            {(q.length > 0 || contactMatches.length > 0) && (
               <ul className="flex flex-col gap-1 rounded-2xl border-[1.5px] border-border bg-bg p-1.5">
                 {memberMatches.length === 0 && contactMatches.length === 0 && (
                   <li className="px-2 py-2 text-timestamp text-sub">Nobody by that name.</li>
+                )}
+                {q.length === 0 && contactMatches.length > 0 && (
+                  <li className="px-2 pb-1 pt-1.5 text-timestamp text-sub">
+                    At this company — or type any name
+                  </li>
                 )}
                 {memberMatches.map((m) => (
                   <li key={m.id}>

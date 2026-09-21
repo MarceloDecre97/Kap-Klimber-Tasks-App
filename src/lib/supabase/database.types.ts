@@ -663,6 +663,24 @@ export interface Database {
         Args: { p_meeting_id: string; p_body: string; p_expected: string | null };
         Returns: string;
       };
+      /**
+       * One write for everything a meeting is. Replaces the split that let
+       * the details panel and the paper disagree about what "saved" meant.
+       * Raises SQLSTATE 40001 when the row moved on. See 0049.
+       */
+      save_meeting: {
+        Args: {
+          p_meeting_id: string;
+          p_title: string;
+          p_met_on: string;
+          p_met_at: string | null;
+          p_company_id: string | null;
+          p_clear_company: boolean;
+          p_body: string;
+          p_expected: string | null;
+        };
+        Returns: string;
+      };
       /** The author's, with the inactive-author escape hatch. */
       can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean };
       /** Set by hand, or the one company every external attendee shares. */

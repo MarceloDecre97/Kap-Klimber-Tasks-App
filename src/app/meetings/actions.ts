@@ -435,3 +435,67 @@ export async function removeMeetingComment(
     return { ok: false, error: "Couldn't remove that comment. Try again." };
   }
 }
+
+/**
+ * One save for the whole meeting: details, paper and attendees.
+ *
+ * The split between a Save-details button and an autosaving paper is what let
+ * Marcelo set a title, a company and an attendee, leave, and come back to
+ * none of it — one half of the screen saved itself and the other quietly did
+ * not. There is one write now, under one stale check, behind one button.
+ */
+export async function saveMeeting(
+  meetingIdInput: string,
+  input: unknown,
+  body: string,
+  expected: string | null
+): Promise<{ ok: true; savedAt: string } | { ok: false; stale?: true; error: string }> {
+  const meetingId = idSchema.safeParse(meetingIdInput);
+  if (!meetingId.success) return { ok: false, error: "Invalid meeting." };
+  const parsed = meetingInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the details." };
+  }
+  if (typeof body !== "string") return { ok: false, error: "Invalid minutes." };
+  if (body.length > 200_000) {
+    return { ok: false, error: "These minutes are too long to save. Split them across two." };
+  }
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+    const v = parsed.data;
+
+    const { data, error } = await supabase.rpc("save_meeting", {
+      p_meeting_id: meetingId.data,
+      p_title: v.title,
+      p_met_on: v.metOn,
+      p_met_at: v.metAt ? v.metAt : null,
+      p_company_id: v.companyId ?? null,
+      /*
+        Said outright rather than inferred from a null, because null is a
+        real answer here — "worked out from who was there" — and a caller
+        that has to guess which null is which gets it wrong eventually.
+      */
+      p_clear_company: !v.companyId,
+      p_body: body,
+      p_expected: expected,
+    });
+    if (error) throw error;
+
+    await syncAttendees(supabase, meetingId.data, member.id, v.contactIds, v.memberIds);
+
+    revalidateMeetingViews(meetingId.data);
+    return { ok: true, savedAt: data as unknown as string };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("STALE")) {
+      return {
+        ok: false,
+        stale: true,
+        error: "These minutes changed somewhere else — reload before you carry on.",
+      };
+    }
+    console.error("saveMeeting failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't save just now — your text is still here.") };
+  }
+}

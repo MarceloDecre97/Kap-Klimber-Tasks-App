@@ -30,15 +30,23 @@ import type { NotificationFeed } from "@/lib/data/notifications";
  * ordered independently; at `lg` it becomes a real flex box again and the
  * two `flex-1` end zones put the switcher on the true horizontal centre.
  *
- * That first row holds exactly three things on a phone and cannot hold four.
- * Measured with both a bell and a theme toggle: 390px survives with nothing
- * to spare, and at 360px settings is pushed onto the second row and the clock
- * onto a third — the 137px header becomes 193px, back to the ragged three
- * rows this layout exists to prevent. So the notification bell takes the
- * theme toggle's slot below `lg`, and the toggle shows from `lg` up where
- * there is room for both. Nothing is lost — the same
- * toggle already sits on the Settings screen, one tap away, and it is a
- * control you use once rather than one that has to be watchable.
+ * Row one holds four things on a phone — logo, clock, bell, gear — and it
+ * took three separate concessions to make them fit, each measured at 360px
+ * where 320px of width is all there is:
+ *
+ *   - the clock stacked to two characters (44px, was 74) and went 24-hour,
+ *     because "11:40 AM" on one line has no shorter form;
+ *   - the bell and the gear dropped to 44px, still the floor for a thumb;
+ *   - the logo stopped growing at 360px and stays at its smallest step.
+ *
+ * Together: 286px against 320px. Before them the total was exactly 320px,
+ * which rounding pushed over, and the gear fell to a third row — a 183px
+ * header where this layout exists to produce a 127px one. At 320px it is
+ * three rows again, which is rare and is where it already was.
+ *
+ * The theme toggle stays off the phone entirely. Nothing is lost: the same
+ * toggle sits on the Settings screen, one tap away, and it is a control you
+ * use once rather than one that has to be watchable.
  */
 export function AppHeader({
   current,
@@ -55,11 +63,14 @@ export function AppHeader({
       <div className="flex flex-wrap items-center gap-2 lg:gap-3">
         <div className="order-1 flex min-w-0 items-center lg:flex-1">
           {/*
-            A step smaller below `sm`: row one now carries the clock as well
-            as the bell and settings, and the logo is the only element that
-            can give up width without losing meaning.
+            A step smaller below `sm`, and it stays at that step now rather
+            than growing at 360px: row one carries four things on a phone —
+            logo, clock, bell, gear — and at 360px the old h-6 logo put the
+            total at exactly the 320px available, which rounding then pushed
+            over and the gear fell to a third row. The logo is still the only
+            element here that can give up width without losing meaning.
           */}
-          <BrandLogo width={364} height={56} className="h-5 w-auto max-w-full min-[360px]:h-6 sm:h-10 lg:h-14" priority />
+          <BrandLogo width={364} height={56} className="h-5 w-auto max-w-full sm:h-10 lg:h-14" priority />
         </div>
 
         {/*
@@ -88,7 +99,7 @@ export function AppHeader({
             Settings ended at the Tasklist, whichever book you came from.
           */}
           <Link href={`/settings${returnToQuery(pathname)}`} className="order-4 lg:order-4">
-            <IconButton aria-label="Settings" className="size-12 lg:size-14">
+            <IconButton aria-label="Settings" className="size-11 sm:size-12 lg:size-14">
               <Settings aria-hidden className="size-5" />
             </IconButton>
           </Link>

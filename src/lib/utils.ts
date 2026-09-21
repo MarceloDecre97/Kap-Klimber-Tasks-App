@@ -176,6 +176,32 @@ export function formatClockTime(date: Date, timeZone: string = APP_TIMEZONE): st
 }
 
 /**
+ * The hour and minute as two separate 24-hour strings, for the stacked
+ * phone clock.
+ *
+ * Split rather than formatted-then-cut: a locale is free to put the hour
+ * second, or to use a separator that is not a colon, and slicing a formatted
+ * string assumes neither. Asking Intl for each part removes the assumption.
+ *
+ * 24-hour because the chip is two characters wide by design — "AM"/"PM" has
+ * nowhere to go, and a 12-hour clock without one is ambiguous twice a day.
+ */
+export function clockParts(
+  date: Date,
+  timeZone: string = APP_TIMEZONE
+): { hour: string; minute: string } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).formatToParts(date);
+  const get = (type: "hour" | "minute") =>
+    parts.find((part) => part.type === type)?.value.padStart(2, "0") ?? "00";
+  return { hour: get("hour"), minute: get("minute") };
+}
+
+/**
  * Wall-clock fields of `date` as they read in `timeZone`.
  */
 function zonedParts(date: Date, timeZone: string) {

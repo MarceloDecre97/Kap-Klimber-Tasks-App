@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { APP_TIMEZONE_LABEL, cn, formatClockTime, formatLongDate, getGmtOffsetLabel } from "@/lib/utils";
+import {
+  APP_TIMEZONE_LABEL,
+  clockParts,
+  cn,
+  formatClockTime,
+  formatLongDate,
+  getGmtOffsetLabel,
+} from "@/lib/utils";
 
 /**
  * Non-interactive readout of the app's fixed working timezone. Not a button
@@ -21,6 +28,12 @@ import { APP_TIMEZONE_LABEL, cn, formatClockTime, formatLongDate, getGmtOffsetLa
  * smallest screen in the team. So on a phone it shrinks to a time chip that
  * fits beside the bell on row one, and the city and date stay on desktop
  * where there has always been room for them.
+ *
+ * A fourth nav segment then pushed the SETTINGS gear onto a third row, and
+ * the phone chip is where the width had to come from: stacked, 24-hour, two
+ * characters wide instead of "11:40 AM" on one line. Marcelo's shape. It
+ * costs a glance to read a stacked time and buys the gear its place on row
+ * one, which is the better trade on the screen where rows are expensive.
  */
 export function AppClock({ className }: { className?: string }) {
   const [now, setNow] = useState<Date | null>(null);
@@ -37,12 +50,13 @@ export function AppClock({ className }: { className?: string }) {
   }, []);
 
   const zoneLine = `${APP_TIMEZONE_LABEL}${now ? ` (${getGmtOffsetLabel(now)})` : ""}`;
+  const stacked = now ? clockParts(now) : null;
 
   return (
     <div
       className={cn(
         "flex shrink-0 flex-col justify-center whitespace-nowrap border-[1.5px] border-border bg-muted",
-        "h-12 min-w-[74px] items-center rounded-xl px-2",
+        "h-12 w-11 items-center rounded-xl px-1",
         "lg:h-14 lg:min-w-[214px] lg:items-stretch lg:gap-0.5 lg:rounded-2xl lg:px-4",
         className
       )}
@@ -57,7 +71,21 @@ export function AppClock({ className }: { className?: string }) {
         {/* The zone still reaches a screen reader on a phone, where the
             sighted label is only the time. */}
         <span className="sr-only lg:hidden">{zoneLine}</span>
-        <span className="text-[14px] leading-[18px] font-bold text-fg tabular-nums lg:text-[13px] lg:leading-4">
+        {/*
+          Two lines on a phone, one on desktop. The full "1:19 PM" is what a
+          desktop shows and what a screen reader is given in both, so the
+          stacking is a visual compression rather than a loss.
+        */}
+        <span className="sr-only">{now ? formatClockTime(now) : ""}</span>
+        <span aria-hidden className="flex flex-col items-center leading-none lg:hidden">
+          <span className="text-[15px] font-bold text-fg tabular-nums">{stacked?.hour ?? ""}</span>
+          <span className="my-[2px] h-[1.5px] w-4 bg-line" />
+          <span className="text-[15px] font-bold text-fg tabular-nums">{stacked?.minute ?? ""}</span>
+        </span>
+        <span
+          aria-hidden
+          className="hidden text-[14px] leading-[18px] font-bold text-fg tabular-nums lg:block lg:text-[13px] lg:leading-4"
+        >
           {now ? formatClockTime(now) : ""}
         </span>
       </span>

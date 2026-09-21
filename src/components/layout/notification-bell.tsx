@@ -122,7 +122,7 @@ export function NotificationBell({ feed, className }: { feed: NotificationFeed; 
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-        className={cn("relative size-12 lg:size-14", className)}
+        className={cn("relative size-11 sm:size-12 lg:size-14", className)}
       >
         <Bell aria-hidden className="size-5" />
         {unread > 0 && (
