@@ -4,12 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { attendeeLine, toTimeInput, type MeetingSummary } from "@/lib/meetings-view";
-import {
-  FieldSelect,
-  PersonCombo,
-  type ChoiceOption,
-  type PersonOption,
-} from "@/components/meetings/meeting-pickers";
+import { PickCombo, type PickOption } from "@/components/meetings/meeting-pickers";
 import type { ContactSummary } from "@/lib/data/contacts";
 import type { CompanySummary } from "@/lib/companies-view";
 import type { MemberSummary } from "@/lib/data/tasks";
@@ -41,7 +36,8 @@ export interface DetailValues {
   description: string;
   metOn: string;
   metAt: string;
-  companyId: string | null;
+  /** Up to four. The address book below offers the people at any of them. */
+  companyIds: string[];
   contactIds: string[];
   memberIds: string[];
 }
@@ -52,8 +48,8 @@ export function detailsFrom(meeting: MeetingSummary): DetailValues {
     description: meeting.description ?? "",
     metOn: meeting.met_on,
     metAt: toTimeInput(meeting.met_at),
-    /* What was typed, not what was inferred — see MeetingSummary. */
-    companyId: meeting.explicit_company_id,
+    /* What was chosen, not what was inferred — see MeetingSummary. */
+    companyIds: meeting.explicit_company_ids,
     contactIds: meeting.attendees.filter((a) => a.kind === "contact").map((a) => a.id),
     memberIds: meeting.attendees.filter((a) => a.kind === "member").map((a) => a.id),
   };
@@ -62,8 +58,8 @@ export function detailsFrom(meeting: MeetingSummary): DetailValues {
 /** 200 characters, matching the column. Two lines on a 360px card. */
 const DESCRIPTION_LIMIT = 200;
 
-/** The company menu's first row: a meeting that belongs to nobody in the book. */
-const NO_COMPANY = "";
+/** Matching set_meeting_attendees. Five is a conference, not a meeting. */
+const COMPANY_LIMIT = 4;
 
 export function MeetingDetails({
   values,
@@ -73,6 +69,7 @@ export function MeetingDetails({
   roster,
   meId,
   isAuthor = true,
+  memberAddedBy,
   disabled,
   startOpen = false,
   alwaysOpen = false,
@@ -84,8 +81,15 @@ export function MeetingDetails({
   roster: MemberSummary[];
   /** Who is looking, so they cannot accidentally sign themselves out. */
   meId?: string;
-  /** Whether they wrote the minutes; only the author may drop an attendee. */
+  /** Whether they wrote the minutes. The author may take anybody off. */
   isAuthor?: boolean;
+  /**
+   * Who put each member in the room, for the people already saved.
+   *
+   * A name missing from this map is one added in this session, which by
+   * definition was added by whoever is looking. See the remove rule below.
+   */
+  memberAddedBy?: Record<string, string | null>;
   /** Somebody who was not at this meeting: read it, change nothing. */
   disabled?: boolean;
   startOpen?: boolean;
@@ -94,6 +98,7 @@ export function MeetingDetails({
 }) {
   const [collapsed, setCollapsed] = useState(!startOpen);
   const open = alwaysOpen || !collapsed;
+  const [companyQuery, setCompanyQuery] = useState("");
   const [teamQuery, setTeamQuery] = useState("");
   const [contactQuery, setContactQuery] = useState("");
 
@@ -102,14 +107,15 @@ export function MeetingDetails({
 
   const pickedContacts = contacts.filter((c) => values.contactIds.includes(c.id));
   const pickedMembers = roster.filter((m) => values.memberIds.includes(m.id));
-  const companyName = companies.find((c) => c.id === values.companyId)?.name ?? null;
+  const pickedCompanies = companies.filter((c) => values.companyIds.includes(c.id));
+  const companyNames = pickedCompanies.map((c) => c.name);
 
   /*
     The team: always all of us, minus whoever is already on. Four names is not
     a search problem, so typing only ever narrows a list you can already see.
   */
   const teamQ = teamQuery.trim().toLowerCase();
-  const teamOptions: PersonOption[] = roster
+  const teamOptions: PickOption[] = roster
     .filter((m) => !values.memberIds.includes(m.id))
     .filter((m) => teamQ.length === 0 || m.display_name.toLowerCase().includes(teamQ))
     .map((m) => ({
@@ -132,11 +138,12 @@ export function MeetingDetails({
     everybody.
   */
   const contactQ = contactQuery.trim().toLowerCase();
-  const atCompany = values.companyId
-    ? contacts.filter((c) => c.company_id === values.companyId)
-    : [];
+  const atCompany =
+    values.companyIds.length > 0
+      ? contacts.filter((c) => c.company_id && values.companyIds.includes(c.company_id))
+      : [];
   const contactPool = contactQ.length > 0 ? contacts : atCompany;
-  const contactOptions: PersonOption[] = contactPool
+  const contactOptions: PickOption[] = contactPool
     .filter((c) => !values.contactIds.includes(c.id))
     .filter(
       (c) =>
@@ -169,14 +176,12 @@ export function MeetingDetails({
     })),
   ]);
 
-  const companyOptions: ChoiceOption[] = [
-    {
-      value: NO_COMPANY,
-      label: "No company, or one not in the book",
-      hint: "The company then follows whoever you add below",
-    },
-    ...companies.map((c) => ({ value: c.id, label: c.name })),
-  ];
+  const companyQ = companyQuery.trim().toLowerCase();
+  const companyOptions: PickOption[] = companies
+    .filter((c) => !values.companyIds.includes(c.id))
+    .filter((c) => companyQ.length === 0 || c.name.toLowerCase().includes(companyQ))
+    .slice(0, 12)
+    .map((c) => ({ id: c.id, label: c.name }));
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-border bg-card p-3">
@@ -208,7 +213,10 @@ export function MeetingDetails({
             label="When"
             value={values.metAt ? `${values.metOn} · ${values.metAt}` : values.metOn}
           />
-          <ReadRow label="Company" value={companyName ?? "Worked out from who was there"} />
+          <ReadRow
+            label={companyNames.length === 1 ? "Company" : "Companies"}
+            value={companyNames.join(", ") || "Worked out from who was there"}
+          />
           <ReadRow label="Who was there" value={summary} />
         </dl>
       )}
@@ -221,6 +229,10 @@ export function MeetingDetails({
               value={values.title}
               onChange={(event) => set("title", event.target.value)}
               placeholder="What was it about?"
+              /* Same reason as the minutes box: a phone keyboard capitalises
+                 the first letter before there is a word to judge, and a title
+                 is exactly where a product name gets typed. */
+              autoCapitalize="off"
               className="h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] text-fg placeholder:text-sub"
             />
           </Field>
@@ -237,6 +249,7 @@ export function MeetingDetails({
               maxLength={DESCRIPTION_LIMIT}
               onChange={(event) => set("description", event.target.value)}
               placeholder="One line — this is what shows on the card"
+              autoCapitalize="off"
               className="h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] text-fg placeholder:text-sub"
             />
             <p className="text-timestamp text-sub tabular-nums">
@@ -266,20 +279,49 @@ export function MeetingDetails({
             </Field>
           </div>
 
-          <Field label="Company" htmlFor="meeting-company">
-            <FieldSelect
-              id="meeting-company"
-              value={values.companyId ?? NO_COMPANY}
-              options={companyOptions}
-              onChange={(next) => set("companyId", next === NO_COMPANY ? null : next)}
+          {/*
+            Up to four. A call with somebody from AAA and somebody from ADV
+            Mobil had to pick one or be filed as nobody's, which is what this
+            replaces. At the limit the box says so rather than going quiet.
+          */}
+          <Field
+            label={values.companyIds.length === 1 ? "Company" : "Companies"}
+            htmlFor="meeting-companies"
+          >
+            <PickCombo
+              id="meeting-companies"
+              placeholder={
+                values.companyIds.length >= COMPANY_LIMIT
+                  ? `${COMPANY_LIMIT} is the most`
+                  : "Who was the meeting with?"
+              }
+              picked={pickedCompanies.map((c) => ({ id: c.id, label: c.name }))}
+              options={values.companyIds.length >= COMPANY_LIMIT ? [] : companyOptions}
+              query={companyQuery}
+              onQuery={setCompanyQuery}
+              onPick={(id) => set("companyIds", [...values.companyIds, id])}
+              onRemove={(id) =>
+                set(
+                  "companyIds",
+                  values.companyIds.filter((x) => x !== id)
+                )
+              }
+              emptyText={
+                values.companyIds.length >= COMPANY_LIMIT
+                  ? `Four companies is the most one meeting can be with. Take one off to swap it.`
+                  : companyQ.length > 0
+                    ? "No company in the book by that name."
+                    : "Every company is already on."
+              }
             />
             <p className="text-timestamp text-sub text-pretty">
-              Pick the company first — the address book below then lists its people.
+              Pick these first — the address book below then lists the people who work at them.
+              Leave it empty and the company follows whoever you add.
             </p>
           </Field>
 
           <Field label="From Opus Kap" htmlFor="meeting-team">
-            <PersonCombo
+            <PickCombo
               id="meeting-team"
               placeholder="Who else from the team was there?"
               picked={pickedMembers.map((m) => ({
@@ -302,26 +344,34 @@ export function MeetingDetails({
                 teamQ.length > 0 ? "Nobody on the team by that name." : "Everybody is already on."
               }
               /*
-                You cannot take yourself off somebody else's meeting. Being on
-                it is what gives you the right to correct these details, so
-                the X would be a button that revokes your own access and
-                cannot undo itself — you would have to ask whoever wrote the
-                minutes to put you back. The author can take anybody off,
-                including themselves.
+                On somebody else's meeting you may add anybody and take off
+                only the people you added. Marcelo's rule, and it closes two
+                holes at once: Dee could take Marcelo off his own meeting, and
+                taking YOURSELF off is a one-way door — being on it is what
+                gives you the right to change any of this, and there would be
+                no way back in without asking the author.
+
+                A name missing from `memberAddedBy` was added in this session,
+                so by definition by whoever is looking.
               */
-              canRemove={(id) => isAuthor || id !== meId}
+              canRemove={(id) =>
+                isAuthor ||
+                (id !== meId && (memberAddedBy?.[id] === undefined || memberAddedBy[id] === meId))
+              }
               removeHint={
-                !isAuthor && values.memberIds.includes(meId ?? "")
-                  ? "You can correct these details because you were at this meeting, so you can't take yourself off it."
-                  : undefined
+                isAuthor
+                  ? undefined
+                  : "You were at this meeting, so you can correct it — you can take off the people you added, but not the others and not yourself."
               }
             />
           </Field>
 
           <Field label="From the address book" htmlFor="meeting-contacts">
-            <PersonCombo
+            <PickCombo
               id="meeting-contacts"
-              placeholder={companyName ? "Anyone else, or search the book" : "Type a name from the book"}
+              placeholder={
+                companyNames.length > 0 ? "Anyone else, or search the book" : "Type a name from the book"
+              }
               picked={pickedContacts.map((c) => ({
                 id: c.id,
                 label: fullName(c),
@@ -339,13 +389,15 @@ export function MeetingDetails({
                 )
               }
               heading={
-                contactQ.length === 0 && companyName ? `At ${companyName}` : undefined
+                contactQ.length === 0 && companyNames.length > 0
+                  ? `At ${companyNames.join(", ")}`
+                  : undefined
               }
               emptyText={
                 contactQ.length > 0
                   ? "Nobody in the book by that name."
-                  : companyName
-                    ? `Nobody in the book is linked to ${companyName} yet — type a name to search the whole book.`
+                  : companyNames.length > 0
+                    ? `Nobody in the book is linked to ${companyNames.join(" or ")} yet — type a name to search the whole book.`
                     : "Pick a company above, or type a name to search the book."
               }
             />

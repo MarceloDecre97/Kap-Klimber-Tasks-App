@@ -61,7 +61,12 @@ const meetingInputSchema = z.object({
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "That time isn't valid.")
     .optional()
     .or(z.literal("")),
-  companyId: z.string().uuid().nullable().optional(),
+  /*
+    Up to four, matching set_meeting_attendees. A meeting spanning five
+    companies is a conference, and its minutes want a title rather than five
+    chips on a 360px card.
+  */
+  companyIds: z.array(z.string().uuid()).max(4, "Four companies is the most.").default([]),
   contactIds: z.array(z.string().uuid()).max(40).default([]),
   memberIds: z.array(z.string().uuid()).max(20).default([]),
 });
@@ -79,7 +84,7 @@ function revalidateMeetingViews(meetingId?: string) {
 function rpcError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : "";
   /* The database's own refusals are written to be read by a person. */
-  if (message && /minutes|team|exist|long|meeting|bin/i.test(message)) return message;
+  if (message && /minutes|team|exist|long|meeting|bin|companies|added/i.test(message)) return message;
   return fallback;
 }
 
@@ -107,14 +112,13 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
         description: v.description || null,
         met_on: v.metOn,
         met_at: v.metAt ? v.metAt : null,
-        company_id: v.companyId ?? null,
         created_by: member.id,
       })
       .select("id")
       .single();
     if (error) throw error;
 
-    await syncAttendees(supabase, meeting.id, v.contactIds, v.memberIds);
+    await syncAttendees(supabase, meeting.id, v.companyIds, v.contactIds, v.memberIds);
 
     revalidateMeetingViews(meeting.id);
     return { ok: true, meetingId: meeting.id };
@@ -155,12 +159,11 @@ export async function updateMeeting(
         description: v.description || null,
         met_on: v.metOn,
         met_at: v.metAt ? v.metAt : null,
-        company_id: v.companyId ?? null,
       })
       .eq("id", meetingId.data);
     if (error) throw error;
 
-    await syncAttendees(supabase, meetingId.data, v.contactIds, v.memberIds);
+    await syncAttendees(supabase, meetingId.data, v.companyIds, v.contactIds, v.memberIds);
 
     revalidateMeetingViews(meetingId.data);
     return { ok: true, meetingId: meetingId.data };
@@ -303,11 +306,13 @@ export async function meetingActivity(
 async function syncAttendees(
   supabase: Awaited<ReturnType<typeof getCurrentMember>>["supabase"],
   meetingId: string,
+  companyIds: string[],
   contactIds: string[],
   memberIds: string[]
 ): Promise<void> {
   const { error } = await supabase.rpc("set_meeting_attendees", {
     p_meeting_id: meetingId,
+    p_company_ids: [...new Set(companyIds)],
     p_contact_ids: [...new Set(contactIds)],
     p_member_ids: [...new Set(memberIds)],
   });
@@ -467,20 +472,13 @@ export async function saveMeeting(
       p_title: v.title,
       p_met_on: v.metOn,
       p_met_at: v.metAt ? v.metAt : null,
-      p_company_id: v.companyId ?? null,
-      /*
-        Said outright rather than inferred from a null, because null is a
-        real answer here — "worked out from who was there" — and a caller
-        that has to guess which null is which gets it wrong eventually.
-      */
-      p_clear_company: !v.companyId,
       p_body: body,
       p_expected: expected,
       p_description: v.description || null,
     });
     if (error) throw error;
 
-    await syncAttendees(supabase, meetingId.data, v.contactIds, v.memberIds);
+    await syncAttendees(supabase, meetingId.data, v.companyIds, v.contactIds, v.memberIds);
 
     revalidateMeetingViews(meetingId.data);
     return { ok: true, savedAt: data as unknown as string };

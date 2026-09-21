@@ -15,6 +15,15 @@ export interface Attendee {
   /** Team members carry their own colour; contacts get one from their name. */
   color: string | null;
   kind: "member" | "contact";
+  /**
+   * Who put them in the room.
+   *
+   * Only meaningful for members, and only because of 0052's rule: somebody
+   * who was at the meeting but did not write the minutes may take off the
+   * people they added, and nobody else. The screen needs to know before it
+   * draws an X that the database would refuse.
+   */
+  addedBy?: string | null;
 }
 
 /** A meeting as the list shows it — everything but the body. */
@@ -38,14 +47,14 @@ export interface MeetingSummary {
    */
   companies: { id: string; name: string }[];
   /**
-   * Only what was typed into the company field.
+   * Only the companies chosen by hand, up to four.
    *
-   * Kept apart from `company_id` because the form must show back what was
+   * Kept apart from `companies` because the form must show back what was
    * chosen, not what was inferred — otherwise opening a meeting whose company
-   * was derived and pressing Save would silently write the inference into the
-   * field, and it would stop being derived.
+   * was derived from its attendees and pressing Save would silently write the
+   * inference into the field, and it would stop being derived.
    */
-  explicit_company_id: string | null;
+  explicit_company_ids: string[];
   /**
    * What the meeting was about, in one line, written on purpose.
    *

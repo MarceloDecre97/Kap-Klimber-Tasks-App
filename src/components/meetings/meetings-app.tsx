@@ -183,7 +183,7 @@ export function MeetingsApp({
       description: "",
       metOn,
       metAt: "",
-      companyId: null,
+      companyIds: [],
       contactIds: [],
       /* You were at your own meeting. Everyone else is a choice. */
       memberIds: [meId],
@@ -356,9 +356,21 @@ export function MeetingsApp({
         as the two kinds of answer they are.
       */}
       <div className="flex items-center gap-2">
-        <Button size="md" onClick={startMeeting} disabled={isPending} className="w-auto shrink-0">
+        {/*
+          "Meeting", not "New meeting", and 48px to match the dropdown beside
+          it. Marcelo's call: the plus already says new, and two controls on
+          one line that are nearly the same height read as a mistake rather
+          than as a pair. The shapes stay different — a square-ish button is
+          an action, a pill is a filter.
+        */}
+        <Button
+          size="md"
+          onClick={startMeeting}
+          disabled={isPending}
+          className="h-12 w-auto shrink-0"
+        >
           <Plus aria-hidden className="size-5" strokeWidth={2.2} />
-          New meeting
+          Meeting
         </Button>
         <FilterDropdown
           label={scopeLabel}

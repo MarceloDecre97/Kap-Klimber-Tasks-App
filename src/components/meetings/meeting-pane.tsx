@@ -88,6 +88,17 @@ export function MeetingPane({
   onSaved: () => void;
 }) {
   const [details, setDetails] = useState<DetailValues>(() => detailsFrom(meeting));
+  /*
+    Who put each of the team in the room, as the server last saw it. Read from
+    the meeting rather than kept in the draft: it is not something this screen
+    edits, and 0052's rule needs it to decide whether to draw an X that the
+    database would refuse.
+  */
+  const memberAddedBy = Object.fromEntries(
+    meeting.attendees
+      .filter((a) => a.kind === "member")
+      .map((a) => [a.id, a.addedBy ?? null])
+  );
   const [body, setBody] = useState(meeting.body);
   const [reading, setReading] = useState(false);
   const [draftDismissed, setDraftDismissed] = useState(false);
@@ -253,6 +264,7 @@ export function MeetingPane({
           disabled={!canEditDetails}
           meId={meId}
           isAuthor={canEditBody}
+          memberAddedBy={memberAddedBy}
           onChange={(next) => edit(next, body)}
           contacts={contacts}
           companies={companies}

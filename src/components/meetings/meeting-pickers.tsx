@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type ReactNode } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Building2, ChevronDown, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { FloatingPanel, useFloatingPanel } from "@/components/tasks/floating-panel";
 import { cn } from "@/lib/utils";
@@ -23,17 +23,24 @@ import { cn } from "@/lib/utils";
 
 const PANEL_WIDTH = 320;
 
-/** One row of either menu. */
-export interface PersonOption {
+/**
+ * One row of a menu, and one chip above it.
+ *
+ * `initials` and `color` are optional so the same control can pick companies,
+ * which have a name and no face. A row without them draws a building instead,
+ * which keeps the two menus the same shape without inventing initials for a
+ * company — "ADV Mobil" as a red circle reading "AM" looks like a person.
+ */
+export interface PickOption {
   id: string;
   label: string;
   hint?: string;
-  initials: string;
-  color: string;
+  initials?: string;
+  color?: string;
 }
 
 /**
- * Pick several people: a box you type in, with a menu under it.
+ * Pick several of something: a box you type in, with a menu under it.
  *
  * Closed until you press it. The first version listed every option the
  * moment the panel opened, which for the team meant three names and a face
@@ -45,7 +52,7 @@ export interface PersonOption {
  * this — the team is always all of us, the book follows the company — and a
  * component that tried to hold both rules would state neither clearly.
  */
-export function PersonCombo({
+export function PickCombo({
   id,
   placeholder,
   picked,
@@ -62,8 +69,8 @@ export function PersonCombo({
 }: {
   id: string;
   placeholder: string;
-  picked: PersonOption[];
-  options: PersonOption[];
+  picked: PickOption[];
+  options: PickOption[];
   query: string;
   onQuery: (next: string) => void;
   onPick: (id: string) => void;
@@ -90,7 +97,7 @@ export function PersonCombo({
                 key={person.id}
                 className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-border bg-bg py-1 pl-1 pr-1.5"
               >
-                <Avatar initials={person.initials} color={person.color} size={26} />
+                <Face option={person} size={26} />
                 <span className={cn("text-timestamp font-bold text-fg", !removable && "pr-1.5")}>
                   {person.label}
                 </span>
@@ -113,10 +120,23 @@ export function PersonCombo({
       {removeHint && <p className="text-timestamp text-sub text-pretty">{removeHint}</p>}
 
       {!disabled && (
+        /*
+          The ring belongs to the whole control, not to the text box inside it.
+
+          globals.css gives every `:focus-visible` a 3px outline with a 2px
+          offset and says it is never removed — rightly. But the focusable
+          element here is the `<input>`, so the ring was drawn around the text
+          box alone: it stopped short of the chevron and sat inside the
+          border, which is the short, misaligned box Marcelo photographed.
+          Drawn from `focus-within` on the container it wraps the box and the
+          chevron together, and the indicator is not weakened — only moved to
+          the thing a person would say has the focus.
+        */
         <div
           ref={triggerRef}
           className={cn(
             "flex h-14 items-center rounded-2xl border-[1.5px] bg-bg pr-1",
+            "focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-prim",
             open ? "border-fg" : "border-border"
           )}
         >
@@ -131,7 +151,7 @@ export function PersonCombo({
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
             autoComplete="off"
-            className="h-full min-w-0 grow rounded-2xl border-none bg-transparent px-3.5 text-[17px] text-fg outline-none placeholder:text-sub"
+            className="h-full min-w-0 grow rounded-2xl border-none bg-transparent px-3.5 text-[17px] text-fg placeholder:text-sub focus-visible:outline-none"
           />
           <button
             type="button"
@@ -169,7 +189,7 @@ export function PersonCombo({
               }}
               className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-muted"
             >
-              <Avatar initials={option.initials} color={option.color} size={30} />
+              <Face option={option} size={30} />
               <span className="flex min-w-0 grow flex-col">
                 <span className="text-[17px] leading-6 font-bold text-fg wrap-anywhere">
                   {option.label}
@@ -178,89 +198,6 @@ export function PersonCombo({
               </span>
             </button>
           ))}
-        </Menu>
-      )}
-    </>
-  );
-}
-
-/** One row of the company menu. */
-export interface ChoiceOption {
-  value: string;
-  label: string;
-  hint?: string;
-}
-
-/**
- * Pick one of something: a field that looks like the others and opens the
- * same menu. Not a `<select>`, for the reason at the top of this file.
- */
-export function FieldSelect({
-  id,
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  id: string;
-  value: string;
-  options: ChoiceOption[];
-  onChange: (next: string) => void;
-  disabled?: boolean;
-}) {
-  const { open, setOpen, triggerRef, panelRef, style } = useFloatingPanel<HTMLButtonElement>();
-  const chosen = options.find((o) => o.value === value) ?? options[0];
-
-  return (
-    <>
-      <button
-        id={id}
-        ref={triggerRef}
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((wasOpen) => !wasOpen)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className={cn(
-          "flex h-14 w-full cursor-pointer items-center gap-2 rounded-2xl border-[1.5px] bg-bg px-3.5 text-left text-[17px] text-fg",
-          open ? "border-fg" : "border-border"
-        )}
-      >
-        <span className="min-w-0 grow truncate">{chosen?.label ?? ""}</span>
-        <ChevronDown
-          aria-hidden
-          className={cn("size-5 shrink-0 text-sub transition-transform duration-150", open && "rotate-180")}
-          strokeWidth={2}
-        />
-      </button>
-
-      {open && (
-        <Menu panelRef={panelRef} style={style}>
-          {options.map((option) => {
-            const on = option.value === value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={on}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left",
-                  on ? "text-fg" : "text-sub hover:bg-muted"
-                )}
-              >
-                <span className="flex min-w-0 grow flex-col">
-                  <span className="text-[17px] leading-6 font-bold wrap-anywhere">{option.label}</span>
-                  {option.hint && <span className="text-timestamp text-sub">{option.hint}</span>}
-                </span>
-                {on && <Check aria-hidden className="size-4 shrink-0" strokeWidth={2.5} />}
-              </button>
-            );
-          })}
         </Menu>
       )}
     </>
@@ -301,4 +238,20 @@ function MenuHeading({ children }: { children: ReactNode }) {
 
 function MenuEmpty({ children }: { children: ReactNode }) {
   return <p className="px-3 py-2.5 text-[16px] leading-[22px] text-sub text-pretty">{children}</p>;
+}
+
+/** A face for a person, a building for a company. */
+function Face({ option, size }: { option: PickOption; size: number }) {
+  if (option.initials) {
+    return <Avatar initials={option.initials} color={option.color ?? "#87252b"} size={size} />;
+  }
+  return (
+    <span
+      aria-hidden
+      className="inline-grid shrink-0 place-items-center rounded-full border-[1.5px] border-border bg-muted text-sub"
+      style={{ width: size, height: size }}
+    >
+      <Building2 className="size-[60%]" strokeWidth={1.75} />
+    </span>
+  );
 }

@@ -302,3 +302,52 @@ terminated the `class` attribute in the probe's HTML, so everything after,
 including `shrink-0`, never reached the button. Measured properly: the button
 holds 161px at every width from 320 to 768, the dropdown gives up the
 difference, and there is no horizontal scroll.
+
+## Round four: a meeting can be with four companies
+
+**`meetings.company_id` was a lie the schema told.** A call with somebody from
+AAA and somebody from ADV Mobil had to pick one company or be filed as
+nobody's. 0052 replaces the column with `meeting_companies` — up to four,
+chosen by hand — and the column is *dropped* rather than kept alongside,
+because two answers to "which company is this meeting with" means the one you
+get depends on which query you happened to write. Four is a real limit: five
+companies is a conference, and its minutes want a title rather than five chips
+on a 360px card.
+
+Companies are still derived from whoever from the address book was in the
+room. The two halves compose: `companies` on a summary is the chosen set plus
+the attendees', and the address book picker offers the people at any of the
+chosen ones.
+
+**Who may take whom off.** 0051 let anybody who was at the meeting change its
+details, which let Dee take Marcelo off his own meeting. The rule now: you may
+add anybody, and remove only the people *you* added. The author may remove
+anybody. Nobody but the author may remove themselves — being on the meeting is
+what gives you the right to change it, so that X would be a button revoking
+your own access with no way back.
+
+That rule needs `added_by` to survive a save, which meant `set_meeting_attendees`
+could no longer delete everything and re-insert: rows that are staying are now
+left alone. Worth noting that the delete-and-reinsert shape has caused two
+distinct bugs in two rounds — the 0051 lockout and this one.
+
+**The focus ring was drawn around the wrong box.** globals.css gives every
+`:focus-visible` a 3px outline with a 2px offset and says it is never removed,
+rightly. But the focusable element in the attendee picker is the `<input>`
+inside the control, so the ring stopped short of the chevron and sat inside
+the border — the short, misaligned box in Marcelo's screenshot. It is drawn
+from `focus-within` on the container now: same ring, same rule, around the
+thing a person would say has the focus.
+
+**"New meeting" became "Meeting", at 48px.** The plus already says new, and
+two controls sharing a line at 56px and 48px read as a mistake rather than as
+a pair. Measured after: both 48px, same line from 320px to 768px, and the
+filter gains 39px at the narrowest width.
+
+**iPhone, again.** The notes box has had `autoCapitalize="off"` since round
+three and its own rule leaves any word containing a capital alone — but the
+title and description inputs did not, and a product name typed into a title
+is exactly where this bites. Both are `off` now. If it still happens *in the
+notes box* on the phone, that is Gboard's own device-level auto-capitalisation,
+which some keyboards apply regardless of the attribute; the test is whether
+the same thing happens in another app's text field.

@@ -525,8 +525,6 @@ export interface Database {
           met_on: string;
           /** Optional; minutes are filed by day. */
           met_at: string | null;
-          /** Set by hand, or left null and derived from the attendees. */
-          company_id: string | null;
           /** The paper. Plain text, empty is legal. */
           body: string;
           created_by: string;
@@ -552,9 +550,25 @@ export interface Database {
         Update: Partial<
           Pick<
             Database["public"]["Tables"]["meetings"]["Row"],
-            "title" | "description" | "met_on" | "met_at" | "company_id" | "deleted_at"
+            "title" | "description" | "met_on" | "met_at" | "deleted_at"
           >
         >;
+        Relationships: [];
+      };
+      /** Which companies a meeting was with, chosen by hand. Up to four. 0052. */
+      meeting_companies: {
+        Row: {
+          meeting_id: string;
+          company_id: string;
+          added_by: string | null;
+          created_at: string;
+        };
+        Insert: Pick<
+          Database["public"]["Tables"]["meeting_companies"]["Row"],
+          "meeting_id" | "company_id"
+        > &
+          Partial<Pick<Database["public"]["Tables"]["meeting_companies"]["Row"], "added_by">>;
+        Update: never;
         Relationships: [];
       };
       meeting_contacts: {
@@ -684,8 +698,6 @@ export interface Database {
           p_title: string;
           p_met_on: string;
           p_met_at: string | null;
-          p_company_id: string | null;
-          p_clear_company: boolean;
           p_body: string;
           p_expected: string | null;
           p_description: string | null;
@@ -704,7 +716,12 @@ export interface Database {
        * taken before the delete — see 0051 for the trap this avoids.
        */
       set_meeting_attendees: {
-        Args: { p_meeting_id: string; p_contact_ids: string[]; p_member_ids: string[] };
+        Args: {
+          p_meeting_id: string;
+          p_company_ids: string[];
+          p_contact_ids: string[];
+          p_member_ids: string[];
+        };
         Returns: void;
       };
       /** Erases binned minutes for good. Tasks that came out of it survive. */

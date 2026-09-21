@@ -40,15 +40,18 @@ const ATTENDEE_SELECT = `
   ),
   members:meeting_members(
     member_id,
+    added_by,
     member:members!meeting_members_member_id_fkey(id, display_name, initials, color)
   )
 `;
 
 const MEETING_SELECT = `
-  id, title, description, met_on, met_at, company_id, body,
+  id, title, description, met_on, met_at, body,
   created_at, updated_at, deleted_at,
   created_by:members!meetings_created_by_fkey(id, display_name, initials, color),
-  company:companies!meetings_company_id_fkey(id, name),
+  set_companies:meeting_companies(
+    company:companies!meeting_companies_company_id_fkey(id, name)
+  ),
   ${ATTENDEE_SELECT}
 `;
 
@@ -58,13 +61,12 @@ type Row = {
   description: string | null;
   met_on: string;
   met_at: string | null;
-  company_id: string | null;
   body: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
   created_by: MemberSummary | null;
-  company: { id: string; name: string } | null;
+  set_companies: { company: { id: string; name: string } | null }[] | null;
   contacts:
     | {
         contact: {
@@ -76,7 +78,7 @@ type Row = {
         } | null;
       }[]
     | null;
-  members: { member_id: string; member: MemberSummary | null }[] | null;
+  members: { member_id: string; added_by: string | null; member: MemberSummary | null }[] | null;
 };
 
 /**
@@ -91,6 +93,11 @@ type Row = {
  * in it is a worse record than one naming somebody who has since left.
  */
 function attendeesOf(row: Row): Attendee[] {
+  /* Who put each member in the room — see Attendee.addedBy for why. */
+  const addedBy = new Map<string, string | null>(
+    (row.members ?? []).map((m) => [m.member_id, m.added_by])
+  );
+
   const members: Attendee[] = (row.members ?? [])
     .map((m) => m.member)
     .filter((m): m is MemberSummary => Boolean(m))
@@ -100,6 +107,7 @@ function attendeesOf(row: Row): Attendee[] {
       initials: m.initials,
       color: m.color,
       kind: "member" as const,
+      addedBy: addedBy.get(m.id) ?? null,
     }));
 
   const contacts: Attendee[] = (row.contacts ?? [])
@@ -130,7 +138,9 @@ function attendeesOf(row: Row): Attendee[] {
  */
 function companiesOf(row: Row): { id: string; name: string }[] {
   const companies = new Map<string, string>();
-  if (row.company) companies.set(row.company.id, row.company.name);
+  for (const link of row.set_companies ?? []) {
+    if (link.company) companies.set(link.company.id, link.company.name);
+  }
   for (const link of row.contacts ?? []) {
     const company = link.contact?.company;
     if (company) companies.set(company.id, company.name);
@@ -147,7 +157,11 @@ function companiesOf(row: Row): { id: string; name: string }[] {
  * this is what the meeting files under.
  */
 function companyOf(row: Row): { id: string; name: string } | null {
-  if (row.company) return row.company;
+  const chosen = (row.set_companies ?? [])
+    .map((link) => link.company)
+    .filter((c): c is { id: string; name: string } => Boolean(c));
+  if (chosen.length === 1) return chosen[0]!;
+  if (chosen.length > 1) return null;
   const companies = companiesOf(row);
   return companies.length === 1 ? companies[0]! : null;
 }
@@ -164,8 +178,10 @@ function toSummary(row: Row, meId: string): MeetingSummary {
     company_id: company?.id ?? null,
     company_name: company?.name ?? null,
     companies: companiesOf(row),
-    /* Only what was typed into the field, which the form shows back. */
-    explicit_company_id: row.company_id,
+    /* Only what was chosen by hand, which the form shows back. */
+    explicit_company_ids: (row.set_companies ?? [])
+      .map((link) => link.company?.id)
+      .filter((id): id is string => Boolean(id)),
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -198,13 +214,20 @@ export async function listMeetings(
     .limit(options.limit ?? 200);
 
   /*
-    Only the company set on the meeting is filtered here. The derived half —
+    Only the companies chosen by hand are filtered here. The derived half —
     meetings whose attendees work there — needs a second query with a
     different shape, which is what listCompanyMeetings exists to do. Asking
     one builder to be both is what PostgREST's types quite rightly refuse.
   */
   const { data, error } = options.companyId
-    ? await query.eq("company_id", options.companyId)
+    ? await supabase
+        .from("meetings")
+        .select(`${MEETING_SELECT}, mco:meeting_companies!inner(company_id)`)
+        .is("deleted_at", null)
+        .eq("mco.company_id", options.companyId)
+        .order("met_on", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(options.limit ?? 200)
     : await query;
 
   if (error) throw error;
@@ -258,9 +281,9 @@ export async function listCompanyMeetings(
   const [direct, viaContacts] = await Promise.all([
     supabase
       .from("meetings")
-      .select(MEETING_SELECT)
+      .select(`${MEETING_SELECT}, mco:meeting_companies!inner(company_id)`)
       .is("deleted_at", null)
-      .eq("company_id", companyId)
+      .eq("mco.company_id", companyId)
       .order("met_on", { ascending: false })
       .limit(limit),
     supabase
