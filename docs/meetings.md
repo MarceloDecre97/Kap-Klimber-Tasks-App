@@ -524,3 +524,22 @@ red, white on the dark ground. Measured in both themes.
 **Back and close on one row** on a phone, where they were stacked — two rows
 saying the same thing. The pane keeps its own X from `lg` up, where there is
 no back link.
+
+## Round eight: the close button holds its corner
+
+Five company names on the meta line pushed the X onto a row of its own. The
+header was `flex-wrap` with a text block of natural width, so once the two
+children did not fit, the smaller one wrapped — which in a `justify-between`
+row is always the button.
+
+The row does not wrap now, and the text takes the squeeze: `flex-1` gives it
+whatever is left and `min-w-0` lets it go below its own content width, which
+is what actually permits the wrapping to happen inside the paragraph instead
+of to the button. Measured against Marcelo's exact five-company line at 1024,
+1280 and 1600px: the X stays on the top row, flush right, and the text grows
+to two or three lines beneath it.
+
+Worth writing down because it is the second time in this project a `min-w-0`
+has been the whole fix. A flex item will not shrink below its content by
+default, so any row holding text beside a control needs it — without it the
+row's only way to fit is to break apart.

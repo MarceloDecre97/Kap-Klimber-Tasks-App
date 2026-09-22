@@ -185,8 +185,18 @@ export function MeetingPane({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-col gap-1">
+      {/*
+        The close button holds the corner however long the line beside it is.
+
+        It was `flex-wrap` with a text block of natural width, so five company
+        names pushed the X onto a row of its own — Marcelo's screenshot. The
+        row does not wrap now and the text takes the squeeze instead: `flex-1`
+        gives it the space that is left and `min-w-0` lets it go below its
+        content width, which is what actually permits the wrapping to happen
+        inside the paragraph rather than to the button.
+      */}
+      <div className="flex items-start justify-between gap-x-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="text-section-heading text-fg text-pretty wrap-anywhere">{meeting.title}</h1>
           {/*
             Every company in the room, not the one the meeting files under.
