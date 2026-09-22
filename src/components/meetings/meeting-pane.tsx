@@ -211,7 +211,9 @@ export function MeetingPane({
         <IconButton
           aria-label="Close these minutes"
           onClick={onClose}
-          className="size-11 shrink-0"
+          /* From `lg` up only: on a phone the close button shares the back
+             row above this, rather than costing a second line here. */
+          className="hidden size-11 shrink-0 lg:inline-flex"
         >
           <X aria-hidden className="size-5" strokeWidth={2} />
         </IconButton>

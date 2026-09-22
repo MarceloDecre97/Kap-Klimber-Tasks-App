@@ -254,13 +254,19 @@ textarea {
   `--color-btn` rather than `--color-prim`: brand red on white, white on the
   dark ground. Marcelo's call, and it is the one colour in the palette that
   already means "this is the live thing".
+
+  It is on the plain fields too — title, description, date, time, the minutes
+  and the comment box. `:focus-within` matches an element that IS focused as
+  well as one containing the focus, so the same class does both jobs: put it
+  on a wrapper and it rings the wrapper, put it on an input and it rings the
+  input.
 */
-.field-ring > :focus-visible {
-  outline: none;
-}
 .field-ring:focus-within {
   outline: 3px solid var(--color-btn);
   outline-offset: 2px;
+}
+.field-ring > :focus-visible {
+  outline: none;
 }
 
 @layer utilities {

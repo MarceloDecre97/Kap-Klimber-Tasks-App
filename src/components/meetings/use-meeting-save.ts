@@ -31,12 +31,29 @@ import type { DetailValues } from "@/components/meetings/meeting-details";
 /** Quiet for this long and it saves itself. Marcelo's number. */
 const AUTOSAVE_AFTER_MS = 60_000;
 
+/**
+ * The shape of what is kept in this browser. Raise it whenever `DetailValues`
+ * changes, and every older draft is ignored rather than read.
+ *
+ * Not housekeeping — this is a crash. A draft written before 0052 holds
+ * `companyId: null` where the panel now expects `companyIds: []`, so
+ * recovering one called `.includes` on `undefined` and took the whole page
+ * down with "This page couldn't load". Marcelo hit exactly that on his phone.
+ * A stored object is a wire format between two versions of the app, and it
+ * needs a version like any other.
+ *
+ * 1 → 2: `companyId: string | null` became `companyIds: string[]`.
+ */
+const DRAFT_VERSION = 2;
+
 export type SaveState = "clean" | "dirty" | "saving" | "error" | "stale";
 
 export interface MeetingDraft {
   details: DetailValues;
   body: string;
 }
+
+type StoredDraft = MeetingDraft & { v: number };
 
 function draftKey(meetingId: string): string {
   return `kk.meeting.draft.${meetingId}`;
@@ -65,7 +82,9 @@ function readDraft(meetingId: string): MeetingDraft | null {
   try {
     const raw = window.localStorage.getItem(draftKey(meetingId));
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<MeetingDraft>;
+    const parsed = JSON.parse(raw) as Partial<StoredDraft>;
+    /* Anything from an older app is not a draft, it is a different shape. */
+    if (parsed.v !== DRAFT_VERSION) return null;
     if (typeof parsed.body !== "string" || !parsed.details) return null;
     return { body: parsed.body, details: parsed.details as DetailValues };
   } catch {
@@ -75,7 +94,8 @@ function readDraft(meetingId: string): MeetingDraft | null {
 
 function writeDraft(meetingId: string, draft: MeetingDraft): void {
   try {
-    window.localStorage.setItem(draftKey(meetingId), JSON.stringify(draft));
+    const stored: StoredDraft = { ...draft, v: DRAFT_VERSION };
+    window.localStorage.setItem(draftKey(meetingId), JSON.stringify(stored));
   } catch {
     /* Out of quota or blocked. The server save is still the real one. */
   }

@@ -467,3 +467,60 @@ notifications from a comment that had named two people. Notifications are
 private — `notifications_select` shows you only your own rows — and the test
 was reading them as the sender. Each recipient checks their own inbox now,
 which also proves the policy.
+
+## Round seven: a notification nobody could see
+
+**`meeting_comment` had never once reached the bell.** Not since 0048 shipped
+it. The database wrote the row correctly every time — production had three of
+them — and `toItem` in `listNotifications` dropped every one:
+
+```
+const gone = !row.task || row.task.deleted_at !== null;
+if (gone && row.kind !== "deleted") return null;
+```
+
+No `task_id` means no joined task row, no task row means `gone`, and `gone`
+means dropped. `contact_erased` had an early return above this because it was
+written at the same time as the rule; the two meeting kinds were written a
+round later and nobody connected them. The lesson is not "add a case": it is
+that a notification kind is TWO pieces of work, one in the trigger and one in
+the reader, and shipping the first without the second produces something that
+tests green at every layer I looked at. It is a `TASKLESS_KINDS` set now,
+listed rather than inferred from `task_id === null`, because a missing task is
+also what a deleted task looks like from there and those two must not be
+treated alike.
+
+Found by querying production rather than by re-reading the trigger — the rows
+were there, so the write half was never the suspect.
+
+**A stored draft is a wire format.** Marcelo's phone offered "this device kept
+a newer copy", and taking it crashed the page. A draft written before 0052
+holds `companyId: null` where the panel now expects `companyIds: []`, so
+recovery called `.includes` on `undefined`. `localStorage` is a channel
+between two versions of the app and needs a version like any other: drafts
+carry one now, and anything older is ignored rather than read. That fixes the
+crash and the stale offer in one — the draft that produced it was from an
+older shape.
+
+**Companies follow the people.** Marcelo asked the same question three rounds
+running: why does ADV Mobil appear on the card when I add Eric, and not in the
+panel? Both answers were true — the panel showed what was chosen, the card
+showed what is true — and the right fix was to stop making him choose
+something the app already knew. Picking somebody from the address book now
+adds their company with them. It never passes four, and it never REMOVES a
+company when the last person from it comes off: a meeting with a company you
+named and nobody from is a real meeting.
+
+**The card's date lost its time.** "17 Sep · 2:30 PM" costs about 70px of a
+row that has to hold a company name, and nobody finds a meeting by the hour it
+started.
+
+**The ring, everywhere it was asked for.** `.field-ring` now covers a plain
+field as well as a box of them: `:focus-within` matches an element that IS
+focused as well as one containing the focus, so one class does both jobs.
+Title, description, date, time, the minutes and the comment box all ring brand
+red, white on the dark ground. Measured in both themes.
+
+**Back and close on one row** on a phone, where they were stacked — two rows
+saying the same thing. The pane keeps its own X from `lg` up, where there is
+no back link.

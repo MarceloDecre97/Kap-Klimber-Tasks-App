@@ -196,6 +196,7 @@ export function MeetingComments({
         rows={2}
         placeholder="Anything to add? Type @ to name somebody. This won't change the minutes."
         spellCheck
+        className="field-ring"
       />
       {draft.trim().length > 0 && (
         <Button size="sm" onClick={post} disabled={isPending} className="w-auto self-start">

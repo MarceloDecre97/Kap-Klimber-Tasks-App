@@ -2,10 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronLeft, Flame, Plus, RotateCcw, Search, Trash2, Users } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  Flame,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { MeetingCalendar } from "@/components/meetings/meeting-calendar";
 import { MeetingPane } from "@/components/meetings/meeting-pane";
@@ -374,7 +385,10 @@ export function MeetingsApp({
              button rather than as a centred one. */
           className="h-12 w-auto shrink-0 gap-1"
         >
-          <Plus aria-hidden className="size-5" strokeWidth={2.2} />
+          {/* 18px against the label's 16: a plus needs to sit a little above
+              the cap height to read as the same weight, and `size-5` put it a
+              clear step above. */}
+          <Plus aria-hidden className="size-[18px]" strokeWidth={2.4} />
           Meeting
         </Button>
         <FilterDropdown
@@ -587,17 +601,36 @@ export function MeetingsApp({
         >
           {open || creating ? (
             <div className="mx-auto w-full max-w-[900px]">
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(null);
-                  setCreating(null);
-                }}
-                className="mb-3 inline-flex h-11 w-auto cursor-pointer items-center gap-1 rounded-xl border-none bg-transparent px-1 text-[17px] font-bold text-brand lg:hidden"
-              >
-                <ChevronLeft aria-hidden className="size-5" strokeWidth={2.2} />
-                Meetings
-              </button>
+              {/*
+                Back and close on one row. They were stacked — the back link
+                here, the X inside the pane below it — which spent two rows of
+                a phone saying the same thing twice. One row: out on the left,
+                done on the right, and the pane keeps its own X from `lg` up
+                where there is no back link.
+              */}
+              <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(null);
+                    setCreating(null);
+                  }}
+                  className="inline-flex h-11 w-auto cursor-pointer items-center gap-1 rounded-xl border-none bg-transparent px-1 text-[17px] font-bold text-brand"
+                >
+                  <ChevronLeft aria-hidden className="size-5" strokeWidth={2.2} />
+                  Meetings
+                </button>
+                <IconButton
+                  aria-label="Close these minutes"
+                  onClick={() => {
+                    setOpen(null);
+                    setCreating(null);
+                  }}
+                  className="size-11"
+                >
+                  <X aria-hidden className="size-5" strokeWidth={2} />
+                </IconButton>
+              </div>
               {creating ? (
                 createForm
               ) : open && (
@@ -649,7 +682,12 @@ function MeetingCard({
   onOpen: () => void;
 }) {
   const internal = isInternal(meeting);
-  const when = meetingWhen(meeting.met_on, meeting.met_at, formatMeetingDay);
+  /*
+    The day, and not the time. "17 Sep · 2:30 PM" costs about 70px of a row
+    that has to hold a company name, and nobody finds a meeting by the hour it
+    started. The time is on the meeting itself, where there is room for it.
+  */
+  const when = formatMeetingDay(meeting.met_on);
   const chips = fitCompanyChips(meeting.companies, when, CARD_CONTENT_WIDTH);
   return (
     <button

@@ -105,6 +105,33 @@ export function MeetingDetails({
   const set = <K extends keyof DetailValues>(key: K, value: DetailValues[K]) =>
     onChange({ ...values, [key]: value });
 
+  /*
+    Adding somebody adds their company with them.
+    
+    Marcelo added Eric Housman to a meeting and ADV Mobil appeared on the card
+    but not in this panel — right, but only because the panel shows what was
+    CHOSEN and the card shows what is true. His answer: stop making him choose
+    something the app already knows. Picking a person now sets their company
+    as well, so the two halves agree without him doing anything.
+
+    Two things it will not do. It never passes four — the limit is the
+    limit — and it never REMOVES a company when the last person from it comes
+    off, because a meeting with a company you named and nobody from is a real
+    meeting, and taking it away would undo something he typed on purpose.
+  */
+  function addContact(contactId: string) {
+    const contact = contacts.find((c) => c.id === contactId);
+    const company = contact?.company_id ?? null;
+    const alreadyOn = company !== null && values.companyIds.includes(company);
+    const room = values.companyIds.length < COMPANY_LIMIT;
+    onChange({
+      ...values,
+      contactIds: [...values.contactIds, contactId],
+      companyIds:
+        company && !alreadyOn && room ? [...values.companyIds, company] : values.companyIds,
+    });
+  }
+
   const pickedContacts = contacts.filter((c) => values.contactIds.includes(c.id));
   const pickedMembers = roster.filter((m) => values.memberIds.includes(m.id));
   const pickedCompanies = companies.filter((c) => values.companyIds.includes(c.id));
@@ -113,12 +140,11 @@ export function MeetingDetails({
   /*
     The companies nobody chose, which are on the card anyway.
 
-    Marcelo added Eric Housman to a meeting set to AAA Industrias, and ADV
-    Mobil appeared on the card in the list while the panel still showed one
-    chip. Both were right — one is what was chosen, the other is what was
-    worked out from who was in the room — but a screen that shows you one of
-    two true answers and not the other is a screen that looks broken. So the
-    derived half is named, with the person it came from.
+    Rare now that picking somebody adds their company too — what is left is
+    the cases the automatic add cannot cover: a meeting already at four
+    companies, and people added before this existed. Both are real, and both
+    would otherwise show a chip on the card that this panel knows nothing
+    about, which is the thing that looked broken.
   */
   const derived = new Map<string, string[]>();
   for (const contact of pickedContacts) {
@@ -251,7 +277,7 @@ export function MeetingDetails({
                  the first letter before there is a word to judge, and a title
                  is exactly where a product name gets typed. */
               autoCapitalize="off"
-              className="h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] text-fg placeholder:text-sub"
+              className="field-ring h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] text-fg placeholder:text-sub"
             />
           </Field>
 
@@ -268,7 +294,7 @@ export function MeetingDetails({
               onChange={(event) => set("description", event.target.value)}
               placeholder="One line — this is what shows on the card"
               autoCapitalize="off"
-              className="h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] text-fg placeholder:text-sub"
+              className="field-ring h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] text-fg placeholder:text-sub"
             />
             <p className="text-timestamp text-sub tabular-nums">
               {values.description.length} / {DESCRIPTION_LIMIT} · leave it empty and the card shows
@@ -283,7 +309,7 @@ export function MeetingDetails({
                 type="date"
                 value={values.metOn}
                 onChange={(event) => set("metOn", event.target.value)}
-                className="h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] tabular-nums text-fg"
+                className="field-ring h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] tabular-nums text-fg"
               />
             </Field>
             <Field label="Time" htmlFor="meeting-time" className="min-w-[140px] flex-1">
@@ -292,7 +318,7 @@ export function MeetingDetails({
                 type="time"
                 value={values.metAt}
                 onChange={(event) => set("metAt", event.target.value)}
-                className="h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] tabular-nums text-fg"
+                className="field-ring h-14 w-full rounded-2xl border-[1.5px] border-border bg-bg px-3.5 text-[17px] tabular-nums text-fg"
               />
             </Field>
           </div>
@@ -342,7 +368,9 @@ export function MeetingDetails({
                 {[...derived.entries()]
                   .map(([name, people]) => `${name} (from ${people.join(", ")})`)
                   .join("; ")}
-                . Add one here to keep it whoever is in the room.
+                {values.companyIds.length >= COMPANY_LIMIT
+                  ? `. Four companies is the most, so this one stays worked out from who is here.`
+                  : `. Add one above to name it outright.`}
               </p>
             )}
           </Field>
@@ -408,7 +436,7 @@ export function MeetingDetails({
               options={contactOptions}
               query={contactQuery}
               onQuery={setContactQuery}
-              onPick={(id) => set("contactIds", [...values.contactIds, id])}
+              onPick={(id) => addContact(id)}
               onRemove={(id) =>
                 set(
                   "contactIds",

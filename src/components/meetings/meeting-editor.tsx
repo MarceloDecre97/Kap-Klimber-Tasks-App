@@ -269,7 +269,7 @@ export function MeetingEditor({
         */
         autoCapitalize="off"
         className={cn(
-          "w-full resize-none rounded-2xl border-[1.5px] border-border bg-card p-4",
+          "field-ring w-full resize-none rounded-2xl border-[1.5px] border-border bg-card p-4",
           /*
             17px, and never below 16: iOS zooms the page when a field under
             16px takes focus, which on a phone mid-meeting is a small disaster.

@@ -81,6 +81,25 @@ const NOTIFICATION_SELECT = `
   note:task_notes(id, body, deleted_at)
 `;
 
+/**
+ * The kinds that are not about a task at all.
+ *
+ * Every other kind is, and the rule below drops any row whose task has gone —
+ * which silently ate these. `meeting_comment` had been written correctly by
+ * the database since 0048 and never once reached the bell: no task_id means
+ * no task row, no task row means `gone`, and `gone` means dropped. The
+ * notification existed, was counted by nothing, and was seen by nobody.
+ *
+ * Listed rather than inferred from `task_id === null`, because a missing task
+ * is also what a DELETED task looks like from here, and those two must not be
+ * treated the same.
+ */
+const TASKLESS_KINDS = new Set<NotificationKind>([
+  "contact_erased",
+  "meeting_comment",
+  "meeting_mention",
+]);
+
 /*
   A deleted task normally takes its notifications with it — there is nothing
   left to open, and the rows stay in the table so a restore puts them back.
@@ -95,13 +114,22 @@ function toItem(row: RawNotification): NotificationItem | null {
   const payload = row.payload ?? {};
 
   /*
-    The one kind that is about somebody in the address book rather than a
-    task. It carries no task at all — and the contact it names has been
-    erased, so its name travels in the payload for the same reason a deleted
-    task's title does: there is nothing left to join to.
+    The kinds that are about something other than a task: somebody erased
+    from the address book, and the two about a meeting. They carry no task at
+    all, and what they name travels in the payload — for the contact because
+    it has been erased and there is nothing left to join to, for a meeting
+    because the title should say what it said when the notification was sent
+    rather than what the meeting has since been renamed to.
+
+    Each still has to carry ENOUGH to be worth showing, so each says what
+    that means: a name for the contact, a meeting to open for the other two.
   */
-  if (row.kind === "contact_erased") {
-    if (typeof payload.contact_name !== "string" || !payload.contact_name) return null;
+  if (TASKLESS_KINDS.has(row.kind)) {
+    const enough =
+      row.kind === "contact_erased"
+        ? typeof payload.contact_name === "string" && payload.contact_name.length > 0
+        : typeof payload.meeting_id === "string" && payload.meeting_id.length > 0;
+    if (!enough) return null;
     return {
       id: row.id,
       kind: row.kind,
