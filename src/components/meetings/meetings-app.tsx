@@ -26,7 +26,9 @@ import {
   activeFilterCount,
   canEditBody,
   canEditDetails,
+  CARD_CONTENT_WIDTH,
   companiesIn,
+  fitCompanyChips,
   groupMeetings,
   matchesFilters,
   isInternal,
@@ -367,7 +369,10 @@ export function MeetingsApp({
           size="md"
           onClick={startMeeting}
           disabled={isPending}
-          className="h-12 w-auto shrink-0"
+          /* gap-1, not the button default of gap-2: the plus and the word are
+             one label, and 8px between them read as two things sharing a
+             button rather than as a centred one. */
+          className="h-12 w-auto shrink-0 gap-1"
         >
           <Plus aria-hidden className="size-5" strokeWidth={2.2} />
           Meeting
@@ -644,6 +649,8 @@ function MeetingCard({
   onOpen: () => void;
 }) {
   const internal = isInternal(meeting);
+  const when = meetingWhen(meeting.met_on, meeting.met_at, formatMeetingDay);
+  const chips = fitCompanyChips(meeting.companies, when, CARD_CONTENT_WIDTH);
   return (
     <button
       type="button"
@@ -657,27 +664,43 @@ function MeetingCard({
         {meeting.title}
       </span>
 
-      <span className="flex flex-wrap items-center gap-2">
-        {/*
-          Every company that was in the room, not just the one the meeting
-          files under. Marcelo had a meeting with somebody from AAA and
-          somebody from ADV Mobil, and the card said ADV Mobil.
-        */}
+      {/*
+        One line, always. Every company that was in the room is on the card —
+        a meeting with somebody from AAA and somebody from ADV Mobil used to
+        claim ADV Mobil — but three chips do not fit a 356px column, so as
+        many as fit are drawn and the rest are counted: `ADV Mobil +1 Sep 21`.
+
+        Two things keep it honest. `fitCompanyChips` decides HOW MANY to
+        attempt, from an estimate that is calibrated never to read short of a
+        real chip. And `truncate` on the names absorbs whatever the estimate
+        gets wrong: the row cannot wrap, so the worst case is an ellipsis
+        rather than the ragged two lines this replaces. The date and the count
+        never shrink — they are the short, load-bearing halves.
+      */}
+      <span className="flex w-full items-center gap-2 overflow-hidden">
         {internal ? (
-          <Chip className="border-accent text-accent">
+          <Chip className="shrink-0 border-accent text-accent">
             <Users aria-hidden className="size-4" strokeWidth={1.75} />
             Internal
           </Chip>
         ) : (
-          meeting.companies.map((company) => (
-            <Chip key={company.id} className="border-tag text-tag">
-              {company.name}
-            </Chip>
-          ))
+          <>
+            {chips.shown.map((company) => (
+              <Chip key={company.id} className="min-w-0 border-tag text-tag">
+                <span className="truncate">{company.name}</span>
+              </Chip>
+            ))}
+            {chips.more > 0 && (
+              <Chip
+                className="shrink-0 border-tag text-tag tabular-nums"
+                title={meeting.companies.map((c) => c.name).join(", ")}
+              >
+                +{chips.more}
+              </Chip>
+            )}
+          </>
         )}
-        <Chip className="border-border text-sub tabular-nums">
-          {meetingWhen(meeting.met_on, meeting.met_at, formatMeetingDay)}
-        </Chip>
+        <Chip className="shrink-0 border-border text-sub tabular-nums">{when}</Chip>
       </span>
 
       {/*
@@ -718,9 +741,19 @@ function MeetingCard({
   );
 }
 
-function Chip({ className, children }: { className?: string; children: React.ReactNode }) {
+function Chip({
+  className,
+  title,
+  children,
+}: {
+  className?: string;
+  /** On the "+N" chip, the full list — so hovering says what was left out. */
+  title?: string;
+  children: React.ReactNode;
+}) {
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border-[1.5px] px-2.5 py-1 text-timestamp font-bold",
         className

@@ -121,22 +121,15 @@ export function PickCombo({
 
       {!disabled && (
         /*
-          The ring belongs to the whole control, not to the text box inside it.
-
-          globals.css gives every `:focus-visible` a 3px outline with a 2px
-          offset and says it is never removed — rightly. But the focusable
-          element here is the `<input>`, so the ring was drawn around the text
-          box alone: it stopped short of the chevron and sat inside the
-          border, which is the short, misaligned box Marcelo photographed.
-          Drawn from `focus-within` on the container it wraps the box and the
-          chevron together, and the indicator is not weakened — only moved to
-          the thing a person would say has the focus.
+          `field-ring` is defined in globals.css, and has to be: it moves the
+          focus ring from the `<input>` to this box, and the rule it has to
+          beat is unlayered, which no Tailwind utility can do. See the note
+          there. It is also what makes the ring brand red rather than ink.
         */
         <div
           ref={triggerRef}
           className={cn(
-            "flex h-14 items-center rounded-2xl border-[1.5px] bg-bg pr-1",
-            "focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-prim",
+            "field-ring flex h-14 items-center rounded-2xl border-[1.5px] bg-bg pr-1",
             open ? "border-fg" : "border-border"
           )}
         >
@@ -151,7 +144,7 @@ export function PickCombo({
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
             autoComplete="off"
-            className="h-full min-w-0 grow rounded-2xl border-none bg-transparent px-3.5 text-[17px] text-fg placeholder:text-sub focus-visible:outline-none"
+            className="h-full min-w-0 grow rounded-2xl border-none bg-transparent px-3.5 text-[17px] text-fg placeholder:text-sub"
           />
           <button
             type="button"

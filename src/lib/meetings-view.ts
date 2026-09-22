@@ -199,6 +199,90 @@ export function isInternal(meeting: MeetingSummary): boolean {
 }
 
 /**
+ * How many company chips fit on the card's one line.
+ *
+ * The card is a 356px column on the desktop and the width of a phone on a
+ * phone, which come out within a few pixels of each other — so this is one
+ * rule, not two. "ADV Mobil" and "AAA INDUSTRIAS PATO" and a date do not fit
+ * on either; "ADV Mobil" and "Sep 21" do. Rather than pick one of those
+ * outcomes for every meeting, the row shows as many as fit and counts the
+ * rest: `ADV Mobil  +1  Sep 21`.
+ *
+ * Estimated rather than measured, because measuring means rendering the row,
+ * reading it back and rendering it again — two frames of visibly wrong layout
+ * on a list that can hold fifty cards. The estimate is deliberately
+ * PESSIMISTIC: over-guessing a width drops a chip that would just have fitted,
+ * which is a smaller card; under-guessing wraps the row, which is the bug this
+ * replaces. The constants are calibrated against real rendered chips — see the
+ * probe in the round-five notes — and asserted never to under-read.
+ */
+const CHIP_CHROME = 24;
+/** Capitals and digits at 15px bold; everything else; a space. Measured. */
+const WIDE_CHAR = 9.6;
+const NARROW_CHAR = 7.95;
+const SPACE_CHAR = 4.6;
+const CHIP_GAP = 8;
+
+export function chipWidth(label: string): number {
+  let text = 0;
+  for (const ch of label) {
+    if (ch === " ") text += SPACE_CHAR;
+    else text += /[A-Z0-9@#%&]/.test(ch) ? WIDE_CHAR : NARROW_CHAR;
+  }
+  return Math.ceil(CHIP_CHROME + text);
+}
+
+export interface ChipPlan {
+  shown: { id: string; name: string }[];
+  more: number;
+}
+
+/**
+ * `available` is the card's content width. The date chip is always kept —
+ * "which meeting was that" is answered by when it happened more often than by
+ * who it was with — so its width is taken off the top.
+ */
+export function fitCompanyChips(
+  companies: { id: string; name: string }[],
+  dateLabel: string,
+  available: number
+): ChipPlan {
+  if (companies.length === 0) return { shown: [], more: 0 };
+
+  let room = available - chipWidth(dateLabel) - CHIP_GAP;
+  const shown: { id: string; name: string }[] = [];
+
+  for (let i = 0; i < companies.length; i += 1) {
+    const company = companies[i]!;
+    const rest = companies.length - i - 1;
+    /* Room has to be left for the "+N" chip unless this is the last one. */
+    const overflowChip = rest > 0 ? chipWidth(`+${rest}`) + CHIP_GAP : 0;
+    const cost = chipWidth(company.name) + (shown.length > 0 ? CHIP_GAP : 0);
+    if (cost + overflowChip > room) break;
+    room -= cost;
+    shown.push(company);
+  }
+
+  /*
+    One chip always shows, even when its name alone is wider than the card.
+    A row of nothing but "+2" says less than a truncated name does, and the
+    chip itself wraps its text rather than overflowing.
+  */
+  if (shown.length === 0) shown.push(companies[0]!);
+  return { shown, more: companies.length - shown.length };
+}
+
+/**
+ * The card's content width, which both layouts land within a few pixels of.
+ *
+ * Desktop: a 356px column, less its 40px of padding, less the card's 28px.
+ * Phone: a 360px screen, same arithmetic. The narrowest phone in use is
+ * 320px, which this under-serves by 40px — deliberately, because being
+ * pessimistic here costs a chip and being optimistic costs a wrapped row.
+ */
+export const CARD_CONTENT_WIDTH = 288;
+
+/**
  * The groups the list is broken into.
  *
  * Dates rather than pages: minutes are looked for by when they happened, and

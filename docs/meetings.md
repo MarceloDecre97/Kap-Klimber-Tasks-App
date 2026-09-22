@@ -351,3 +351,49 @@ is exactly where this bites. Both are `off` now. If it still happens *in the
 notes box* on the phone, that is Gboard's own device-level auto-capitalisation,
 which some keyboards apply regardless of the attribute; the test is whether
 the same thing happens in another app's text field.
+
+## Round five: the card's one line, and the ring that was two
+
+**Two borders, and the layered-CSS rule behind them.** Round four moved the
+picker's focus ring from the inner `<input>` to the box, using Tailwind's
+`focus-visible:outline-none` on the input. It lost. `globals.css` declares
+`:focus-visible { outline: 3px solid ... }` outside any cascade layer, and
+Tailwind's utilities live inside `@layer utilities` — **an unlayered rule
+beats a layered one however specific the layered one is.** So both rings drew:
+the new one around the box and the old one still around the text. The
+suppression is an unlayered rule in `globals.css` now, beside the rule it has
+to beat. It also takes `--color-btn` rather than `--color-prim`, which is
+brand red on white and white on the dark ground — Marcelo's call, and the one
+token in the palette that already means "this is the live thing". Measured in
+both themes: one outline, `rgb(135,37,43)` light and `rgb(255,255,255)` dark,
+`none` on the input.
+
+**Three chips on a 356px column.** Two company names and a date do not fit,
+and wrapping them gave the ragged three-line card in Marcelo's screenshot. The
+row shows as many company chips as fit and counts the rest — `ADV Mobil +1
+Sep 21` — with the date and the count never shrinking, because they are the
+short load-bearing halves.
+
+How many fit is estimated rather than measured: measuring means rendering the
+row, reading it back and rendering again, which is two frames of visibly wrong
+layout on a list that holds fifty cards. The estimate is deliberately
+pessimistic — over-guessing drops a chip that would just have fitted, which is
+a smaller card; under-guessing wraps the row, which is the bug. A probe
+renders real chips against the built CSS and asserts the estimate never reads
+short of one; the first constants read 1–2px short on three of nine labels and
+were raised. And `truncate` on the names absorbs whatever is still wrong: the
+row cannot wrap, so the worst case is an ellipsis. Measured at 320, 360 and
+412px: one line every time, nothing clipped, no horizontal scroll.
+
+**A screen that showed one of two true answers.** Marcelo set a meeting to AAA
+Industrias, added Eric Housman from ADV Mobil, and the card grew an ADV Mobil
+chip while the details panel still showed one. Both were right — one is what
+was chosen, the other is worked out from who was in the room — but showing
+only half of that looks like a bug. The panel now names the derived half and
+where it came from: *"Also on the card: ADV Mobil (from Eric Housman)."* The
+pane's own header had the same hole for a different reason: it printed
+`company_name`, which is null the moment two firms are present, so it went
+quiet on exactly the meetings that needed it. It lists them all now.
+
+**"+ Meeting" at `gap-1`.** 8px between a plus and its word reads as two
+things sharing a button rather than one centred label.

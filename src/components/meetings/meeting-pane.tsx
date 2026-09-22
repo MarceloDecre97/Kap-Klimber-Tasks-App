@@ -175,9 +175,16 @@ export function MeetingPane({
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-section-heading text-fg text-pretty wrap-anywhere">{meeting.title}</h1>
-          <p className="text-timestamp text-sub">
+          {/*
+            Every company in the room, not the one the meeting files under.
+            `company_name` is null the moment two firms are present, so this
+            line went quiet on exactly the meetings that needed it most.
+          */}
+          <p className="text-timestamp text-sub text-pretty">
             {meetingWhen(meeting.met_on, meeting.met_at, formatMeetingDay)}
-            {meeting.company_name ? ` · ${meeting.company_name}` : ""}
+            {meeting.companies.length > 0
+              ? ` · ${meeting.companies.map((c) => c.name).join(", ")}`
+              : ""}
             {meeting.created_by ? ` · ${meeting.created_by.display_name}` : ""}
           </p>
         </div>

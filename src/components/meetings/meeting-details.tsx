@@ -111,6 +111,24 @@ export function MeetingDetails({
   const companyNames = pickedCompanies.map((c) => c.name);
 
   /*
+    The companies nobody chose, which are on the card anyway.
+
+    Marcelo added Eric Housman to a meeting set to AAA Industrias, and ADV
+    Mobil appeared on the card in the list while the panel still showed one
+    chip. Both were right — one is what was chosen, the other is what was
+    worked out from who was in the room — but a screen that shows you one of
+    two true answers and not the other is a screen that looks broken. So the
+    derived half is named, with the person it came from.
+  */
+  const derived = new Map<string, string[]>();
+  for (const contact of pickedContacts) {
+    if (!contact.company_id || values.companyIds.includes(contact.company_id)) continue;
+    const name = companies.find((c) => c.id === contact.company_id)?.name ?? contact.company;
+    if (!name) continue;
+    derived.set(name, [...(derived.get(name) ?? []), fullName(contact)]);
+  }
+
+  /*
     The team: always all of us, minus whoever is already on. Four names is not
     a search problem, so typing only ever narrows a list you can already see.
   */
@@ -318,6 +336,15 @@ export function MeetingDetails({
               Pick these first — the address book below then lists the people who work at them.
               Leave it empty and the company follows whoever you add.
             </p>
+            {derived.size > 0 && (
+              <p className="text-timestamp text-sub text-pretty">
+                Also on the card:{" "}
+                {[...derived.entries()]
+                  .map(([name, people]) => `${name} (from ${people.join(", ")})`)
+                  .join("; ")}
+                . Add one here to keep it whoever is in the room.
+              </p>
+            )}
           </Field>
 
           <Field label="From Opus Kap" htmlFor="meeting-team">

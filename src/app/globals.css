@@ -236,6 +236,33 @@ textarea {
   outline-offset: 2px;
 }
 
+/*
+  A control whose focusable element is not the thing you would point at.
+
+  The attendee pickers are a bordered box holding a text input and a chevron
+  button. The focus lands on the input, so the rule above drew its ring around
+  the text alone — stopping short of the chevron and sitting inside the box's
+  own border. Two rectangles, one of them wrong, which is what Marcelo
+  photographed. `.field-ring` moves the ring to the box.
+
+  It has to live here rather than as `focus-visible:outline-none` on the
+  input, because Tailwind's utilities are inside `@layer utilities` and
+  unlayered rules beat layered ones however specific the layered one is. The
+  first attempt at this was exactly that utility, and it lost to the rule
+  above — which is why there were two borders instead of a corrected one.
+
+  `--color-btn` rather than `--color-prim`: brand red on white, white on the
+  dark ground. Marcelo's call, and it is the one colour in the palette that
+  already means "this is the live thing".
+*/
+.field-ring > :focus-visible {
+  outline: none;
+}
+.field-ring:focus-within {
+  outline: 3px solid var(--color-btn);
+  outline-offset: 2px;
+}
+
 @layer utilities {
   .text-screen-title {
     font-family: var(--font-display);
