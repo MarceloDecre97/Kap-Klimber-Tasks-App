@@ -397,3 +397,73 @@ quiet on exactly the meetings that needed it. It lists them all now.
 
 **"+ Meeting" at `gap-1`.** 8px between a plus and its word reads as two
 things sharing a button rather than one centred label.
+
+## Round six: mentions, likes, and one device at a time
+
+**Mentions** (0053). The margin was deliberately plainer than a task's notes.
+Two of the three omissions earned their place after use: a mention is the
+difference between Dee's note about the second depot reaching Marcelo and
+sitting in a list he might scroll, and a like closes the loop without a second
+comment saying "yes" — which is what people write instead, and it is worse.
+Threaded replies stay out: a thread is a conversation, and a conversation
+between four people who sit in the same room is machinery for a problem this
+team does not have.
+
+The `@` picker, the storage form `@[Name](uuid)` and the renderer are the
+Tasklist's, unchanged. Learning one gesture twice is a waste of the person
+using it, and a second copy of the mention grammar is a second thing to keep
+in step with the trigger that reads it.
+
+`meeting_mention` is its own notification kind rather than reusing `mention`,
+because `notifications_subject_check` requires a `task_id` for that one and a
+meeting comment has no task. Loosening the rule would have been the cheap
+option; the rule is what stops a notification arriving with nothing to open.
+Both constraint lists were read off the live constraint and restated — retyping
+one from memory has gone wrong twice in this project.
+
+The author is told once. Named in the comment and also its author, they get
+the mention and not the comment notification too: two rows for one comment is
+how a notification list stops being read.
+
+**A like is a row, not a counter.** Insert or delete, one per person per
+comment, so two people liking at once cannot lose one of the two and there is
+no number to drift. The count moves on screen before the server answers and
+goes back if the write fails — it is the cheapest gesture in the app and a
+round trip to see it land makes it feel broken.
+
+**The write lease** (0054). The stale check has always stopped a second screen
+flattening the first, but only after a paragraph has been typed into it.
+Marcelo writes on a laptop and, when it dies or the call is on speaker, on a
+phone, so the same minutes are genuinely open twice on one account. Whoever
+opens the write box holds it; the other device gets the minutes to read and a
+line saying where they are being written.
+
+It is a **lease**, and that is the whole design. A phone that dies mid-meeting,
+a lid closed, a tab the OS kills — none release anything, and a lock nobody can
+take back would lock Marcelo out of his own minutes with no way in. So it is
+refreshed every 20 seconds while the box is open and expires 60 seconds after
+the refreshes stop: two heartbeats may be lost to a bad tunnel before anybody
+else can take it, and walking away costs a minute.
+
+Keyed by **device**, not by member — a lock keyed by person alone would permit
+exactly the collision it exists to prevent. `claim_meeting_lock` takes or
+refreshes and returns who holds it either way, so the page never asks a second
+question and there is no gap between "is it free" and "take it".
+
+Only the BODY is claimed. The details belong to everybody who was in the room
+(0051), and two people fixing a date and a title at once is not a document
+being overwritten.
+
+**Derived, not corrected.** The pane computes `wantsToWrite` from what the
+person asked for and shows the editor only when the lease came back as theirs.
+Nothing reaches into the reading state from an effect to put it back — the
+second device simply never renders an editor. The hook stores only the answer,
+stamped with the question it answers, so "idle" and "checking" are derived and
+every `setState` stays inside an async callback. React's lint caught the first
+version doing it the other way.
+
+**A test that was wrong, not the code.** The first run reported zero
+notifications from a comment that had named two people. Notifications are
+private — `notifications_select` shows you only your own rows — and the test
+was reading them as the sender. Each recipient checks their own inbox now,
+which also proves the policy.

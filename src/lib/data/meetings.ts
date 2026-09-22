@@ -446,18 +446,25 @@ export async function listMeetingTasks(
 /**
  * A margin note on somebody's minutes.
  *
- * Its own thing rather than a task note: this carries no replies, no likes
- * and no mentions, because a comment on minutes is not a conversation — it
- * is Dee remembering the bit about the second depot.
+ * Mentions and likes, since 0053, and still no threaded replies. A mention is
+ * the difference between Dee's note about the second depot reaching Marcelo
+ * and sitting in a list he might scroll; a like closes the loop without a
+ * second comment saying "yes". A thread is a conversation, and a conversation
+ * between four people who sit in the same room is machinery for a problem
+ * this team does not have.
  */
 export interface MeetingComment {
   id: string;
+  /** Stored form: mentions are `@[Name](uuid)`. Rendered by NoteBody. */
   body: string;
   created_at: string;
   edited_at: string | null;
   member: MemberSummary | null;
   /** Whether the viewer wrote it — only its author may change it. */
   mine: boolean;
+  likes: number;
+  /** Whether the viewer is one of them, so the button knows which way it is. */
+  liked: boolean;
 }
 
 export async function listMeetingComments(
@@ -469,14 +476,24 @@ export async function listMeetingComments(
     .from("meeting_comments")
     .select(
       `id, body, created_at, edited_at, member_id,
-       member:members!meeting_comments_member_id_fkey(id, display_name, initials, color)`
+       member:members!meeting_comments_member_id_fkey(id, display_name, initials, color),
+       likes:meeting_comment_likes(member_id)`
     )
     .eq("meeting_id", meetingId)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
   if (error) throw error;
 
-  type CommentRow = Omit<MeetingComment, "mine"> & { member_id: string };
+  /*
+    The likes come back as rows rather than a count, which is the same request
+    either way and answers both questions at once: how many, and whether one
+    of them is yours. A count plus a second query for "did I" would be two
+    round trips for one line of a card.
+  */
+  type CommentRow = Omit<MeetingComment, "mine" | "likes" | "liked"> & {
+    member_id: string;
+    likes: { member_id: string }[] | null;
+  };
   return ((data ?? []) as unknown as CommentRow[]).map((row) => ({
     id: row.id,
     body: row.body,
@@ -484,5 +501,7 @@ export async function listMeetingComments(
     edited_at: row.edited_at,
     member: row.member,
     mine: row.member_id === meId,
+    likes: (row.likes ?? []).length,
+    liked: (row.likes ?? []).some((like) => like.member_id === meId),
   }));
 }

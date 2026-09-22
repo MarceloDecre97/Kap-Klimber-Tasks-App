@@ -91,6 +91,19 @@ export function describeNotification(item: NotificationItem): NotificationCopy {
     };
   }
 
+  /*
+    Named in a comment. Its own kind rather than `mention`, because that one
+    requires a task and this has none — see 0053. Worded so the two read
+    differently in a list: one is about your minutes, the other about you.
+  */
+  if (item.kind === "meeting_mention") {
+    const title = typeof item.payload.title === "string" ? item.payload.title.trim() : "";
+    return {
+      headline: `${who} mentioned you in a comment`,
+      detail: title || "On a meeting",
+    };
+  }
+
   if (item.kind === "contact_erased") {
     const company = typeof item.payload.company === "string" ? item.payload.company.trim() : "";
     return {

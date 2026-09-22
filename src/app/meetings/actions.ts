@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/get-current-member";
+import { toStorageBody, visibleLength } from "@/lib/mentions";
+import { listRoster } from "@/lib/data/tasks";
 import {
   getMeeting,
   listBinnedMeetings,
@@ -401,19 +403,158 @@ export async function addMeetingComment(
   if (!meetingId.success) return { ok: false, error: "Invalid meeting." };
   const text = typeof body === "string" ? body.trim() : "";
   if (text.length === 0) return { ok: false, error: "Write something first." };
-  if (text.length > 4000) return { ok: false, error: "That comment is too long." };
 
   try {
     const { supabase, member } = await getCurrentMember();
+
+    /*
+      `@Dee Kapur` on the way in becomes `@[Dee Kapur](uuid)` on the way to
+      the database, which is the form the notification trigger reads and the
+      form that survives somebody changing their display name. Resolved here
+      against the live roster rather than trusting ids from the browser: a
+      client that could name the member id could name anybody's.
+    */
+    const roster = await listRoster(supabase);
+    const stored = toStorageBody(text, roster);
+
+    /*
+      Measured as it reads, not as it is stored. A mention costs about fifty
+      characters on disk and eight on screen, and charging somebody fifty for
+      typing a teammate's name would be inexplicable from the outside.
+    */
+    if (visibleLength(stored) > 4000) {
+      return { ok: false, error: "That comment is too long." };
+    }
+
     const { error } = await supabase
       .from("meeting_comments")
-      .insert({ meeting_id: meetingId.data, member_id: member.id, body: text });
+      .insert({ meeting_id: meetingId.data, member_id: member.id, body: stored });
     if (error) throw error;
     revalidateMeetingViews(meetingId.data);
     return { ok: true };
   } catch (error) {
     console.error("addMeetingComment failed", error);
     return { ok: false, error: "Couldn't add that comment. Try again." };
+  }
+}
+
+/**
+ * Agreeing with a comment, or taking it back.
+ *
+ * One row per person per comment, so this is an insert or a delete rather
+ * than a counter — which means two people liking at once cannot lose one of
+ * the two, and there is no number to drift out of step with reality.
+ *
+ * Nothing is revalidated: a like changes one number on one line, the screen
+ * already knows what it did, and rebuilding three routes for it would make
+ * the cheapest gesture in the app the most expensive.
+ */
+export async function setMeetingCommentLike(
+  commentIdInput: string,
+  liked: boolean
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const commentId = idSchema.safeParse(commentIdInput);
+  if (!commentId.success) return { ok: false, error: "Invalid comment." };
+
+  try {
+    const { supabase, member } = await getCurrentMember();
+    if (liked) {
+      const { error } = await supabase
+        .from("meeting_comment_likes")
+        .upsert(
+          { comment_id: commentId.data, member_id: member.id },
+          { onConflict: "comment_id,member_id", ignoreDuplicates: true }
+        );
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("meeting_comment_likes")
+        .delete()
+        .eq("comment_id", commentId.data)
+        .eq("member_id", member.id);
+      if (error) throw error;
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error("setMeetingCommentLike failed", error);
+    return { ok: false, error: "Couldn't do that just now." };
+  }
+}
+
+/**
+ * The write lease on a set of minutes.
+ *
+ * Marcelo writes on a laptop and, when it dies or the call is on speaker, on
+ * a phone — so the same minutes can genuinely be open twice on his own
+ * account. The stale check already stops the second screen flattening the
+ * first, but only after a paragraph has been typed into it. This stops the
+ * typing: whoever opens the write box holds it, and everybody else gets the
+ * minutes to read and a line saying where they are being written.
+ *
+ * Always returns who holds it now — yours or somebody else's — so the page
+ * never has to ask a second question, and there is no gap between "is it
+ * free" and "take it" for the other device to slip through.
+ */
+export interface MeetingLock {
+  heldByMe: boolean;
+  holder: string | null;
+  refreshedAt: string | null;
+}
+
+export async function claimMeetingLock(
+  meetingIdInput: string,
+  deviceId: string
+): Promise<{ ok: true; lock: MeetingLock } | { ok: false; error: string }> {
+  const meetingId = idSchema.safeParse(meetingIdInput);
+  if (!meetingId.success) return { ok: false, error: "Invalid meeting." };
+  if (typeof deviceId !== "string" || deviceId.length < 8 || deviceId.length > 64) {
+    return { ok: false, error: "Invalid device." };
+  }
+
+  try {
+    const { supabase } = await getCurrentMember();
+    const { data, error } = await supabase.rpc("claim_meeting_lock", {
+      p_meeting_id: meetingId.data,
+      p_device_id: deviceId,
+    });
+    if (error) throw error;
+    const state = data as unknown as {
+      held_by_me: boolean;
+      display_name: string | null;
+      refreshed_at: string | null;
+    };
+    return {
+      ok: true,
+      lock: {
+        heldByMe: Boolean(state?.held_by_me),
+        holder: state?.display_name ?? null,
+        refreshedAt: state?.refreshed_at ?? null,
+      },
+    };
+  } catch (error) {
+    console.error("claimMeetingLock failed", error);
+    return { ok: false, error: rpcError(error, "Couldn't open these minutes for writing.") };
+  }
+}
+
+export async function releaseMeetingLock(
+  meetingIdInput: string,
+  deviceId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const meetingId = idSchema.safeParse(meetingIdInput);
+  if (!meetingId.success) return { ok: false, error: "Invalid meeting." };
+  if (typeof deviceId !== "string") return { ok: false, error: "Invalid device." };
+  try {
+    const { supabase } = await getCurrentMember();
+    const { error } = await supabase.rpc("release_meeting_lock", {
+      p_meeting_id: meetingId.data,
+      p_device_id: deviceId,
+    });
+    if (error) throw error;
+    return { ok: true };
+  } catch (error) {
+    console.error("releaseMeetingLock failed", error);
+    return { ok: false, error: "Couldn't let go of these minutes." };
   }
 }
 

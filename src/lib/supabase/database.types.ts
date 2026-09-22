@@ -26,7 +26,8 @@ export type NotificationKind =
   /** The one that is not about a task at all. See 0025_contact_erased.sql. */
   | "contact_erased"
   /** Somebody wrote in the margin of your minutes. See 0048. */
-  | "meeting_comment";
+  | "meeting_comment"
+  | "meeting_mention";
 
 /**
  * Everything a task's Activity can record. The deletion kinds are what make
@@ -555,6 +556,33 @@ export interface Database {
         >;
         Relationships: [];
       };
+      /** One row per member per meeting comment they liked. 0053. */
+      meeting_comment_likes: {
+        Row: { comment_id: string; member_id: string; created_at: string };
+        Insert: Pick<
+          Database["public"]["Tables"]["meeting_comment_likes"]["Row"],
+          "comment_id" | "member_id"
+        >;
+        Update: never;
+        Relationships: [];
+      };
+      /**
+       * Who is typing into which minutes right now. A lease, not a lock: it
+       * expires sixty seconds after the last heartbeat, because no device
+       * reliably announces that it has stopped. 0054.
+       */
+      meeting_locks: {
+        Row: {
+          meeting_id: string;
+          member_id: string;
+          device_id: string;
+          claimed_at: string;
+          refreshed_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       /** Which companies a meeting was with, chosen by hand. Up to four. 0052. */
       meeting_companies: {
         Row: {
@@ -722,6 +750,25 @@ export interface Database {
           p_contact_ids: string[];
           p_member_ids: string[];
         };
+        Returns: void;
+      };
+      /**
+       * Take or refresh the write lease on a meeting's minutes, and say who
+       * holds it now. Called every few seconds while the box is open.
+       */
+      claim_meeting_lock: {
+        Args: { p_meeting_id: string; p_device_id: string };
+        Returns: {
+          held_by_me: boolean;
+          member_id: string | null;
+          display_name: string | null;
+          device_id: string | null;
+          refreshed_at: string | null;
+        };
+      };
+      /** Give up your own lease. Never anybody else's. */
+      release_meeting_lock: {
+        Args: { p_meeting_id: string; p_device_id: string };
         Returns: void;
       };
       /** Erases binned minutes for good. Tasks that came out of it survive. */

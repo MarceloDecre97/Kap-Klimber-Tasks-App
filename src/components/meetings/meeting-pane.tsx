@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Save,
   Trash2,
+  Laptop,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
   useMeetingSave,
   useStoredDraft,
 } from "@/components/meetings/use-meeting-save";
+import { useMeetingLock } from "@/components/meetings/use-meeting-lock";
 import { formatMeetingDay, meetingWhen, type Meeting } from "@/lib/meetings-view";
 import { cn } from "@/lib/utils";
 import type { ContactSummary } from "@/lib/data/contacts";
@@ -116,6 +118,17 @@ export function MeetingPane({
     canEdit: canEditBody || canEditDetails,
     onSaved,
   });
+
+  /*
+    The write lease. `active` is what the person is ASKING for, not what they
+    get: pressing Write claims the lease, and whether the box appears depends
+    on the answer. Derived rather than stored, so nothing has to reach into
+    `reading` from an effect to correct it — the second device simply never
+    renders an editor.
+  */
+  const wantsToWrite = canEditBody && !reading;
+  const lock = useMeetingLock({ meetingId: meeting.id, active: wantsToWrite });
+  const writing = wantsToWrite && lock.status === "mine";
 
   const storedDraft = useStoredDraft(meeting.id);
   /*
@@ -291,7 +304,32 @@ export function MeetingPane({
           </div>
         )}
 
-        {canEditBody && !reading ? (
+        {/*
+          Somebody else's device has the box. His words: "I should only be
+          able to have the read section available, and if I try to go to the
+          edit or write section I would get a message just saying this meeting
+          is being edited on another device."
+        */}
+        {wantsToWrite && lock.status === "theirs" && (
+          <p className="flex items-start gap-2 rounded-2xl border-[1.5px] border-accent bg-card p-3 text-[16px] leading-[22px] text-fg text-pretty">
+            <Laptop aria-hidden className="mt-0.5 size-5 shrink-0 text-accent" strokeWidth={1.75} />
+            <span>
+              These minutes are open for writing on another device
+              {lock.holder ? ` (${lock.holder})` : ""}. You can read them here — the box comes back
+              about a minute after the other one is closed.
+            </span>
+          </p>
+        )}
+        {wantsToWrite && lock.status === "checking" && (
+          <p className="text-timestamp text-sub">Opening the box…</p>
+        )}
+        {wantsToWrite && lock.status === "error" && (
+          <p className="rounded-2xl border-[1.5px] border-accent bg-card p-3 text-[16px] leading-[22px] text-fg text-pretty">
+            {lock.message}
+          </p>
+        )}
+
+        {writing ? (
           <MeetingEditor
             value={body}
             onChange={(next) => edit(details, next)}
@@ -397,7 +435,7 @@ export function MeetingPane({
         )}
       </div>
 
-      <MeetingComments meetingId={meeting.id} />
+      <MeetingComments meetingId={meeting.id} roster={roster} />
 
       {/*
         The last thing on the page, and deliberately the last thing.

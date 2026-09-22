@@ -9,6 +9,7 @@ import {
   CalendarClock,
   CircleDot,
   MessageSquare,
+  AtSign,
   NotebookPen,
   RotateCcw,
   Trash2,
@@ -52,6 +53,9 @@ const KIND_ICON: Record<NotificationKind, LucideIcon> = {
   contact_erased: UserRoundX,
   /* A pen on a page: somebody wrote in the margin of your minutes. */
   meeting_comment: NotebookPen,
+  /* Named in a comment on somebody's minutes. The same @ a task mention gets,
+     because it is the same event happening somewhere else. */
+  meeting_mention: AtSign,
   due_soon: CalendarClock,
   overdue: AlertTriangle,
 };
@@ -249,13 +253,15 @@ function NotificationRow({
   );
 
   /*
-    A comment on your minutes has somewhere to go, even though it names no
-    task: the meeting it was written on. Handled before the check below,
+    A comment on your minutes, or one that names you, has somewhere to go
+    even though it names no task: the meeting it was written on. Handled
+    before the check below,
     which would otherwise file it under "nothing to open" and leave the one
     notification whose entire purpose is to be followed as a dead end.
   */
   const meetingId =
-    item.kind === "meeting_comment" && typeof item.payload.meeting_id === "string"
+    (item.kind === "meeting_comment" || item.kind === "meeting_mention") &&
+    typeof item.payload.meeting_id === "string"
       ? item.payload.meeting_id
       : null;
   if (meetingId) {
