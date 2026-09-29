@@ -306,7 +306,10 @@ export async function listOutreach(
          created_by:members!tasks_created_by_fkey(id, display_name, initials, color),
          completed_by:members!tasks_completed_by_fkey(id, display_name, initials, color),
          assignees:task_assignees(member_id),
-         rounds:task_events(kind, created_at)
+         rounds:task_events(
+           kind, to_value, created_at,
+           member:members!task_events_member_id_fkey(id, display_name, initials, color)
+         )
        )`
     )
     .eq("task.is_outreach", true)
@@ -326,7 +329,14 @@ export async function listOutreach(
       created_by: MemberSummary | null;
       completed_by: MemberSummary | null;
       assignees: { member_id: string }[] | null;
-      rounds: { kind: TaskEventKind; created_at: string }[] | null;
+      rounds:
+        | {
+            kind: TaskEventKind;
+            to_value: string | null;
+            created_at: string;
+            member: MemberSummary | null;
+          }[]
+        | null;
     } | null;
   };
 
@@ -367,6 +377,25 @@ export async function listOutreach(
       .filter((e) => e.kind === "outreach_sent")
       .map((e) => e.created_at)
       .sort();
+
+    /*
+      When the email went out, and who sent it.
+
+      The moment this task FIRST reached `waiting` — a task can be moved back
+      and forth, and the first time is when the email left. That moment is
+      already in the event log, which is why 0055 could change what counts as
+      sent with nothing to store and nothing to backfill.
+
+      A task completed without ever passing through `waiting` falls back to
+      its completion: that is every round recorded before the change, and
+      every one where somebody goes straight to Complete. The fallback is what
+      holds the history still.
+    */
+    const wentOut = (t.rounds ?? [])
+      .filter((e) => e.kind === "status" && e.to_value === "waiting")
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+    const sentAt = wentOut?.created_at ?? (t.status === "complete" ? t.completed_at : null);
+    const sentBy = wentOut ? wentOut.member : t.completed_by;
     (byContact[row.contact_id] ??= []).push({
       task_id: t.id,
       title: t.title,
@@ -378,41 +407,52 @@ export async function listOutreach(
       mine,
       people: peopleByTask[t.id] ?? [],
       sentAgainAt,
+      sentAt,
+      sentBy,
     });
   }
 
   const out: Record<string, Outreach> = {};
   for (const [contactId, tasks] of Object.entries(byContact)) {
     tasks.sort((a, b) => b.created_at.localeCompare(a.created_at));
-    const done = tasks.filter((t) => t.status === "complete");
-    const open = tasks.filter((t) => t.status !== "complete");
+    /*
+      Sent, or not sent yet. Not complete or incomplete — that was the old
+      rule and the thing Marcelo was fighting.
+
+      A task in `waiting` is SENT: the email has gone and the reply has not
+      come, which is exactly what the pill should read as Contacted. What is
+      left in `pending` is a chase somebody has set up and not yet sent, and
+      that is the only thing "Reaching out" should mean.
+    */
+    const sent = tasks.filter((t) => t.sentAt !== null);
+    const pending = tasks.filter((t) => t.sentAt === null && t.status !== "complete");
 
     /*
       Every round that went out, as a flat list of dates.
 
-      A completed task is round one and each "Sent another" on it is the next,
-      so the count is the completions plus the events — not the number of
-      tasks. That is the whole point of 0044: chasing somebody four times
-      should read ×4 whether it took four task cards or one.
+      A sent task is round one and each "Sent another" on it is the next, so
+      the count is the sends plus the events — not the number of tasks. That
+      is the whole point of 0044: chasing somebody four times should read ×4
+      whether it took four task cards or one.
     */
-    const rounds = done
-      .flatMap((t) => [t.completed_at, ...t.sentAgainAt])
+    const rounds = sent
+      .flatMap((t) => [t.sentAt, ...t.sentAgainAt])
       .filter((d): d is string => Boolean(d))
       .sort();
 
     const shape = {
       contactedCount: rounds.length,
-      openCount: open.length,
-      latestCompleted: done[0] ?? null,
-      latestOpen: open[0] ?? null,
+      openCount: pending.length,
+      latestSent: sent[0] ?? null,
+      latestOpen: pending[0] ?? null,
       tasks,
       firstContactedAt: rounds[0] ?? null,
       lastContactedAt: rounds[rounds.length - 1] ?? null,
       outcome: null,
       outcomeAt: null,
       outcomeBy: null,
-      /* An outcome can only be recorded off the back of a finished round. */
-      canConfirm: done.some((t) => t.mine),
+      /* An outcome can only be recorded off the back of a round that went out. */
+      canConfirm: sent.some((t) => t.mine),
     };
     out[contactId] = { ...shape, state: outreachStateOf(shape) };
   }

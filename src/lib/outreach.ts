@@ -7,9 +7,16 @@ import type { TaskStatus } from "@/lib/supabase/database.types";
  * The obvious build was a "contacted" flag on the contact. A flag means
  * "somebody remembered to press a button", and three weeks after a trade show
  * nobody can tell you who pressed it or when. So most of this reads work that
- * actually happened: an outreach task, linked to the person, finished. The
- * date is the task's completion date and the person is whoever finished it,
+ * actually happened: an outreach task, linked to the person, that has GONE
+ * OUT. The date is the moment it went out and the person is whoever sent it,
  * because those are already recorded and cannot drift.
+ *
+ * "Gone out" is the task reaching `waiting` — since 0055, Marcelo's
+ * correction. Completing it used to be the signal, which meant finishing a
+ * task he was not finished with: the email had gone, the reply had not come,
+ * and the only gesture on offer filed the whole thing away. The status
+ * already said it. A task still completed counts as sent too, so nothing
+ * recorded before that change moved.
  *
  * The exception is how it ended. A reply lands in somebody's inbox and a
  * silence lands nowhere at all, neither of which the app can see — so the
@@ -26,6 +33,17 @@ export interface OutreachTask {
   created_by: MemberSummary | null;
   completed_at: string | null;
   completed_by: MemberSummary | null;
+  /**
+   * When the email actually went out: the moment this task first reached
+   * `waiting`, or its completion for a task finished before 0055 — or by
+   * somebody who skipped straight past waiting.
+   *
+   * Null while nothing has gone out yet, which is what separates "Reaching
+   * out" from "Contacted".
+   */
+  sentAt: string | null;
+  /** Whoever moved it to `waiting`, or completed it. */
+  sentBy: MemberSummary | null;
   /** Whether the viewer is the creator or on it — who may record an outcome. */
   mine: boolean;
   /**
@@ -68,9 +86,17 @@ export interface Outreach {
    * many task cards it took.
    */
   contactedCount: number;
-  /** Tasks still running. Never counted as an outreach — an intention is not one. */
+  /**
+   * Tasks that have not gone out yet. Never counted as an outreach — an
+   * intention is not one.
+   *
+   * A task sitting in `waiting` is NOT one of these: it has gone out, it is
+   * waiting for a reply, and it is a round. What is left here is a chase
+   * somebody has set up and not yet sent.
+   */
   openCount: number;
-  latestCompleted: OutreachTask | null;
+  /** The most recent task that has gone out. What the buttons hang off. */
+  latestSent: OutreachTask | null;
   latestOpen: OutreachTask | null;
   /** Newest first, every task. */
   tasks: OutreachTask[];
@@ -89,7 +115,7 @@ export const NO_OUTREACH: Outreach = {
   state: "none",
   contactedCount: 0,
   openCount: 0,
-  latestCompleted: null,
+  latestSent: null,
   latestOpen: null,
   tasks: [],
   firstContactedAt: null,
@@ -190,14 +216,14 @@ export function hasOpenRound(o: Outreach): boolean {
 /**
  * Whether another round may be recorded on what is already there.
  *
- * Needs a completed task of the viewer's to hang off, and stops once the
+ * Needs a sent task of the viewer's to hang off, and stops once the
  * outreach has an ending: sending another email to somebody you have marked
  * "In touch" is a conversation, not a chase, and sending one to somebody you
  * have given up on means you have not given up — take the outcome off first
  * and the button comes back.
  */
 export function canSendAnother(o: Outreach): boolean {
-  return o.canConfirm && o.latestCompleted !== null && o.outcome === null;
+  return o.canConfirm && o.latestSent !== null && o.outcome === null;
 }
 
 /**

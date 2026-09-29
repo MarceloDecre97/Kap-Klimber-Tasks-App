@@ -135,7 +135,7 @@ export function OutreachSection({
     and parking Sheena would be throwing away a live thread.
   */
   function startDeciding(outcome: OutreachOutcome) {
-    const others = outreach.latestCompleted?.people ?? [];
+    const others = outreach.latestSent?.people ?? [];
     if (others.length > 1) {
       setDeciding({ outcome, ids: others.map((p) => p.id) });
       return;
@@ -149,7 +149,7 @@ export function OutreachSection({
     call, so this button is the entire gesture.
   */
   function sendAnother() {
-    const taskId = outreach.latestCompleted?.task_id;
+    const taskId = outreach.latestSent?.task_id;
     if (!taskId) return;
     startTransition(async () => {
       const result = await recordOutreachSent(taskId);
@@ -165,7 +165,7 @@ export function OutreachSection({
   const {
     state,
     latestOpen,
-    latestCompleted,
+    latestSent,
     outcome,
     outcomeAt,
     outcomeBy,
@@ -217,14 +217,14 @@ export function OutreachSection({
         )}
 
         {/*
-          The open round links to its task, because that is where the work is
-          and you may well want to go and do it. A finished one does not: it
-          is finished, the sentence already says who and when, and a link
-          there is an invitation to go and look at nothing.
+          A round that has not gone out yet links to its task, because that
+          is where the work is and you may well want to go and do it. A sent
+          one does not: the sentence already says who and when, and the task
+          is still sitting in your list anyway.
         */}
         {latestOpen && (
           <p className="text-[17px] leading-6 text-fg text-pretty">
-            Outreach open — {latestOpen.created_by?.display_name ?? "somebody"}, started{" "}
+            Not sent yet — {latestOpen.created_by?.display_name ?? "somebody"}, started{" "}
             {formatTimestampWithYear(latestOpen.created_at)}.{" "}
             <Link
               href={`/tasks?task=${latestOpen.task_id}`}
@@ -257,8 +257,8 @@ export function OutreachSection({
                 {formatTimestampWithYear(lastContactedAt ?? firstContactedAt)}.
               </>
             )}
-            {contactedCount === 1 && latestCompleted && (
-              <> Sent by {latestCompleted.completed_by?.display_name ?? "somebody"}.</>
+            {contactedCount === 1 && latestSent && (
+              <> Sent by {latestSent.sentBy?.display_name ?? "somebody"}.</>
             )}
           </p>
         )}
@@ -400,7 +400,7 @@ export function OutreachSection({
                 : "Who are you giving up on? Leave anyone still worth chasing unticked."}
             </p>
             <ul className="flex flex-col gap-1.5">
-              {(latestCompleted?.people ?? []).map((person) => {
+              {(latestSent?.people ?? []).map((person) => {
                 const on = deciding.ids.includes(person.id);
                 return (
                   <li key={person.id}>

@@ -88,8 +88,10 @@ export async function GET(request: NextRequest) {
     c.source ?? "",
     tradeShowLabel(c) ?? "",
     outreachLabel(outreach[c.id]!),
-    outreach[c.id]!.latestCompleted?.completed_by?.display_name ?? "",
-    outreach[c.id]!.latestCompleted?.completed_at?.slice(0, 10) ?? "",
+    /* Who sent it and when it went — the moment it reached `waiting`, not
+       the moment somebody filed the task away. See 0055. */
+    outreach[c.id]!.latestSent?.sentBy?.display_name ?? "",
+    outreach[c.id]!.latestSent?.sentAt?.slice(0, 10) ?? "",
     c.notes ?? "",
     c.created_by?.display_name ?? "",
     c.created_at.slice(0, 10),

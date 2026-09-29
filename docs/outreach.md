@@ -315,3 +315,56 @@ the link is 20px tall and the buttons 44px, so items on the *same* flex line
 have different tops. Grouping by vertical centre gives the truth. A layout
 probe needs checking against a case whose answer is already known, or it will
 report failures that are entirely its own.
+
+## "Waiting" is what sending an email looks like (0055)
+
+The Contact button made a task, and the contact only turned **Contacted** when
+that task was **completed**. Which meant Marcelo had to finish a task he was
+not finished with: the email had gone, the reply had not come, and the one
+gesture the app offered filed the whole thing away.
+
+His correction, and it is the right one — the status already said this:
+
+| status                     | what it means                | pill          |
+|----------------------------|------------------------------|---------------|
+| not started / in progress  | the email has not gone yet   | Reaching out  |
+| waiting                    | it has gone, no reply yet    | Contacted     |
+| complete                   | the chase is over            | unchanged     |
+
+**Nothing had to be stored or backfilled.** The moment a task first reached
+`waiting` is already in `task_events`, so "first reached out" reads from the
+log. A task completed without ever passing through `waiting` falls back to its
+completion — which is every round recorded before this change, and every one
+where somebody goes straight to Complete. That fallback is what holds the
+history still: no pill on any existing contact moved.
+
+**"Reaching out" got sharper.** It used to mean "an open task exists". It now
+means "a task that has not gone out yet", because a `waiting` task is a round,
+not an intention. Without that split, a sent chase would have counted as both.
+
+**Replied closes the task, and the clock with it.** Marcelo's words: "if I
+click replied, that should mark the task complete automatically and remove any
+live reminders." No reply does the same — giving up is also an ending, and a
+task you have given up on sitting open with a live clock is the app arguing
+with you.
+
+But only once **nobody** on the task is still owed a chase. One email to three
+people gets one reply, and that reply does not close the other two — the rule
+`outreach_still_owed` already encodes for the reminder, now reused for the
+task. A task still owed stays open and closes by itself when the last person
+has an answer. A `not_started` task is never closed this way: a fresh round
+you have only just created is not something an answer to the last one should
+quietly finish.
+
+**The reminder is untouched.** Seven days from creation, whatever the status —
+Marcelo asked for that explicitly, so moving to `waiting` re-arms nothing. Only
+"Sent again" moves the clock, which is what it already did.
+
+**The guard needed one exception.** `guard_task_edit` pins the status for
+anybody who is not an assignee, which is right — status is the assignee's to
+move. But whoever presses Replied may be the task's *creator* without being on
+it: they made it, gave it to Dee, and sent the email themselves. Without the
+exception the completion would have been pinned away silently and the task
+would have stayed open for ever with nothing on screen to say why. A
+transaction-local flag, set either side of the one write, the same shape 0044
+uses for `app.outcome_write`.
